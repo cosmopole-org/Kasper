@@ -138,10 +138,6 @@ func RunNet() error {
 
 	app.Load(
 		[]string{
-			"aras",
-			"mani",
-			"shahin",
-			"amir",
 			"keyhan",
 		},
 		[]abstract.ILayer{
