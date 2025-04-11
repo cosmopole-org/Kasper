@@ -9,6 +9,7 @@ import (
 	"kasper/src/shell/api/model"
 	outputs_invites "kasper/src/shell/api/outputs/invites"
 	outputs_spaces "kasper/src/shell/api/outputs/spaces"
+	updates_spaces "kasper/src/shell/api/updates/spaces"
 	updates_topics "kasper/src/shell/api/updates/topics"
 	"kasper/src/shell/layer1/adapters"
 	models "kasper/src/shell/layer1/model"
@@ -80,6 +81,8 @@ func ParseInput[T abstract.IInput](i string) (abstract.IInput, error) {
 	return *body, nil
 }
 
+const memberTemplate = "member::%s::%s::%s"
+
 func (fed *FedNet) HandlePacket(channelId string, payload models.OriginPacket) {
 	if payload.IsResponse {
 		dataArr := strings.Split(payload.Key, " ")
@@ -107,6 +110,22 @@ func (fed *FedNet) HandlePacket(channelId string, payload models.OriginPacket) {
 				fed.storage.Db().Create(member)
 				fed.signaler.JoinGroup(member.SpaceId, member.UserId)
 			}
+		} else if dataArr[0] == "/spaces/create" {
+			var spaceRes outputs_spaces.CreateOutput
+			err2 := json.Unmarshal([]byte(payload.Data), &spaceRes)
+			if err2 != nil {
+				fed.logger.Println(err2)
+				return
+			}
+			fed.storage.DoTrx(func(trx adapters.ITrx) error {
+				trx.Db().Create(&spaceRes.Space)
+				trx.Db().Create(&spaceRes.Topic)
+				trx.Db().Create(&spaceRes.Member)
+				return nil
+			})
+			fed.cache.Put(fmt.Sprintf("city::%s", spaceRes.Topic.Id), spaceRes.Topic.SpaceId)
+			fed.signaler.JoinGroup(spaceRes.Member.SpaceId, spaceRes.Member.UserId)
+			fed.cache.Put(fmt.Sprintf(memberTemplate, spaceRes.Member.SpaceId, spaceRes.Member.UserId, spaceRes.Member.Id), spaceRes.Member.TopicId)
 		}
 		fed.signaler.SignalUser(payload.Key, payload.RequestId, payload.UserId, payload.Data, true)
 	} else {
@@ -126,6 +145,118 @@ func (fed *FedNet) HandlePacket(channelId string, payload models.OriginPacket) {
 					return
 				}
 				fed.cache.Put(fmt.Sprintf("city::%s", tc.Topic.Id), tc.Topic.SpaceId)
+			} else if key == "topics/update" {
+				tc := updates_topics.Update{}
+				err := json.Unmarshal([]byte(data), &tc)
+				if err != nil {
+					fed.logger.Println(err)
+					return
+				}
+				err2 := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+					return trx.Db().Save(&tc.Topic).Error
+				})
+				if err2 != nil {
+					fed.logger.Println(err2)
+					return
+				}
+			} else if key == "topics/delete" {
+				tc := updates_topics.Delete{}
+				err := json.Unmarshal([]byte(data), &tc)
+				if err != nil {
+					fed.logger.Println(err)
+					return
+				}
+				err2 := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+					return trx.Db().Delete(&tc.Topic).Error
+				})
+				if err2 != nil {
+					fed.logger.Println(err2)
+					return
+				}
+			} else if key == "spaces/update" {
+				tc := updates_spaces.Update{}
+				err := json.Unmarshal([]byte(data), &tc)
+				if err != nil {
+					fed.logger.Println(err)
+					return
+				}
+				err2 := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+					return trx.Db().Save(&tc.Space).Error
+				})
+				if err2 != nil {
+					fed.logger.Println(err2)
+					return
+				}
+			} else if key == "spaces/delete" {
+				tc := updates_spaces.Delete{}
+				err := json.Unmarshal([]byte(data), &tc)
+				if err != nil {
+					fed.logger.Println(err)
+					return
+				}
+				err2 := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+					return trx.Db().Delete(&tc.Space).Error
+				})
+				if err2 != nil {
+					fed.logger.Println(err2)
+					return
+				}
+			} else if key == "spaces/addMember" {
+				tc := updates_spaces.AddMember{}
+				err := json.Unmarshal([]byte(data), &tc)
+				if err != nil {
+					fed.logger.Println(err)
+					return
+				}
+				err2 := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+					return trx.Db().Create(&tc.Member).Error
+				})
+				if err2 != nil {
+					fed.logger.Println(err2)
+					return
+				}
+			} else if key == "spaces/removeMember" {
+				tc := updates_spaces.AddMember{}
+				err := json.Unmarshal([]byte(data), &tc)
+				if err != nil {
+					fed.logger.Println(err)
+					return
+				}
+				err2 := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+					return trx.Db().Delete(&tc.Member).Error
+				})
+				if err2 != nil {
+					fed.logger.Println(err2)
+					return
+				}
+			} else if key == "spaces/updateMember" {
+				tc := updates_spaces.AddMember{}
+				err := json.Unmarshal([]byte(data), &tc)
+				if err != nil {
+					fed.logger.Println(err)
+					return
+				}
+				err2 := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+					return trx.Db().Save(&tc.Member).Error
+				})
+				if err2 != nil {
+					fed.logger.Println(err2)
+					return
+				}
+			} else if key == "spaces/join" {
+				tc := updates_spaces.Join{}
+				err := json.Unmarshal([]byte(data), &tc)
+				if err != nil {
+					fed.logger.Println(err)
+					return
+				}
+				err2 := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+					return trx.Db().Create(&tc.Member).Error
+				})
+				if err2 != nil {
+					fed.logger.Println(err2)
+					// nevermin if there is an error about duplication
+				}
 			}
 		}
 		dataArr := strings.Split(payload.Key, " ")
