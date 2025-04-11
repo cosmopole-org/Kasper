@@ -10,24 +10,24 @@ import (
 	"strings"
 	"time"
 
-	"kasper/cmd/babble/sigma"
-	"kasper/cmd/babble/sigma/abstract"
-	inputs_users "kasper/cmd/babble/sigma/api/inputs/users"
-	plugger_api "kasper/cmd/babble/sigma/api/main"
-	"kasper/cmd/babble/sigma/api/model"
-	outputs_users "kasper/cmd/babble/sigma/api/outputs/users"
-	"kasper/cmd/babble/sigma/bots/hokmagent"
-	models_hokmaent "kasper/cmd/babble/sigma/bots/hokmagent/models"
-	"kasper/cmd/babble/sigma/bots/hokmgame"
-	models_hokmgame "kasper/cmd/babble/sigma/bots/hokmgame/models"
-	module_logger "kasper/cmd/babble/sigma/core/module/logger"
-	plugger_machiner "kasper/cmd/babble/sigma/machiner/main"
-	plugger_admin "kasper/cmd/babble/sigma/plugins/admin/main"
-	plugger_game "kasper/cmd/babble/sigma/plugins/game/main"
-	game_model "kasper/cmd/babble/sigma/plugins/game/model"
-	game_memory "kasper/cmd/babble/sigma/plugins/game/tools/memory"
-	plugger_social "kasper/cmd/babble/sigma/plugins/social/main"
-	"kasper/cmd/babble/sigma/utils"
+	"kasper/src/abstract"
+	module_logger "kasper/src/core/module/logger"
+	plugger_admin "kasper/src/plugins/admin/main"
+	plugger_game "kasper/src/plugins/game/main"
+	game_model "kasper/src/plugins/game/model"
+	game_memory "kasper/src/plugins/game/tools/memory"
+	plugger_social "kasper/src/plugins/social/main"
+	sigma "kasper/src/shell"
+	inputs_users "kasper/src/shell/api/inputs/users"
+	plugger_api "kasper/src/shell/api/main"
+	"kasper/src/shell/api/model"
+	outputs_users "kasper/src/shell/api/outputs/users"
+	"kasper/src/shell/bots/hokmagent"
+	models_hokmaent "kasper/src/shell/bots/hokmagent/models"
+	"kasper/src/shell/bots/hokmgame"
+	models_hokmgame "kasper/src/shell/bots/hokmgame/models"
+	plugger_machiner "kasper/src/shell/machiner/main"
+	"kasper/src/shell/utils"
 
 	"kasper/src/babble"
 	"kasper/src/proxy/inmem"
@@ -36,27 +36,27 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
 	// "gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"kasper/cmd/babble/sigma/layer1/adapters"
-	layer1 "kasper/cmd/babble/sigma/layer1/layer"
-	module_model "kasper/cmd/babble/sigma/layer1/model"
-	module_model1 "kasper/cmd/babble/sigma/layer1/module/toolbox"
-	layer2 "kasper/cmd/babble/sigma/layer2/layer"
-	layer3 "kasper/cmd/babble/sigma/layer3/layer"
-	module_model3 "kasper/cmd/babble/sigma/layer3/model"
+	"kasper/src/shell/layer1/adapters"
+	layer1 "kasper/src/shell/layer1/layer"
+	module_model "kasper/src/shell/layer1/model"
+	module_model1 "kasper/src/shell/layer1/module/toolbox"
+	layer2 "kasper/src/shell/layer2/layer"
+	layer3 "kasper/src/shell/layer3/layer"
+	module_model3 "kasper/src/shell/layer3/model"
 
-	actor_model "kasper/cmd/babble/sigma/core/module/actor/model"
+	actor_model "kasper/src/core/module/actor/model"
 
 	"os"
 
-	"github.com/getsentry/sentry-go"
 	_ "github.com/go-sql-driver/mysql"
 )
 
-var KasperApp sigma.Sigma;
+var KasperApp sigma.Sigma
 
 // NewRunCmd returns the command that starts a Babble node
 func NewRunCmd() *cobra.Command {
@@ -102,8 +102,6 @@ func RunNet() error {
 
 	logger.Println("Welcome to Kasper !")
 
-	sentry.CaptureMessage("It works!")
-
 	err2 := godotenv.Load()
 	if err2 != nil {
 		panic(err2)
@@ -114,7 +112,7 @@ func RunNet() error {
 		Log: logger.Println,
 	})
 
-	KasperApp = app;
+	KasperApp = app
 
 	_config.Babble.Logger().WithFields(logrus.Fields{
 		"ProxyAddr":  _config.ProxyAddr,

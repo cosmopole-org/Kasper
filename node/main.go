@@ -6,8 +6,8 @@ import (
 	"os"
 
 	cmd "kasper/cmd/babble/commands"
-	"kasper/cmd/babble/sigma/abstract"
-	tb "kasper/cmd/babble/sigma/layer2/model"
+	"kasper/src/abstract"
+	tb "kasper/src/shell/layer2/model"
 )
 
 import "C"
