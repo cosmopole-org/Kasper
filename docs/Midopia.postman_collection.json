@@ -1,0 +1,2486 @@
+{
+	"info": {
+		"_postman_id": "e21516db-2e37-4756-b400-750b9494807b",
+		"name": "Midopia",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31406450"
+	},
+	"item": [
+		{
+			"name": "old",
+			"item": [
+				{
+					"name": "main",
+					"item": [
+						{
+							"name": "loginPlayer",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"var jsonData = JSON.parse(responseBody);",
+											"postman.setEnvironmentVariable(\"token\", jsonData.session.token);",
+											"postman.setEnvironmentVariable(\"humanId\", jsonData.user.id);",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/players/loginPlayer",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"loginPlayer"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "updatePlayer",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"data\": {\n        \"coin\": 8000,\n        \"gem\": 1000,\n        \"energy\": 100,\n        \"level\": 2,\n        \"xp\": 1,\n        \"tacklCard\": 0,\n        \"pressCard\": 0,\n        \"defCard\": 4,\n        \"lastXPTemp\": 3,\n        \"nextXPTemp\": 6,\n        \"teamName\": \"user team 5\",\n        \"playerName\": \"keyhan 3\",\n        \"avatarId\": 7,\n        \"logoId\": 7,\n        \"kitId\": 3,\n        \"playersSpeed\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"playersRadius\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"unlockAvatarsList\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"UnlockKitsList\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"UnlockFormationsList\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"unlockLogosList\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"formation1\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"formation2\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"formation3\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ]\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/players/updatePlayer",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"updatePlayer"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "submitScore",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"result\": \"win\",\n    \"goalP\": 2,\n    \"goalN\": 0,\n    \"leagueLevel\": 2\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/players/submitScore",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"submitScore"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "readMyPlayer",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "iiOpTYBxMtEQ0XwPjcu3Cz13pmz5FvFv",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/players/readMyPlayer",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"readMyPlayer"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "currentVersion",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{server}}/players/currentVersion",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"currentVersion"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "readRewardValues",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{server}}/players/readRewardValues",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"readRewardValues"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "readMetadata",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/players/readMetadata",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"readMetadata"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "readLeaderBoard",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"leagueLevel\": 2\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/players/readLeaderBoard",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"readLeaderBoard"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "getMyWinnerState",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"leagueLevel\": 2\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/players/getMyWinnerState",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"getMyWinnerState"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "clearReward",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"leagueLevel\": 2\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/players/clearReward",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"clearReward"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "getMyBoardRank",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"leagueLevel\": 2\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/players/getMyBoardRank",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"players",
+										"getMyBoardRank"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "admin",
+					"item": [
+						{
+							"name": "updatePlayer",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"humanId\": {{humanId}},   \n    \"data\": {\n        \"coin\": 20050,\n        \"gem\": 1000,\n        \"energy\": 100,\n        \"level\": 2,\n        \"xp\": 1,\n        \"tacklCard\": 0,\n        \"pressCard\": 0,\n        \"defCard\": 4,\n        \"lastXPTemp\": 3,\n        \"nextXPTemp\": 6,\n        \"teamName\": \"sample-team5\",\n        \"playerName\": \"shadow\",\n        \"avatarId\": 7,\n        \"logoId\": 7,\n        \"kitId\": 3,\n        \"playersSpeed\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"playersRadius\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"unlockAvatarsList\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"UnlockKitsList\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"UnlockFormationsList\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"unlockLogosList\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"formation1\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"formation2\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ],\n        \"formation3\": [\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0,\n            0\n        ]\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{admin}}/admin/updatePlayer",
+									"host": [
+										"{{admin}}"
+									],
+									"path": [
+										"admin",
+										"updatePlayer"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "kickoutPlayer",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"humanId\": 22,\n    \"leagueLevel\": 2\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{admin}}/admin/kickoutPlayer",
+									"host": [
+										"{{admin}}"
+									],
+									"path": [
+										"admin",
+										"kickoutPlayer"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "signin",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"amir@midopia.com\",\n    \"password\": \"GhRokACBt3N6zGraoepXzP-V4QlMZTKa\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{admin}}/auths/signin",
+									"host": [
+										"{{admin}}"
+									],
+									"path": [
+										"auths",
+										"signin"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "updatePass",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "4FFfNlB_gTWgTDl7p9lEeS_vWhODPz1j",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"password\": \"4FFfNlB_gTWgTDl7p9lEeS_vWhODPz1j\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{admin}}/auths/updatePass",
+									"host": [
+										"{{admin}}"
+									],
+									"path": [
+										"auths",
+										"updatePass"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "readPlayer",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin}}/admin/readPlayer?humanId={{humanId}}",
+									"host": [
+										"{{admin}}"
+									],
+									"path": [
+										"admin",
+										"readPlayer"
+									],
+									"query": [
+										{
+											"key": "humanId",
+											"value": "{{humanId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "readMetadata",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin}}/admin/readMetadata",
+									"host": [
+										"{{admin}}"
+									],
+									"path": [
+										"admin",
+										"readMetadata"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "readPlayers",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin}}/admin/readPlayers?query=1&offset=0&count=10",
+									"host": [
+										"{{admin}}"
+									],
+									"path": [
+										"admin",
+										"readPlayers"
+									],
+									"query": [
+										{
+											"key": "query",
+											"value": "1"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "count",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "updateMetadata",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"data\": {\n        \"version\": 1,\n        \"rewardLeague1Player1Coin\": 50000,\n        \"rewardLeague1Player1Gem\": 250,\n        \"rewardLeague1Player2Coin\": 2500,\n        \"rewardLeague1Player2Gem\": 150,\n        \"rewardLeague1Player3Coin\": 1000,\n        \"rewardLeague1Player3Gem\": 50,\n        \"rewardLeague2Player1Coin\": 20000,\n        \"rewardLeague2Player1Gem\": 1000,\n        \"rewardLeague2Player2Coin\": 10000,\n        \"rewardLeague2Player2Gem\": 500,\n        \"rewardLeague2Player3Coin\": 5000,\n        \"rewardLeague2Player3Gem\": 250,\n        \"rewardLeague3Player1Coin\": 10000,\n        \"rewardLeague3Player1Gem\": 4000,\n        \"rewardLeague3Player2Coin\": 50000,\n        \"rewardLeague3Player2Gem\": 2000,\n        \"rewardLeague3Player3Coin\": 20000,\n        \"rewardLeague3Player3Gem\": 1000\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{admin}}/admin/updateMetadata",
+									"host": [
+										"{{admin}}"
+									],
+									"path": [
+										"admin",
+										"updateMetadata"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "new",
+			"item": [
+				{
+					"name": "player",
+					"item": [
+						{
+							"name": "inc",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"incKey\": \"video\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/player/inc",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"player",
+										"inc"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "update",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"data\": {\n        \"chat\": 900000000000000000000000000\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/player/update",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"player",
+										"update"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "get",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/player/get?gameKey=hokm",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"player",
+										"get"
+									],
+									"query": [
+										{
+											"key": "gameKey",
+											"value": "hokm"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "store",
+					"item": [
+						{
+							"name": "buy",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"product\": \"hokmchat02\",\n    \"market\": \"myket\",\n    \"purchaseToken\": \"25609087\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/store/buy",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"store",
+										"buy"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "auth",
+					"item": [
+						{
+							"name": "login",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"var jsonData = JSON.parse(responseBody);",
+											"postman.setEnvironmentVariable(\"token\", jsonData.token);",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/auth/login",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"auth",
+										"login"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "meta",
+					"item": [
+						{
+							"name": "update",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"tag\": \"\",\n    \"data\": {\n        \"maintenance\": \"false\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/meta/update",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"meta",
+										"update"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "get",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/meta/get?gameKey=hokm",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"meta",
+										"get"
+									],
+									"query": [
+										{
+											"key": "gameKey",
+											"value": "hokm"
+										},
+										{
+											"key": "tag",
+											"value": "buy",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "read",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/meta/read?gameKey=hokm",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"meta",
+										"read"
+									],
+									"query": [
+										{
+											"key": "gameKey",
+											"value": "hokm"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "random",
+					"item": [
+						{
+							"name": "daily",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/random/daily",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"random",
+										"daily"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "news",
+					"item": [
+						{
+							"name": "read",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/news/read?gameKey=hokm",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"news",
+										"read"
+									],
+									"query": [
+										{
+											"key": "gameKey",
+											"value": "hokm"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "last",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/news/last?gameKey=hokm",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"news",
+										"last"
+									],
+									"query": [
+										{
+											"key": "gameKey",
+											"value": "hokm"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "create",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"data\": {\n        \"title\": \"hello 3\",\n        \"description\": \"hello world 3!\",\n        \"link\": \"hello.com 3\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/news/create",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"news",
+										"create"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "delete",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"newsId\": \"7f003e22-fb27-47b7-bd2c-a03e6de40461@midopia\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/news/delete",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"news",
+										"delete"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "see",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"newsId\": \"9cbaf9dd-fb19-4ab3-a21a-aab8a242e68e@kasper\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/news/see",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"news",
+										"see"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "match",
+					"item": [
+						{
+							"name": "join",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"level\": \"1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/match/join",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"match",
+										"join"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "end",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"level\": \"1\",\n    \"winners\": [\n        \"4@global\"\n    ],\n    \"loosers\": []\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/match/end",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"match",
+										"end"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "start",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"spaceId\": \"{{towerId}}\",\n    \"topicId\": \"{{roomId}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/match/start",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"match",
+										"start"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "createInHall",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"level\": \"1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/match/createInHall",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"match",
+										"createInHall"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "getOpenMatches",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/match/getOpenMatches",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"match",
+										"getOpenMatches"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "admin",
+					"item": [
+						{
+							"name": "meta",
+							"item": [
+								{
+									"name": "update",
+									"request": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											},
+											{
+												"key": "layer",
+												"value": "1",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"gameKey\": \"hokm\",\n    \"data\": {\n        \"maintenance\": \"false\"\n    }\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{server}}/admin/meta/update",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"meta",
+												"update"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "get",
+									"request": {
+										"method": "GET",
+										"header": [
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											}
+										],
+										"url": {
+											"raw": "{{server}}/admin/meta/get?gameKey=hokm",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"meta",
+												"get"
+											],
+											"query": [
+												{
+													"key": "gameKey",
+													"value": "hokm"
+												}
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "board",
+							"item": [
+								{
+									"name": "setFormula",
+									"request": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											},
+											{
+												"key": "layer",
+												"value": "1",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"gameKey\": \"hokm\",\n    \"level\": \"3_5\",\n    \"keys\": [\n        \"score\"\n    ],\n    \"weights\": [\n        1\n    ],\n    \"nonZero\": [\n        true\n    ],\n    \"operations\": [\n        \"sum\"\n    ],\n    \"totalOp\": \"sum\",\n    \"rules\": {},\n    \"order\": \"asc\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{server}}/admin/board/setFormula",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"board",
+												"setFormula"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "getFormula",
+									"request": {
+										"method": "GET",
+										"header": [
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											},
+											{
+												"key": "layer",
+												"value": "1",
+												"type": "text",
+												"disabled": true
+											}
+										],
+										"url": {
+											"raw": "{{server}}/admin/board/getFormula?gameKey=hokm&level=1",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"board",
+												"getFormula"
+											],
+											"query": [
+												{
+													"key": "gameKey",
+													"value": "hokm"
+												},
+												{
+													"key": "level",
+													"value": "1"
+												}
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "player",
+							"item": [
+								{
+									"name": "update",
+									"request": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											},
+											{
+												"key": "layer",
+												"value": "1",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"gameKey\": \"cars\",\n    \"data\": {\n        \"profile\": {\n            \"name\": \"edward\",\n            \"avatar\": 500\n        }\n    }\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{server}}/admin/player/update",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"player",
+												"update"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "get",
+									"request": {
+										"method": "GET",
+										"header": [
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											},
+											{
+												"key": "layer",
+												"value": "1",
+												"type": "text"
+											}
+										],
+										"url": {
+											"raw": "{{server}}/admin/player/get?gameKey=cars",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"player",
+												"get"
+											],
+											"query": [
+												{
+													"key": "gameKey",
+													"value": "cars"
+												}
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "list",
+									"request": {
+										"method": "GET",
+										"header": [
+											{
+												"key": "layer",
+												"value": "1",
+												"type": "text"
+											},
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											}
+										],
+										"url": {
+											"raw": "{{server}}/admin/player/list?gameKey=hokm&count=50&offset=0",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"player",
+												"list"
+											],
+											"query": [
+												{
+													"key": "gameKey",
+													"value": "hokm"
+												},
+												{
+													"key": "count",
+													"value": "50"
+												},
+												{
+													"key": "offset",
+													"value": "0"
+												}
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "message",
+							"item": [
+								{
+									"name": "delete",
+									"request": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"topicId\": \"main@midopia\",\n    \"messageId\": \"c66a6373-7ea4-4a28-83d6-3a2fd5f0019f@midopia\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{server}}/admin/messages/delete",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"messages",
+												"delete"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "switchChatBanned",
+									"request": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "token",
+												"value": "{{token}}",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"userId\": \"{{humanId}}\",\n    \"gameKey\": \"hokm\",\n    \"banned\": true\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{server}}/admin/messages/switchChatBanned",
+											"host": [
+												"{{server}}"
+											],
+											"path": [
+												"admin",
+												"messages",
+												"switchChatBanned"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "restart",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"password\": \"1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/admin/auth/restart",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"admin",
+										"auth",
+										"restart"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "board",
+					"item": [
+						{
+							"name": "submit",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"level\": \"1\",\n    \"data\": {\n        \"xp\": 100\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/board/submit",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"board",
+										"submit"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "get",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/board/get?gameKey=hokm&level=1",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"board",
+										"get"
+									],
+									"query": [
+										{
+											"key": "gameKey",
+											"value": "hokm"
+										},
+										{
+											"key": "level",
+											"value": "1"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "nextEnd",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/board/nextEnd?gameKey=hokm&level=2",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"board",
+										"nextEnd"
+									],
+									"query": [
+										{
+											"key": "gameKey",
+											"value": "hokm"
+										},
+										{
+											"key": "level",
+											"value": "2"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "winner",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"level\": \"1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/board/winner",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"board",
+										"winner"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "reward",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"cars\",\n    \"level\": \"1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/board/reward",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"board",
+										"reward"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "rank",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"gameKey\": \"hokm\",\n    \"level\": \"3\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/board/rank",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"board",
+										"rank"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "myLbShard",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "3",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/board/myLbShard?gameKey=hokm&level=3",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"board",
+										"myLbShard"
+									],
+									"query": [
+										{
+											"key": "gameKey",
+											"value": "hokm"
+										},
+										{
+											"key": "level",
+											"value": "3"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "messages",
+					"item": [
+						{
+							"name": "create",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"var jsonData = JSON.parse(responseBody);",
+											"postman.setEnvironmentVariable(\"messageId\", jsonData.message.id);",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "2",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"topicId\": \"main@midopia\",\n    \"data\": {\n        \"text\": \":)\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/messages/create",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"messages",
+										"create"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "update",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "2",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"topicId\": \"{{roomId}}\",\n    \"messageId\": \"{{messageId}}\",\n    \"data\": {\n        \"text\": \"hello world 2 !\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/messages/update",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"messages",
+										"update"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "delete",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "2",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"topicId\": \"main@midopia\",\n    \"messageId\": \"{{messageId}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/messages/delete",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"messages",
+										"delete"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "read",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "2",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/messages/read?topicId=main@midopia&offset=0&count=50",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"messages",
+										"read"
+									],
+									"query": [
+										{
+											"key": "topicId",
+											"value": "main@midopia"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "count",
+											"value": "50"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "readChats",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "2",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/messages/readChats",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"messages",
+										"readChats"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "seeChat",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "2",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"spaceId\": \"{{towerId}}\",\n    \"topicId\": \"{{roomId}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/messages/seeChat",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"messages",
+										"seeChat"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "report",
+					"item": [
+						{
+							"name": "report",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "2",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"data\": {\n        \"text\": \"hello !\",\n        \"userId\": \"5759b89e-ba05-4043-911d-f45af267de10@midopia\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{server}}/report/report",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"report",
+										"report"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "read",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "1",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/admin/report/read",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"admin",
+										"report",
+										"read"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "codes",
+					"item": [
+						{
+							"name": "inviteCode",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "token",
+										"value": "{{token}}",
+										"type": "text"
+									},
+									{
+										"key": "layer",
+										"value": "1",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{server}}/interact/getInviteCode",
+									"host": [
+										"{{server}}"
+									],
+									"path": [
+										"interact",
+										"getInviteCode"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "buy",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Access-Token",
+								"value": "9132a90e-20cf-4500-91b7-26f31a0417be",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"tokenId\": \"25609087\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://developer.myket.ir/api/partners/applications/com.midopia.hokmraan/purchases/products/hokmchat02/verify",
+							"protocol": "https",
+							"host": [
+								"developer",
+								"myket",
+								"ir"
+							],
+							"path": [
+								"api",
+								"partners",
+								"applications",
+								"com.midopia.hokmraan",
+								"purchases",
+								"products",
+								"hokmchat02",
+								"verify"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

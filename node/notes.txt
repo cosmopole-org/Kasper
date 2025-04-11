@@ -1,0 +1,18 @@
+midopia postgres database docker:
+docker run --name midodb -p 5432:5432 -e POSTGRES_PASSWORD=vEjjXsyhYDyFH0qlq0M7GrJe -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres -e PGDATA=/home/ubuntu/database/files --mount type=bind,source=/home/ubuntu/database,target=/home/ubuntu/database -d docker.arvancloud.ir/postgres
+midopia redis cache docker:
+docker run --name some-redis -p 6379:6379 -d docker.arvancloud.ir/redis redis-server --save 60 1 --loglevel warning
+
+docker run --name=server --mount type=bind,source=/home/ubuntu/storage,target=/app/data -p 8080:8080 -p 1337:1337 midopia:latest run \
+    --heartbeat=100ms \
+    --moniker="node1" \
+    --cache-size=50000 \
+    --listen="127.0.0.1:1337" \
+    --proxy-listen="127.0.0.1:1338" \
+    --client-connect="127.0.0.1:1339" \
+    --service-listen="127.0.0.1:80" \
+    --sync-limit=100 \
+    --fast-sync=false \
+    --log="debug" \
+    --webrtc=false \
+    --signal-addr="127.0.0.1:2443"

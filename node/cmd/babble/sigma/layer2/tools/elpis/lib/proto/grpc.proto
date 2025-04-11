@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.worker.kasper";
+option java_outer_classname = "Kasper";
+option objc_class_prefix = "HLW";
+option go_package = "kasper/worker";
+
+package kasper;
+
+service Executer {
+  rpc ExecTrxs(ExecTrxsRequest) returns (ExecTrxsReply) {}
+}
+
+message Trx {
+  string key = 1;
+  string payload = 2;
+  string userId = 3;
+  string machineId = 4;
+}
+
+message ExecTrxsRequest {
+  repeated Trx trxs = 1;
+}
+
+message ExecTrxsReply {
+  bool success = 1;
+}

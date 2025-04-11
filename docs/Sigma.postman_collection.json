@@ -1,0 +1,2430 @@
+{
+	"info": {
+		"_postman_id": "5a1f84f3-5d06-40ff-9799-115c90b961cd",
+		"name": "Sigma",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31406450"
+	},
+	"item": [
+		{
+			"name": "users",
+			"item": [
+				{
+					"name": "authenticate",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/users/authenticate",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"users",
+								"authenticate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Tim\",\n    \"avatar\": \"2\",\n    \"username\": \"kasperius3\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/users/update",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"users",
+								"update"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/users/delete",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"users",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"if (jsonData.session) {",
+									"    postman.setEnvironmentVariable(\"token\", jsonData.session.token);",
+									"    postman.setEnvironmentVariable(\"humanId\", jsonData.user.id);",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"kasper3rd\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/users/login",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"users",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "172.77.5.2:8080/users/get?userId=15@global",
+							"host": [
+								"172",
+								"77",
+								"5",
+								"2"
+							],
+							"port": "8080",
+							"path": [
+								"users",
+								"get"
+							],
+							"query": [
+								{
+									"key": "userId",
+									"value": "15@global"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "read",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/users/read?typ=human",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"users",
+								"read"
+							],
+							"query": [
+								{
+									"key": "typ",
+									"value": "human"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "spaces",
+			"item": [
+				{
+					"name": "addMember",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"79@global\",\n    \"spaceId\": \"{{towerId}}\",\n    \"metadata\": \"empty\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/addMember",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"addMember"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "readMembers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"spaceId\": \"b7c28ed1-3a7c-42c7-9d87-a12fcd858a8e@sigma\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/readMembers",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"readMembers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "removeMember",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setEnvironmentVariable(\"towerId\", jsonData.space.id);",
+									"postman.setEnvironmentVariable(\"memberId\", jsonData.member.id);",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"memberId\": \"{{memberId}}\",\n    \"spaceId\": \"{{towerId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/removeMember",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"removeMember"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "join",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setEnvironmentVariable(\"memberId\", jsonData.member.id);",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"spaceId\": \"main@midopia\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/join",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"join"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"spaceId\": \"{{towerId}}\",\n    \"title\": \"test tower updated\",\n    \"avatar\": \"0\",\n    \"isPublic\": true,\n    \"tag\": \"kasperiusHome\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/update",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"update"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"spaceId\": \"{{towerId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/delete",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/spaces/get?spaceId={{towerId}}",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"get"
+							],
+							"query": [
+								{
+									"key": "spaceId",
+									"value": "{{towerId}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "read",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/spaces/read",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"read"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setEnvironmentVariable(\"towerId\", jsonData.space.id);",
+									"postman.setEnvironmentVariable(\"roomId\", jsonData.topic.id);",
+									"postman.setEnvironmentVariable(\"memberId\", jsonData.member.id);",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"test tower\",\n    \"avatar\": \"0\",\n    \"isPublic\": true,\n    \"tag\": \"kasper workspace\",\n    \"orig\": \"\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/create",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "createGroup",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setEnvironmentVariable(\"towerId\", jsonData.space.id);",
+									"postman.setEnvironmentVariable(\"roomId\", jsonData.topic.id);",
+									"postman.setEnvironmentVariable(\"memberId\", jsonData.member.id);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"test group\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/createGroup",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"createGroup"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "createPrivate",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setEnvironmentVariable(\"towerId\", jsonData.space.id);",
+									"postman.setEnvironmentVariable(\"roomId\", jsonData.topic.id);",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"participantId\": \"e9e5efc1-1c15-4098-b76b-f4a8ae9b062a@midopia\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/spaces/createPrivate",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"spaces",
+								"createPrivate"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "invites",
+			"item": [
+				{
+					"name": "create",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setEnvironmentVariable(\"inviteId\", jsonData.invite.id);",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"f76302e5-673c-4150-8d85-16c5002a7070@midopia\",\n    \"spaceId\": \"{{towerId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/invites/create",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"invites",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "accept",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "77adbc16-0869-4e0f-8093-c545ac5811ef-257db844-8ab5-4cbe-be44-87998c9a4055",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"inviteId\": \"{{inviteId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/invites/accept",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"invites",
+								"accept"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "decline",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"inviteId\": \"{{inviteId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/invites/decline",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"invites",
+								"decline"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "cancel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"inviteId\": \"{{inviteId}}\",\n    \"spaceId\": \"{{towerId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/invites/cancel",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"invites",
+								"cancel"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "topics",
+			"item": [
+				{
+					"name": "create",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setEnvironmentVariable(\"roomId\", jsonData.topic.id);",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"test room 3\",\n    \"avatar\": \"123\",\n    \"spaceId\": \"{{towerId}}\",\n    \"metadata\": \"empty\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/topics/create",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"topics",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"topicId\": \"{{roomId}}\",\n    \"title\": \"test room updated\",\n    \"avatar\": \"12\",\n    \"spaceId\": \"{{towerId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/topics/update",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"topics",
+								"update"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"topicId\": \"{{roomId}}\",\n    \"spaceId\": \"{{towerId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/topics/delete",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"topics",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/topics/get?topicId={{roomId}}&spaceId={{towerId}}",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"topics",
+								"get"
+							],
+							"query": [
+								{
+									"key": "topicId",
+									"value": "{{roomId}}"
+								},
+								{
+									"key": "spaceId",
+									"value": "{{towerId}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "send",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "0bd6d7db-9399-4750-8dc2-509090185ea5-20bbcc3e-e00f-4eca-9cb3-49da39d950f2",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"type\": \"single\",\n    \"data\": \"offchain\",\n    \"spaceId\": \"{{towerId}}\",\n    \"topicId\": \"{{roomId}}\",\n    \"memberId\": \"{{memberId}}\",\n    \"recvId\": \"4c215571-7a5b-4f99-8f49-40673c3f690a@midopia\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/topics/send",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"topics",
+								"send"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "storage",
+			"item": [
+				{
+					"name": "upload",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "data",
+									"type": "file",
+									"src": "/home/keyhan/Pictures/wallpapers/material-wallpaper-1.jpg"
+								},
+								{
+									"key": "dataKey",
+									"value": "hihi7",
+									"type": "text"
+								},
+								{
+									"key": "towerId",
+									"value": "{{towerId}}",
+									"type": "text"
+								},
+								{
+									"key": "roomId",
+									"value": "{{roomId}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{storage}}/storages/upload",
+							"host": [
+								"{{storage}}"
+							],
+							"path": [
+								"storages",
+								"upload"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "download",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{storage}}/storages/download?towerId={{towerId}}&roomId={{roomId}}&fileKey=hihi7",
+							"host": [
+								"{{storage}}"
+							],
+							"path": [
+								"storages",
+								"download"
+							],
+							"query": [
+								{
+									"key": "towerId",
+									"value": "{{towerId}}"
+								},
+								{
+									"key": "roomId",
+									"value": "{{roomId}}"
+								},
+								{
+									"key": "fileKey",
+									"value": "hihi7"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "admins",
+			"item": [
+				{
+					"name": "login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"if (jsonData.token) {",
+									"    postman.setEnvironmentVariable(\"token\", jsonData.token);",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"keyhan@midopia\",\n    \"password\": \"klodmfb98130@Yhpzcvxbnmjobi934Pd**sfgfhjobmnIh%u9qj0opminu9j0bmI\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/admin/auth/login",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"admin",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "changePass",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"password\": \"4aef29a9-f667-4512-a030-937c400c7b95-ad54c654-cf15-4928-b197-c3e784cc0171\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/admin/auth/changePass",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"admin",
+								"auth",
+								"changePass"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "auths",
+			"item": [
+				{
+					"name": "getServerPublicKey",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"if (jsonData.token) {",
+									"    postman.setEnvironmentVariable(\"token\", jsonData.token);",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/auths/getServerPublicKey",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"auths",
+								"getServerPublicKey"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "maps",
+			"item": [
+				{
+					"name": "get",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"if (jsonData.token) {",
+									"    postman.setEnvironmentVariable(\"token\", jsonData.token);",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{map}}/map/get",
+							"host": [
+								"{{map}}"
+							],
+							"path": [
+								"map",
+								"get"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "external",
+			"item": [
+				{
+					"name": "plug",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"if (jsonData.token) {",
+									"    postman.setEnvironmentVariable(\"token\", jsonData.token);",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "2",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "key",
+									"value": "16",
+									"type": "text"
+								},
+								{
+									"key": "meta",
+									"value": "[\n    {\n        \"key\": \"hello\",\n        \"path\": \"/greet/hello\",\n        \"guard\": {\n            \"isUser\": false,\n            \"isInSpace\": false,\n            \"isInTopic\": false\n        }\n    }\n]",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/home/keyhan/MyWorkspace/midopia/new/extra/wasm-vms/games/hokm/hokm_game.wasm"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/plugins/plug",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"plugins",
+								"plug"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "use",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"if (jsonData.token) {",
+									"    postman.setEnvironmentVariable(\"token\", jsonData.token);",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"kasper\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/greet/hello",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"greet",
+								"hello"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "assign",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"if (jsonData.token) {",
+									"    postman.setEnvironmentVariable(\"token\", jsonData.token);",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "2",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"key\": \"1\",\n    \"type\": \"machine\",\n    \"tag\": \"bdd9f0f1-b07d-4ebd-b2f5-c4ec004f0f87@midopia\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/plugins/assign",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"plugins",
+								"assign"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "interact",
+			"item": [
+				{
+					"name": "sendFriendRequest",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"code\": \"AAA018\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/sendFriendRequest",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"sendFriendRequest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"8@global\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/create",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "generateCode",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/generateCode",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"generateCode"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "getInviteCode",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/interact/getInviteCode",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"getInviteCode"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "getByCode",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"code\": \"AAA018\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/getByCode",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"getByCode"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "unfriendUser",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{humanId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/unfriendUser",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"unfriendUser"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "blockUser",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{humanId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/blockUser",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"blockUser"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "unblockUser",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{humanId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/unblockUser",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"unblockUser"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "acceptFriendRequest",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "57942e68-5ba3-4a78-8499-f50ac495dcde-f7e76bca-7366-494e-9bd0-31b6ebbf572d",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"37@global\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/acceptFriendRequest",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"acceptFriendRequest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "declineFriendRequest",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{humanId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/interact/declineFriendRequest",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"declineFriendRequest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "readBlockedList",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/interact/readBlockedList",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"readBlockedList"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "readFriendList",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/interact/readFriendList",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"readFriendList"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "readFriendRequestList",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{server}}/interact/readFriendRequestList",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"interact",
+								"readFriendRequestList"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "machine",
+			"item": [
+				{
+					"name": "create",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"testmac3\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/machines/create",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"machines",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "deploy",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "token",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "layer",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"runtime\": \"wasm\",\n    \"machineId\": \"73@global\",\n    \"byteCode\": \"\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{server}}/machines/deploy",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"machines",
+								"deploy"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "hello",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "layer",
+						"value": "1",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{server}}/api/hello",
+					"host": [
+						"{{server}}"
+					],
+					"path": [
+						"api",
+						"hello"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "ping",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "layer",
+						"value": "1",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{server}}/api/ping",
+					"host": [
+						"{{server}}"
+					],
+					"path": [
+						"api",
+						"ping"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "time",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{server}}/api/time",
+					"host": [
+						"{{server}}"
+					],
+					"path": [
+						"api",
+						"time"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

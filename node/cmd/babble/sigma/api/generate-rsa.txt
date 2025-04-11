@@ -1,0 +1,21 @@
+	// key, err := rsa.GenerateKey(rand.Reader, 4096)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// pub := key.Public()
+	// keyPEM := pem.EncodeToMemory(
+	// 	&pem.Block{
+	// 		Type:  "RSA PRIVATE KEY",
+	// 		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	// 	},
+	// )
+	// pubPEM := pem.EncodeToMemory(
+	// 	&pem.Block{
+	// 		Type:  "RSA PUBLIC KEY",
+	// 		Bytes: x509.MarshalPKCS1PublicKey(pub.(*rsa.PublicKey)),
+	// 	},
+	// )
+	// pubKey := string(pubPEM)
+	// pubKey = pubKey[len("-----BEGIN RSA PUBLIC KEY-----\n") : len(pubKey)-len("\n-----END RSA PUBLIC KEY-----\n")]
+	// privKey := string(keyPEM)
+	// privKey = privKey[len("-----BEGIN RSA PRIVATE KEY-----\n") : len(privKey)-len("\n-----END RSA PRIVATE KEY-----\n")]
