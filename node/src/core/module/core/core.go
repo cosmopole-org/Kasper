@@ -611,12 +611,14 @@ func (c *Core) DoElection() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.ElecReg = true
-	c.chain <- abstract.ChainPacket{
-		Type:    "election",
-		Key:     "choose-validator",
-		Meta:    map[string]any{"phase": "start-reg", "voter": c.Ip},
-		Payload: []byte("{}"),
-	}
+	future.Async(func() {
+		c.chain <- abstract.ChainPacket{
+			Type:    "election",
+			Key:     "choose-validator",
+			Meta:    map[string]any{"phase": "start-reg", "voter": c.Ip},
+			Payload: []byte("{}"),
+		}
+	}, false)
 }
 
 func (c *Core) Run() {
@@ -626,20 +628,13 @@ func (c *Core) Run() {
 	}, false)
 
 	future.Async(func() {
-		electionStarted := false
 		for {
 			time.Sleep(time.Duration(1) * time.Second)
 			minutes := time.Now().Minute()
 			seconds := time.Now().Second()
 			if (minutes == 0) && ((seconds >= 0) && (seconds <= 2)) {
-				if !electionStarted {
-					electionStarted = true
-					c.DoElection()
-					future.Async(func() {
-						time.Sleep(time.Duration(5) * time.Second)
-						electionStarted = false
-					}, true)
-				}
+				c.DoElection()
+				time.Sleep(2 * time.Minute)
 			}
 		}
 	}, true)
