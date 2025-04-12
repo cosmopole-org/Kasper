@@ -57,6 +57,7 @@ type PlayerState struct {
 	Ready2       bool
 	TextsCount   int
 	EmojiCount   int
+	Played       bool
 }
 
 type Game struct {
@@ -144,7 +145,7 @@ func (h *HokmGame) createGame(level string, turns float64, spaceId string, topic
 	}
 	game.Players = ps
 	for i, p := range ps {
-		game.Manager[p.MemberId] = &PlayerState{MissCount: 0, NotAvailable: false, Ready: false, Ready2: false, TextsCount: 0, EmojiCount: 0}
+		game.Manager[p.MemberId] = &PlayerState{MissCount: 0, NotAvailable: false, Ready: false, Ready2: false, TextsCount: 0, EmojiCount: 0, Played: false}
 		game.MembersToPlayersMap[p.MemberId] = p.UserId
 		game.MembersIndex[p.MemberId] = i
 		game.MembersToTeamsMap[p.MemberId] = p.TeamId
@@ -242,7 +243,9 @@ func (g *Game) notfiyWinnerToServer(winnerTeam string) {
 		if player.TeamId == winnerTeam {
 			winners = append(winners, player.UserId)
 		} else {
-			loosers = append(loosers, player.UserId)
+			if g.Manager[player.MemberId].Played {
+				loosers = append(loosers, player.UserId)
+			}
 		}
 	}
 	data := map[string]any{
@@ -268,7 +271,9 @@ func (g *Game) notfiyStartToServer() {
 		if strings.HasPrefix(player.UserId, "b_") {
 			continue
 		}
-		humanPlayers = append(humanPlayers, player.UserId)
+		if g.Manager[player.MemberId].Played {
+			humanPlayers = append(humanPlayers, player.UserId)
+		}
 	}
 
 	data := map[string]any{
@@ -617,7 +622,9 @@ func (h *HokmGame) notifyGameStart(g *Game, starter string) {
 						loosers := []string{}
 						for _, player := range g.Players {
 							if player.MemberId == starter {
-								loosers = append(loosers, player.UserId)
+								if g.Manager[player.MemberId].Played {
+									loosers = append(loosers, player.UserId)
+								}
 								break
 							}
 						}
@@ -1138,6 +1145,9 @@ func (h *HokmGame) OnTopicSend(input models.Send) any {
 					}
 					if !g.HakemReady {
 						g.Manager[input.Member.Id].Ready = true
+						if !g.Started {
+							g.Manager[input.Member.Id].Played = true
+						}
 						ready := true
 						for memberId, m := range g.Manager {
 							if !strings.HasPrefix(g.MembersToPlayersMap[memberId], "b_") {
@@ -1255,11 +1265,11 @@ type RandGroup struct {
 	Numbers    []string `json:"numbers"`
 }
 
-// var address = "185.204.168.179:8080"
-// var protocol = ""
+var address = "127.0.0.1:8080"
+var protocol = ""
 
-var address = "game.midopia.com"
-var protocol = "s"
+// var address = "game.midopia.com"
+// var protocol = "s"
 
 // var address = "localhost:8080"
 

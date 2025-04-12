@@ -39,8 +39,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	// "gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/mysql"
+	// "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"kasper/src/shell/layer1/adapters"
@@ -122,7 +122,7 @@ func RunNet() error {
 	}
 
 	app := sigma.NewApp(sigma.Config{
-		Id:  "",
+		Id:  os.Getenv("ORIGIN"),
 		Log: logger.Println,
 	})
 
@@ -151,6 +151,11 @@ func RunNet() error {
 	app.Load(
 		[]string{
 			"keyhan",
+			"amir",
+			"mani",
+			"arash",
+			"arash",
+			"shahin",
 		},
 		[]abstract.ILayer{
 			layer1.New(),
@@ -160,8 +165,8 @@ func RunNet() error {
 		[]interface{}{
 			logger,
 			os.Getenv("STORAGE_ROOT_PATH"),
-			postgres.Open(os.Getenv("DB_URI")),
-			// mysql.Open(getDSN(app.IpAddr())),
+			// postgres.Open(os.Getenv("DB_URI")),
+			mysql.Open(getDSN(app.IpAddr())),
 			os.Getenv("REDIS_URI"),
 			engine,
 			proxy,

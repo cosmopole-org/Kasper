@@ -157,7 +157,9 @@ func (c *Core) ExecAppletRequestOnChain(machineId string, key string, packet []b
 	c.chainCallbacks[callbackId] = &ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
 	vm := mach_model.Vm{MachineId: machineId}
 	abstract.UseToolbox[*module_model.ToolboxL2](c.Get(2).Tools()).Storage().Db().First(&vm)
-	c.chain <- abstract.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": false, "runtime": vm.Runtime, "userId": userId, "machineId": machineId}, Key: key, Payload: packet, Effects: abstract.Effects{DbUpdates: []abstract.Update{}, CacheUpdates: []abstract.CacheUpdate{}}}
+	future.Async(func() {
+		c.chain <- abstract.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": false, "runtime": vm.Runtime, "userId": userId, "machineId": machineId}, Key: key, Payload: packet, Effects: abstract.Effects{DbUpdates: []abstract.Update{}, CacheUpdates: []abstract.CacheUpdate{}}}
+	}, false)
 }
 
 func (c *Core) ExecBaseRequestOnChain(key string, packet any, layer int, token string, callback func([]byte, int, error)) {
@@ -167,7 +169,9 @@ func (c *Core) ExecBaseRequestOnChain(key string, packet any, layer int, token s
 	c.chainCallbacks[callbackId] = &ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
 	serialized, err := json.Marshal(packet)
 	if err == nil {
-		c.chain <- abstract.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": true, "layer": layer, "token": token}, Key: key, Payload: serialized, Effects: abstract.Effects{DbUpdates: []abstract.Update{}, CacheUpdates: []abstract.CacheUpdate{}}}
+		future.Async(func() {
+			c.chain <- abstract.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": true, "layer": layer, "token": token}, Key: key, Payload: serialized, Effects: abstract.Effects{DbUpdates: []abstract.Update{}, CacheUpdates: []abstract.CacheUpdate{}}}
+		}, false)
 	} else {
 		log.Println(err)
 	}
@@ -176,14 +180,18 @@ func (c *Core) ExecBaseRequestOnChain(key string, packet any, layer int, token s
 func (c *Core) ExecBaseResponseOnChain(callbackId string, packet any, resCode int, e string, updates []abstract.Update, cacheUpdates []abstract.CacheUpdate) {
 	serialized, err := json.Marshal(packet)
 	if err == nil {
-		c.chain <- abstract.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": true, "responseCode": resCode, "error": e}, Payload: serialized, Effects: abstract.Effects{DbUpdates: updates, CacheUpdates: cacheUpdates}}
+		future.Async(func() {
+			c.chain <- abstract.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": true, "responseCode": resCode, "error": e}, Payload: serialized, Effects: abstract.Effects{DbUpdates: updates, CacheUpdates: cacheUpdates}}
+		}, false)
 	} else {
 		log.Println(err)
 	}
 }
 
 func (c *Core) ExecAppletResponseOnChain(callbackId string, packet []byte, resCode int, e string, updates []abstract.Update, cacheUpdates []abstract.CacheUpdate) {
-	c.chain <- abstract.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": false, "responseCode": resCode, "error": e}, Payload: packet, Effects: abstract.Effects{DbUpdates: updates, CacheUpdates: cacheUpdates}}
+	future.Async(func() {
+		c.chain <- abstract.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": false, "responseCode": resCode, "error": e}, Payload: packet, Effects: abstract.Effects{DbUpdates: updates, CacheUpdates: cacheUpdates}}
+	}, false)
 }
 
 func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
@@ -219,12 +227,14 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 					for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
 						c.Elections = append(c.Elections, Election{Participants: map[string]bool{}, Commits: map[string][]byte{}, Reveals: map[string]string{}})
 					}
-					c.chain <- abstract.ChainPacket{
-						Type:    "election",
-						Key:     "choose-validator",
-						Meta:    map[string]any{"phase": "register", "voter": c.Ip},
-						Payload: []byte("{}"),
-					}
+					future.Async(func() {
+						c.chain <- abstract.ChainPacket{
+							Type:    "election",
+							Key:     "choose-validator",
+							Meta:    map[string]any{"phase": "register", "voter": c.Ip},
+							Payload: []byte("{}"),
+						}
+					}, false)
 					if voter == c.Ip {
 						future.Async(func() {
 							time.Sleep(time.Duration(10) * time.Second)
@@ -250,12 +260,14 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 							payload = append(payload, bs)
 						}
 						data, _ := json.Marshal(payload)
-						c.chain <- abstract.ChainPacket{
-							Type:    "election",
-							Key:     "choose-validator",
-							Meta:    map[string]any{"phase": "commit", "voter": c.Ip},
-							Payload: data,
-						}
+						future.Async(func() {
+							c.chain <- abstract.ChainPacket{
+								Type:    "election",
+								Key:     "choose-validator",
+								Meta:    map[string]any{"phase": "commit", "voter": c.Ip},
+								Payload: data,
+							}
+						}, false)
 					}
 				} else if phase == "register" {
 					if c.ElecReg {
@@ -282,12 +294,14 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 								myReveals = append(myReveals, c.Elections[i].MyNum)
 							}
 							data, _ := json.Marshal(myReveals)
-							c.chain <- abstract.ChainPacket{
-								Type:    "election",
-								Key:     "choose-validator",
-								Meta:    map[string]any{"phase": "reveal", "voter": c.Ip},
-								Payload: data,
-							}
+							future.Async(func() {
+								c.chain <- abstract.ChainPacket{
+									Type:    "election",
+									Key:     "choose-validator",
+									Meta:    map[string]any{"phase": "reveal", "voter": c.Ip},
+									Payload: data,
+								}
+							}, false)
 						}
 					}
 				} else if phase == "reveal" {

@@ -131,7 +131,7 @@ func (a *Actions) Login(s abstract.IState, input inputsusers.LoginInput) (any, e
 		Avatar:    "0",
 		Token:     token,
 		PublicKey: "",
-	}, "")
+	}, a.Layer.Core().Id())
 	if err2 != nil {
 		return nil, err2
 	}

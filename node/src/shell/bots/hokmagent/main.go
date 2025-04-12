@@ -885,11 +885,11 @@ func (h *HokmAgent) OnTopicSend(input models.Send) any {
 
 var token = ""
 
-// var address = "185.204.168.179:8080"
-// var protocol = ""
+var address = "127.0.0.1:8080"
+var protocol = ""
 
-var address = "game.midopia.com"
-var protocol = "s"
+// var address = "game.midopia.com"
+// var protocol = "s"
 
 // var address = "localhost:8080"
 
