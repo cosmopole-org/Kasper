@@ -1,7 +1,9 @@
 
 const WebSocket = require('ws');
 
-const serverAddress = 'game.midopia.com';
+const serverAddress = '172.77.5.1:8080';
+
+// const serverAddress = 'game.midopia.com';
 // const serverAddress = 'localhost:8080';
 // const serverAddress = '185.204.168.179:8080';
 
@@ -9,7 +11,7 @@ const serverAddress = 'game.midopia.com';
 
     let token = "";
 
-    let socket = new WebSocket(`wss://${serverAddress}/ws`);
+    let socket = new WebSocket(`ws://${serverAddress}/ws`);
 
     const authenticate = (t) => {
         token = t;
@@ -32,7 +34,7 @@ const serverAddress = 'game.midopia.com';
                 redirect: "follow"
             };
 
-            fetch(`https://${serverAddress}${path}`, requestOptions)
+            fetch(`http://${serverAddress}${path}`, requestOptions)
                 .then((response) => response.json())
                 .then((result) => {
                     resolve(result);
@@ -54,7 +56,15 @@ const serverAddress = 'game.midopia.com';
                 }
             }, token);
             console.log(result3);
-            let result4 = await request(`/match/join`, 3, { gameKey: 'hokm', level: '1' }, token);
+            let result4 = await request(`/spaces/create`, 1, {
+                "title": "test tower",
+                "avatar": "0",
+                "isPublic": true,
+                "tag": "kasper workspace",
+                "orig": "172.77.5.2"
+            }, token);
+            console.log(result4);
+            // let result4 = await request(`/match/join`, 3, { gameKey: 'hokm', level: '1' }, token);
             // let result4 = await request(`/invites/join`, 3, { gameKey: 'hokm', level: '1' }, token);
             // console.log(result4);
         }

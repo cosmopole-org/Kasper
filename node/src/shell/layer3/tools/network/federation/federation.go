@@ -15,31 +15,45 @@ import (
 	models "kasper/src/shell/layer1/model"
 	module_actor_model "kasper/src/shell/layer1/module/actor"
 	"kasper/src/shell/layer1/tools/signaler"
+	net_http "kasper/src/shell/layer3/tools/network/http"
 	"kasper/src/shell/utils/crypto"
+	"kasper/src/shell/utils/future"
 	realip "kasper/src/shell/utils/ip"
 	"net"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
+type FedCallback struct {
+	Callback      func([]byte, int, error)
+	UserRequestId string
+}
+
 type FedNet struct {
-	app      abstract.ICore
-	storage  adapters.IStorage
-	cache    adapters.ICache
-	signaler *signaler.Signaler
-	logger   *module_logger.Logger
+	app        abstract.ICore
+	storage    adapters.IStorage
+	cache      adapters.ICache
+	signaler   *signaler.Signaler
+	logger     *module_logger.Logger
+	httpServer *net_http.HttpServer
+	callbacks  *cmap.ConcurrentMap[string, FedCallback]
 }
 
 func FirstStageBackFill(core abstract.ICore, logger *module_logger.Logger) *FedNet {
-	return &FedNet{app: core, logger: logger}
+	m := cmap.New[FedCallback]()
+	return &FedNet{app: core, logger: logger, callbacks: &m}
 }
 
-func (fed *FedNet) SecondStageForFill(f *fiber.App, storage adapters.IStorage, cache adapters.ICache, signaler *signaler.Signaler) adapters.IFederation {
+func (fed *FedNet) SecondStageForFill(f *net_http.HttpServer, storage adapters.IStorage, cache adapters.ICache, signaler *signaler.Signaler) adapters.IFederation {
+	fed.httpServer = f
 	fed.storage = storage
 	fed.cache = cache
 	fed.signaler = signaler
-	f.Post("/api/federation", func(c *fiber.Ctx) error {
+	fed.httpServer.Server.Post("/api/federation", func(c *fiber.Ctx) error {
 		var pack models.OriginPacket
 		err := c.BodyParser(&pack)
 		if err != nil {
@@ -127,7 +141,19 @@ func (fed *FedNet) HandlePacket(channelId string, payload models.OriginPacket) {
 			fed.signaler.JoinGroup(spaceRes.Member.SpaceId, spaceRes.Member.UserId)
 			fed.cache.Put(fmt.Sprintf(memberTemplate, spaceRes.Member.SpaceId, spaceRes.Member.UserId, spaceRes.Member.Id), spaceRes.Member.TopicId)
 		}
-		fed.signaler.SignalUser(payload.Key, payload.RequestId, payload.UserId, payload.Data, true)
+		cb, ok := fed.callbacks.Get(payload.RequestId)
+		if ok {
+			fed.callbacks.Remove(payload.RequestId)
+			if strings.HasPrefix(payload.Data, "error: ") {
+				errPack := payload.Data[len("error: "):]
+				errObj := models.Error{}
+				json.Unmarshal([]byte(errPack), &errObj)
+				err := errors.New(errObj.Message)
+				cb.Callback([]byte(""), 0, err)
+			} else {
+				cb.Callback([]byte(payload.Data), 1, nil)
+			}
+		}
 	} else {
 		reactToUpdate := func(key string, data string) {
 			if key == "topics/create" {
@@ -268,6 +294,9 @@ func (fed *FedNet) HandlePacket(channelId string, payload models.OriginPacket) {
 			fed.signaler.SignalGroup(payload.Key[len("groupUpdate "):], payload.SpaceId, payload.Data, true, payload.Exceptions)
 		} else {
 			layer := fed.app.Get(payload.Layer)
+			if layer == nil {
+				return
+			}
 			action := layer.Actor().FetchAction(payload.Key)
 			if action == nil {
 				errPack, _ := json.Marshal(models.BuildErrorJson("action not found"))
@@ -283,6 +312,7 @@ func (fed *FedNet) HandlePacket(channelId string, payload models.OriginPacket) {
 				fed.logger.Println(err)
 				errPack, err2 := json.Marshal(models.BuildErrorJson(err.Error()))
 				if err2 == nil {
+					errPack = []byte("error: " + string(errPack))
 					fed.SendInFederation(channelId, models.OriginPacket{IsResponse: true, Key: payload.Key, RequestId: payload.RequestId, Data: string(errPack), UserId: payload.UserId})
 				}
 				return
@@ -320,7 +350,61 @@ func (fed *FedNet) SendInFederation(destOrg string, packet models.OriginPacket) 
 		}
 	}
 	if ok {
-		statusCode, _, err := fiber.Post("https://" + destOrg + "/api/federation").JSON(packet).Bytes()
+		var statusCode int
+		var err []error
+		if fed.httpServer.Port == 443 {
+			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation").JSON(packet).Bytes()
+		} else {
+			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation").JSON(packet).Bytes()
+		}
+		if err != nil {
+			fed.logger.Println("could not send: status: %d error: %v", statusCode, err)
+		} else {
+			fed.logger.Println("packet sent successfully. status: ", statusCode)
+		}
+	} else {
+		fed.logger.Println("state org not found")
+	}
+}
+
+func (fed *FedNet) SendInFederationByCallback(destOrg string, packet models.OriginPacket, callback func([]byte, int, error)) {
+	ipAddr := ""
+	ips, _ := net.LookupIP(destOrg)
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			ipAddr = ipv4.String()
+			break
+		}
+	}
+	ok := false
+	for _, peer := range fed.app.Chain().Peers.Peers {
+		arr := strings.Split(peer.NetAddr, ":")
+		addr := strings.Join(arr[0:len(arr)-1], ":")
+		if addr == ipAddr {
+			ok = true
+			break
+		}
+	}
+	if ok {
+		callbackId := crypto.SecureUniqueString()
+		cb := FedCallback{Callback: callback, UserRequestId: packet.RequestId}
+		packet.RequestId = callbackId
+		fed.callbacks.Set(callbackId, cb)
+		future.Async(func() {
+			time.Sleep(time.Duration(120) * time.Second)
+			cb, ok := fed.callbacks.Get(callbackId)
+			if ok {
+				fed.callbacks.Remove(callbackId)
+				cb.Callback([]byte(""), 0, errors.New("federation callback timeout"))
+			}
+		}, false)
+		var statusCode int
+		var err []error
+		if fed.httpServer.Port == 443 {
+			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation").JSON(packet).Bytes()
+		} else {
+			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation").JSON(packet).Bytes()
+		}
 		if err != nil {
 			fed.logger.Println("could not send: status: %d error: %v", statusCode, err)
 		} else {

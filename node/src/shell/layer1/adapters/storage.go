@@ -29,8 +29,8 @@ type ITrx interface {
 }
 
 func BuildJsonFetcher(column string, pathDot string) string {
-	// return "JSON_EXTRACT(`" + column + "`, '$." + pathDot + "')"
-	return "json_extract_path_text(\"" + column + "\"::json, '" + strings.Join(strings.Split(pathDot, "."), "','") + "')"
+	return "JSON_EXTRACT(`" + column + "`, '$." + pathDot + "')"
+	// return "json_extract_path_text(\"" + column + "\"::json, '" + strings.Join(strings.Split(pathDot, "."), "','") + "')"
 }
 
 func extractDbHolder(dbHolder any) *gorm.DB {
@@ -72,8 +72,8 @@ func UpdateJson(dbHolder any, entity any, column string, pathDot string, v any) 
 		return extractDbHolder(dbHolder).UpdateColumn(column, value).Error
 	}
 	pathParts := strings.Split(pathDot, ".")
-	// path := strings.Join(pathParts, ".")
-	path := "{" + strings.Join(pathParts, ",") + "}"
+	path := strings.Join(pathParts, ".")
+	// path := "{" + strings.Join(pathParts, ",") + "}"
 	var finalValue = value
 	if entity == nil {
 		return extractDbHolder(dbHolder).UpdateColumn(column, datatypes.JSONSet(column).Set(path, finalValue)).Error
@@ -82,8 +82,8 @@ func UpdateJson(dbHolder any, entity any, column string, pathDot string, v any) 
 		err := extractDbHolder(dbHolder).First(entity, datatypes.JSONQuery(column).HasKey(pathParts[0:i]...)).Error
 		if err != nil {
 			log.Println(err)
-			// path = strings.Join(pathParts[0:i], ".")
-			path = "{" + strings.Join(pathParts[0:i], ",") + "}"
+			path = strings.Join(pathParts[0:i], ".")
+			// path = "{" + strings.Join(pathParts[0:i], ",") + "}"
 			root := map[string]interface{}{}
 			rootTemp := root
 			for j := i; j < len(pathParts)-1; j++ {

@@ -22,7 +22,7 @@ do
     docker run  \
         -u $(id -u) \
         -v $dest:/.babble \
-        --rm midonet:latest keygen 
+        --rm kasper:latest keygen 
     echo "$IPBASE$i:$PORT" > $dest/addr
 done
 

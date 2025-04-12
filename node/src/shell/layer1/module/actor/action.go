@@ -114,8 +114,20 @@ func (a *SecureAction) SecurelyAct(layer abstract.ILayer, token string, packetId
 	if err != nil {
 		a.logger.Println(err)
 	}
-	toolbox.Federation().SendInFederation(origin, modulemodel.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, SpaceId: input.GetSpaceId(), TopicId: input.GetTopicId(), Data: string(data), RequestId: packetId})
-	return 1, modulemodel.ResponseSimpleMessage{Message: "request sent to federation"}, nil
+	cFed := make(chan int, 1)
+	var scFed int
+	var resFed any
+	var errFed error
+	toolbox.Federation().SendInFederationByCallback(origin, modulemodel.OriginPacket{Layer: layer.Index() + 1, IsResponse: false, Key: a.Key(), UserId: userId, SpaceId: input.GetSpaceId(), TopicId: input.GetTopicId(), Data: string(data), RequestId: packetId}, func(data []byte, resCode int, err error) {
+		result := map[string]any{}
+		json.Unmarshal(data, &result)
+		scFed = resCode
+		resFed = result
+		errFed = err
+		cFed <- 1
+	})
+	<-cFed
+	return scFed, resFed, errFed
 }
 
 func (a *SecureAction) SecurelyActFed(layer abstract.ILayer, userId string, input abstract.IInput) (int, any, error) {
@@ -123,6 +135,22 @@ func (a *SecureAction) SecurelyActFed(layer abstract.ILayer, userId string, inpu
 	if !success {
 		return -1, nil, nil
 	}
-	s := layer.Sb().NewState(info)
-	return a.Act(s, input)
+	s := layer.Sb().NewState(info, nil, "").(statemodule.IStateL1)
+	tb := abstract.UseToolbox[toolbox2.IToolboxL1](a.core.Get(2).Tools())
+	var sc int
+	var res any
+	var err error
+	tb.Storage().DoTrx(func(i adapters.ITrx) error {
+		s.SetTrx(i)
+		sc, res, err = a.Act(s, input)
+		return err
+	})
+	if res != nil {
+		executable, ok := res.(func() (any, error))
+		if ok {
+			o, e := executable()
+			return sc, o, e
+		}
+	}
+	return sc, res, err
 }

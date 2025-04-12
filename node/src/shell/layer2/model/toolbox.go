@@ -43,6 +43,6 @@ func (s *ToolboxL2) Dummy() {
 	// pass
 }
 
-func NewTools(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, cache adapters.ICache, file *toolfile.File) *ToolboxL2 {
-	return &ToolboxL2{storage: storage, cache: cache, wasm: wasm.NewWasm(core, logger, storageRoot, storage), elpis: elpis.NewElpis(core, logger, storageRoot, storage), file: file}
+func NewTools(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, kvDbPath string, cache adapters.ICache, file *toolfile.File) *ToolboxL2 {
+	return &ToolboxL2{storage: storage, cache: cache, wasm: wasm.NewWasm(core, logger, storageRoot, storage, kvDbPath), elpis: elpis.NewElpis(core, logger, storageRoot, storage), file: file}
 }

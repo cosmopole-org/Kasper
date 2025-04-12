@@ -68,15 +68,17 @@ type ChainCallback struct {
 	Responses map[string]string
 }
 
-func NewCore(id string, log abstract.Log) abstract.ICore {
+func NewCore(_ string, log abstract.Log) *Core {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
 	localAddr := conn.LocalAddr().(*net.UDPAddr).IP.String()
+	id := localAddr
 	execs := map[string]bool{}
-	execs[localAddr] = true
+	execs["172.77.5.1"] = true
+	execs["172.77.5.2"] = true
 	return &Core{
 		id:             id,
 		utils:          modulecoremodel.NewUtils(log),
@@ -98,7 +100,11 @@ func (c *Core) Push(l abstract.ILayer) {
 }
 
 func (c *Core) Get(index int) abstract.ILayer {
-	return c.layers[index-1]
+	if (index >= 1) && (index <= len(c.layers)) {
+		return c.layers[index-1]
+	} else {
+		return nil
+	}
 }
 
 func (c *Core) Id() string {
@@ -115,6 +121,10 @@ func (c *Core) Chain() *babble.Babble {
 
 func (c *Core) Gods() []string {
 	return c.gods
+}
+
+func (c *Core) IpAddr() string {
+	return c.Ip
 }
 
 func (c *Core) AppPendingTrxs() {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	models_hokmgame "kasper/src/shell/bots/hokmgame/models"
 	plugger_machiner "kasper/src/shell/machiner/main"
 	"kasper/src/shell/utils"
+	"kasper/src/shell/utils/future"
 
 	"kasper/src/babble"
 	"kasper/src/proxy/inmem"
@@ -74,29 +76,41 @@ func NewRunCmd() *cobra.Command {
 * RUN
 *******************************************************************************/
 
-// func getEnvWithDefault(key, fallback string) string {
-// 	value := os.Getenv(key)
-// 	if len(value) == 0 {
-// 		return fallback
-// 	}
-// 	return value
-// }
+func getEnvWithDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if len(value) == 0 {
+		return fallback
+	}
+	return value
+}
 
-// func getDSN() string {
-// 	tidbHost := getEnvWithDefault("TIDB_HOST", "127.0.0.1")
-// 	tidbPort := getEnvWithDefault("TIDB_PORT", "4000")
-// 	tidbUser := getEnvWithDefault("TIDB_USER", "root")
-// 	tidbPassword := getEnvWithDefault("TIDB_PASSWORD", "")
-// 	tidbDBName := getEnvWithDefault("TIDB_DB_NAME", "test")
-// 	useSSL := getEnvWithDefault("USE_SSL", "false")
+func getDSN(ipAddress string) string {
+	tidbHost := getEnvWithDefault("TIDB_HOST", ipAddress)
+	tidbPort := getEnvWithDefault("TIDB_PORT", "4000")
+	tidbUser := getEnvWithDefault("TIDB_USER", "root")
+	tidbPassword := getEnvWithDefault("TIDB_PASSWORD", "")
+	tidbDBName := getEnvWithDefault("TIDB_DB_NAME", "test")
+	useSSL := getEnvWithDefault("USE_SSL", "false")
 
-// 	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&tls=%s",
-// 		tidbUser, tidbPassword, tidbHost, tidbPort, tidbDBName, useSSL)
-// }
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&tls=%s",
+		tidbUser, tidbPassword, tidbHost, tidbPort, tidbDBName, useSSL)
+}
 
 var exit = make(chan int, 1)
 
 func RunNet() error {
+
+	future.Async(func() {
+		cmnd := exec.Command("tidb-server")
+		cmnd.Start()
+	}, false)
+
+	future.Async(func() {
+		cmnd := exec.Command("redis-server")
+		cmnd.Start()
+	}, false)
+
+	time.Sleep(5 * time.Second)
 
 	logger := new(module_logger.Logger)
 
@@ -108,7 +122,7 @@ func RunNet() error {
 	}
 
 	app := sigma.NewApp(sigma.Config{
-		Id:  os.Getenv("ORIGIN"),
+		Id:  "",
 		Log: logger.Println,
 	})
 
@@ -147,10 +161,11 @@ func RunNet() error {
 			logger,
 			os.Getenv("STORAGE_ROOT_PATH"),
 			postgres.Open(os.Getenv("DB_URI")),
-			// mysql.Open(getDSN()),
+			// mysql.Open(getDSN(app.IpAddr())),
 			os.Getenv("REDIS_URI"),
 			engine,
 			proxy,
+			os.Getenv("APPLET_DB_PATH"),
 		},
 	)
 

@@ -39,7 +39,7 @@ done
 
 for i in $(seq 1 $N)
 do
-    docker create --name=node$i --net=babblenet --ip=172.77.5.$i midonet:latest run \
+    docker create --name=node$i --net=babblenet --ip=172.77.5.$i --mount type=bind,source=/home/keyhan/Desktop/data,target=/home/ubuntu/storage kasper:latest run \
     --heartbeat=100ms \
     --moniker="node$i" \
     --cache-size=50000 \

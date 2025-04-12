@@ -104,7 +104,6 @@ require (
 
 require (
 	github.com/centrifugal/centrifuge v0.32.2
-	github.com/getsentry/sentry-go v0.31.1
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gofiber/contrib/websocket v1.3.3
 	github.com/gofiber/fiber/v2 v2.52.6

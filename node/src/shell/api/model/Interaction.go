@@ -23,7 +23,7 @@ func (j *Json) Scan(value interface{}) error {
 
 type Interaction struct {
 	Id      int    `json:"id" gorm:"autoIncrement;column:id"`
-	UserIds string `json:"userIds" gorm:"uniqueIndex;column:user_ids"`
+	UserIds string `json:"userIds" gorm:"column:user_ids"`
 	State   Json   `json:"state" gorm:"column:state"`
 }
 

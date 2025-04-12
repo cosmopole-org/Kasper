@@ -37,18 +37,19 @@ RUN make install
 WORKDIR /app
 
 RUN apt install -y golang
-
 ENV GOPROXY=https://goproxy.io,direct
 
+RUN apt install -y redis-server
+
 COPY . .
-COPY .babble /.babble
+# COPY .babble /.babble
 
 # RUN go mod tidy
 RUN CGO_ENABLED=1 go build -o kasper .
 
 RUN cp kasper /bin/kasper
 RUN cp .env /bin/.env
-# RUN cp tidb-server /bin/tidb-server
+RUN cp tidb-server /bin/tidb-server
 EXPOSE 1337 1338 80 8080
 ENV HOME=/
 ENTRYPOINT ["kasper"]

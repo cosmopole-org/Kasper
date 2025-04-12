@@ -37,5 +37,5 @@ func (g *Guard) ValidateByToken(layer abstract.ILayer, token string, spaceId str
 }
 
 func (g *Guard) ValidateByUserId(userId string, spaceId string, topicId string, memberId string) (bool, *moduleactormodel.Info) {
-	return true, moduleactormodel.NewInfo("123", spaceId, topicId, memberId)
+	return true, moduleactormodel.NewInfo(userId, spaceId, topicId, memberId)
 }

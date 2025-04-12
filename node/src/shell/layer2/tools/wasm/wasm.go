@@ -1,7 +1,7 @@
 package wasm
 
 /*
- #cgo CXXFLAGS: -I/root/rocksdb/include -std=c++17
+ #cgo CXXFLAGS: -std=c++17
  #cgo LDFLAGS: -lrocksdb -lpthread -lz -lsnappy -lzstd -llz4 -lbz2 -lwasmedge -static-libgcc -static-libstdc++
 
  #include "main.h"
@@ -172,7 +172,7 @@ func checkField[T any](input map[string]any, fieldName string, defVal T) (T, err
 	return f, nil
 }
 
-func NewWasm(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage) *Wasm {
+func NewWasm(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, kvDbPath string) *Wasm {
 	storage.AutoMigrate(&adapters_model.DataUnit{})
 	wm := &Wasm{
 		app:         core,
@@ -180,6 +180,6 @@ func NewWasm(core abstract.ICore, logger *modulelogger.Logger, storageRoot strin
 		storageRoot: storageRoot,
 		storage:     storage,
 	}
-	C.init()
+	C.init(C.CString(kvDbPath))
 	return wm
 }

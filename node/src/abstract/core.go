@@ -31,6 +31,7 @@ type ICore interface {
 	Chain() *babble.Babble
 	Run()
 	NewHgHandler() *HgHandler
+	IpAddr() string
 }
 
 type HgHandler struct {

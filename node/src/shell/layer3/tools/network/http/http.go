@@ -27,6 +27,7 @@ type HttpServer struct {
 	shadows map[string]bool
 	Server  *fiber.App
 	logger  *modulelogger.Logger
+	Port    int
 }
 
 type EmptySuccessResponse struct {
@@ -137,6 +138,7 @@ func (hs *HttpServer) handleRequest(c *fiber.Ctx) error {
 }
 
 func (hs *HttpServer) Listen(port int) {
+	hs.Port = port
 	hs.Server.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 	}))

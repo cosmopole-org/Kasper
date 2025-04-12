@@ -174,7 +174,7 @@ func (a *Actions) Create(s abstract.IState, input inputsusers.CreateInput) (any,
 	if input.Typ != "" {
 		typ = input.Typ
 	}
-	user = models.User{Metadata: datatypes.JSON([]byte(`{}`)), Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Typ: typ, PublicKey: input.PublicKey, Username: input.Username + "@" + a.Layer.Core().Id(), Name: input.Name, Avatar: input.Avatar}
+	user = models.User{Metadata: datatypes.JSON([]byte(`{}`)), Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Typ: typ, PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy(), Name: input.Name, Avatar: input.Avatar}
 	err := trx.Db().Create(&user).Error
 	if err != nil {
 		return nil, err

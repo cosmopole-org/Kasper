@@ -20,17 +20,11 @@
 
 using namespace std;
 
-#if defined(OS_WIN)
-std::string kDBPath = "C:\\Windows\\TEMP\\rocksdb_transaction_example";
-#else
-std::string kDBPath = "/home/ubuntu/storage/vm_db";
-#endif
-
-void init()
+void init(char* kvDbPath)
 {
   wasmSend = wasmCallback;
   options.create_if_missing = true;
-  Status s = TransactionDB::Open(options, txn_db_options, kDBPath, &txn_db);
+  Status s = TransactionDB::Open(options, txn_db_options, kvDbPath, &txn_db);
   assert(s.ok());
 }
 

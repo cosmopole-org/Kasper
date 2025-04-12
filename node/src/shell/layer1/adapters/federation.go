@@ -6,4 +6,5 @@ import (
 
 type IFederation interface {
 	SendInFederation(destOrg string, packet models.OriginPacket)
+	SendInFederationByCallback(destOrg string, packet models.OriginPacket, callback func([]byte, int, error))
 }

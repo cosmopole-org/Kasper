@@ -1,4 +1,4 @@
-nodes = 1
+nodes = 2
 txs = 10
 index = 1
 fast-sync = true
