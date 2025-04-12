@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	modulelogger "kasper/src/core/module/logger"
+	"log"
 	"mime/multipart"
 	"os"
 )
@@ -15,11 +16,12 @@ type File struct {
 }
 
 func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, topicId string, key string) error {
-	var dirPath = fmt.Sprintf("%s/%s", storageRoot, topicId)
+	var dirPath = fmt.Sprintf("%s/files/%s", storageRoot, topicId)
 	err := os.MkdirAll(dirPath, os.ModePerm)
 	if err != nil {
 		return err
 	}
+	log.Println("trying to start file operation...")
 	f, err := fh.Open()
 	if err != nil {
 		return err
@@ -30,6 +32,7 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 			g.logger.Println(err)
 		}
 	}(f)
+	log.Println("opened received file.")
 	buf := bytes.NewBuffer(nil)
 	if _, err := io.Copy(buf, f); err != nil {
 		return err
@@ -44,6 +47,7 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 			g.logger.Println(err)
 		}
 	}(dest)
+	log.Println("opened created file.")
 	if _, err = dest.Write(buf.Bytes()); err != nil {
 		return err
 	}
@@ -51,8 +55,7 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 }
 
 func (g *File) CheckFileFromGlobalStorage(storageRoot string, key string) bool {
-	var dirPath = storageRoot
-	if _, err := os.Stat(fmt.Sprintf("%s/%s", dirPath, key)); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(fmt.Sprintf("%s/%s", storageRoot, key)); errors.Is(err, os.ErrNotExist) {
 		return false
 	} else {
 		return true
@@ -60,8 +63,7 @@ func (g *File) CheckFileFromGlobalStorage(storageRoot string, key string) bool {
 }
 
 func (g *File) ReadFileFromGlobalStorage(storageRoot string, key string) (string, error) {
-	var dirPath = storageRoot
-	content, err := os.ReadFile(fmt.Sprintf("%s/%s", dirPath, key))
+	content, err := os.ReadFile(fmt.Sprintf("%s/%s", storageRoot, key))
 	if err != nil {
 		return "", err
 	}
@@ -146,8 +148,13 @@ func (g *File) SaveDataToGlobalStorage(storageRoot string, data []byte, key stri
 	return nil
 }
 
-func NewFileTool(logger *modulelogger.Logger) *File {
+func NewFileTool(logger *modulelogger.Logger, storageRoot string) *File {
 	ft := &File{}
 	ft.logger = logger
+	var dirPath = fmt.Sprintf("%s/files", storageRoot)
+	err := os.MkdirAll(dirPath, os.ModePerm)
+	if err != nil {
+		log.Println(err)
+	}
 	return ft
 }

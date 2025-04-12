@@ -116,7 +116,7 @@ func (hs *HttpServer) handleRequest(c *fiber.Ctx) error {
 		i, err2 := action.(*moduleactormodel.SecureAction).ParseInput("http", c)
 		if err2 != nil {
 			hs.logger.Println(err2)
-			return c.Status(fiber.StatusBadRequest).JSON(modulemodel.BuildErrorJson("input parsing error"))
+			return c.Status(fiber.StatusBadRequest).JSON(err2.Error())
 		}
 		input = i
 	}

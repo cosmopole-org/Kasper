@@ -151,11 +151,6 @@ func RunNet() error {
 	app.Load(
 		[]string{
 			"keyhan",
-			"amir",
-			"mani",
-			"arash",
-			"arash",
-			"shahin",
 		},
 		[]abstract.ILayer{
 			layer1.New(),

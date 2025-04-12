@@ -32,7 +32,7 @@ func (l *Layer) BackFill(core abstract.ICore, args ...interface{}) []interface{}
 	l.core = core
 	cache := toolcache.NewCache(core, args[0].(*modulelogger.Logger), args[3].(string))
 	storage := toolstorage.NewStorage(core, cache, args[0].(*modulelogger.Logger), args[1].(string), args[2].(gorm.Dialector))
-	file := toolfile.NewFileTool(args[0].(*modulelogger.Logger))
+	file := toolfile.NewFileTool(args[0].(*modulelogger.Logger), args[1].(string))
 	l.toolbox = modulemodel.NewTools(core, args[0].(*modulelogger.Logger), args[1].(string), storage, args[7].(string), cache, file)
 	return []interface{}{
 		args[0],

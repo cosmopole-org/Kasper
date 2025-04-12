@@ -6,10 +6,10 @@ import (
 )
 
 type UploadInput struct {
-	Data    []*multipart.FileHeader `json:"data" validate:"required,max=1,min=1"`
-	SpaceId string                  `json:"spaceId" validate:"required"`
-	TopicId string                  `json:"topicId" validate:"required"`
-	FileId  string                  `json:"fileId"`
+	Data    *multipart.FileHeader `json:"data" validate:"required"`
+	SpaceId string                `json:"spaceId" validate:"required"`
+	TopicId string                `json:"topicId" validate:"required"`
+	FileId  string                `json:"fileId"`
 }
 
 func (d UploadInput) GetData() any {

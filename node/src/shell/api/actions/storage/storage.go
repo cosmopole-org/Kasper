@@ -39,17 +39,18 @@ func (a *Actions) Upload(s abstract.IState, input inputs_storage.UploadInput) (a
 		if file.SenderId != state.Info().UserId() {
 			return nil, errors.New("access to file control denied")
 		}
-		if err := toolbox.File().SaveFileToStorage(toolbox.Storage().StorageRoot(), input.Data[0], state.Info().TopicId(), input.FileId); err != nil {
+		if err := toolbox.File().SaveFileToStorage(toolbox.Storage().StorageRoot(), input.Data, state.Info().TopicId(), input.FileId); err != nil {
 			log.Println(err)
 			return nil, err
 		}
 		return map[string]any{}, nil
 	} else {
 		var file = models.File{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), SenderId: state.Info().UserId(), TopicId: state.Info().TopicId()}
-		if err := toolbox.File().SaveFileToStorage(toolbox.Storage().StorageRoot(), input.Data[0], state.Info().TopicId(), input.FileId); err != nil {
+		if err := toolbox.File().SaveFileToStorage(toolbox.Storage().StorageRoot(), input.Data, state.Info().TopicId(), file.Id); err != nil {
 			log.Println(err)
 			return nil, err
 		}
+		trx.Db().Create(&file)
 		return map[string]any{"file": file}, nil
 	}
 }
