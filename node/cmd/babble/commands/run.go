@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,22 +12,14 @@ import (
 
 	"kasper/src/abstract"
 	module_logger "kasper/src/core/module/logger"
-	plugger_admin "kasper/src/plugins/admin/main"
-	plugger_game "kasper/src/plugins/game/main"
-	game_model "kasper/src/plugins/game/model"
-	game_memory "kasper/src/plugins/game/tools/memory"
 	plugger_social "kasper/src/plugins/social/main"
 	sigma "kasper/src/shell"
 	inputs_users "kasper/src/shell/api/inputs/users"
 	plugger_api "kasper/src/shell/api/main"
-	"kasper/src/shell/api/model"
 	outputs_users "kasper/src/shell/api/outputs/users"
-	"kasper/src/shell/bots/hokmagent"
-	models_hokmaent "kasper/src/shell/bots/hokmagent/models"
-	"kasper/src/shell/bots/hokmgame"
-	models_hokmgame "kasper/src/shell/bots/hokmgame/models"
+	"kasper/src/bots/sampleBot"
+	models_hokmaent "kasper/src/bots/sampleBot/models"
 	plugger_machiner "kasper/src/shell/machiner/main"
-	"kasper/src/shell/utils"
 	"kasper/src/shell/utils/future"
 
 	"kasper/src/babble"
@@ -41,7 +32,6 @@ import (
 
 	"gorm.io/driver/mysql"
 	// "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
 	"kasper/src/shell/layer1/adapters"
 	layer1 "kasper/src/shell/layer1/layer"
@@ -191,66 +181,29 @@ func RunNet() error {
 
 	time.Sleep(time.Duration(5) * time.Second)
 
-	var hokmGameUserId string
-	var hokmGameUserToken string
-	e := abstract.UseToolbox[module_model1.IToolboxL1](app.Get(2).Tools()).Storage().DoTrx(func(trx adapters.ITrx) error {
-		_, res, err := app.Get(1).Actor().FetchAction("/users/login").Act(app.Get(1).Sb().NewState(actor_model.NewInfo("", "", "", ""), trx), inputs_users.LoginInput{
-			Username: "hokmgame",
-		})
-		if err != nil {
-			log.Println(err)
-			return err
-		}
-		hokmGameUserId = res.(outputs_users.LoginOutput).User.Id
-		hokmGameUserToken = res.(outputs_users.LoginOutput).Session.Token
-		return nil
-	})
-	if e != nil {
-		panic(e)
-	}
-	hg := &hokmgame.HokmGame{}
-	hg.Install(app, hokmGameUserToken)
-	abstract.UseToolbox[*module_model1.ToolboxL1](app.Get(1).Tools()).Signaler().ListenToSingle(&module_model.Listener{
-		Id: hokmGameUserId,
-		Signal: func(a any) {
-			data := string(a.([]byte))
-			// log.Println(data)
-			dataParts := strings.Split(data, " ")
-			if dataParts[1] == "topics/send" {
-				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
-				var inp models_hokmgame.Send
-				e := json.Unmarshal([]byte(data), &inp)
-				if e != nil {
-					log.Println(e)
-				}
-				hg.OnTopicSend(inp)
-			}
-		},
-	})
-	var hokmAgentUserId string
-	var hokmAgentUserToken string
+	var sampleBotUserId string
+	var sampleBotUserToken string
 	e2 := abstract.UseToolbox[module_model1.IToolboxL1](app.Get(2).Tools()).Storage().DoTrx(func(trx adapters.ITrx) error {
 		_, res, err := app.Get(1).Actor().FetchAction("/users/login").Act(app.Get(1).Sb().NewState(actor_model.NewInfo("", "", "", ""), trx), inputs_users.LoginInput{
-			Username: "hokmagent",
+			Username: "sampleBot",
 		})
 		if err != nil {
 			log.Println(err)
 			return err
 		}
-		hokmAgentUserId = res.(outputs_users.LoginOutput).User.Id
-		hokmAgentUserToken = res.(outputs_users.LoginOutput).Session.Token
+		sampleBotUserId = res.(outputs_users.LoginOutput).User.Id
+	    sampleBotUserToken = res.(outputs_users.LoginOutput).Session.Token
 		return nil
 	})
 	if e2 != nil {
 		panic(e2)
 	}
 	ha := &hokmagent.HokmAgent{}
-	ha.Install(app, hokmAgentUserToken)
+	ha.Install(app, sampleBotUserToken)
 	abstract.UseToolbox[*module_model1.ToolboxL1](app.Get(1).Tools()).Signaler().ListenToSingle(&module_model.Listener{
-		Id: hokmAgentUserId,
+		Id: sampleBotUserId,
 		Signal: func(a any) {
 			data := string(a.([]byte))
-			// log.Println(data)
 			dataParts := strings.Split(data, " ")
 			if dataParts[1] == "topics/send" {
 				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
@@ -260,131 +213,11 @@ func RunNet() error {
 					log.Println(e)
 				}
 				ha.OnTopicSend(inp)
-			} else if dataParts[1] == "/match/join" {
-				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
-				var inp models_hokmaent.MatchJoinPacket
-				e := json.Unmarshal([]byte(data), &inp)
-				if e != nil {
-					log.Println(e)
-				}
-				ha.OnMatchJoin(inp)
 			}
 		},
 	})
 
-	plugger_admin.PlugAll(app.Get(1), logger, app)
 	plugger_social.PlugAll(app.Get(2), logger, app)
-	plugger_game.PlugAll(app.Get(3), logger, app)
-
-	var tb = abstract.UseToolbox[module_model1.IToolboxL1](app.Get(3).Tools())
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "cars", []string{"1"}, "score")
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "cars", []string{"2"}, "time")
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "hokm", []string{"1"}, "tempXp")
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "hokm", []string{"2"}, "xp")
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "hokm", []string{"3_1"}, "score")
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "hokm", []string{"3_2"}, "score")
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "hokm", []string{"3_3"}, "score")
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "hokm", []string{"3_4"}, "score")
-	game_memory.LoadPlayersIntoMemory(tb.Storage(), tb.Cache(), "hokm", []string{"3_5"}, "score")
-
-	ctx := context.Background()
-	utils.Schedule(ctx, time.Minute, time.Minute, func(t time.Time) {
-		if (time.Now().Weekday() == time.Saturday) && (time.Now().Hour() == 0) && (time.Now().Minute() == 0) {
-			log.Println("preparing scores...")
-			tb.Storage().DoTrx(func(trx adapters.ITrx) error {
-				for _, level := range []string{"1", "2"} {
-					var top10 [10]game_memory.TopPlayer
-					if level == "1" {
-						top10 = game_memory.Top10Players(tb.Cache(), "cars", level, true)
-					} else if level == "2" {
-						top10 = game_memory.Top10Players(tb.Cache(), "cars", level, false)
-					}
-					err := adapters.UpdateJson(func() *gorm.DB { return trx.Db().Model(&model.User{}).Where("1 = 1") }, nil, "metadata", "cars.board."+level, map[string]any{})
-					if err != nil {
-						log.Println(err)
-					}
-					trx.ClearError()
-					for index, tp := range top10 {
-						user := model.User{Id: tp.UserId}
-						trx.Db().First(&user)
-						trx.ClearError()
-						err2 := adapters.UpdateJson(func() *gorm.DB { return trx.Db().Model(&model.User{}).Where("id = ?", tp.UserId) }, &user, "metadata", "cars.board."+level+".old.rank", index+1)
-						if err2 != nil {
-							log.Println(err2)
-						}
-						trx.ClearError()
-					}
-					game_memory.ClearPlayersFromMemory(tb.Cache(), "cars", level)
-				}
-				trx.ClearError()
-				meta := game_model.Meta{Id: "hokm"}
-				trx.Db().First(&meta)
-				trx.ClearError()
-				for _, level := range []string{"1"} {
-					var top10 = game_memory.Top10Players(tb.Cache(), "hokm", level, true)
-					err := adapters.UpdateJson(func() *gorm.DB { return trx.Db().Model(&model.User{}).Where("1 = 1") }, nil, "metadata", "hokm.board."+level, map[string]any{})
-					if err != nil {
-						log.Println(err)
-					}
-					trx.ClearError()
-					rankMetaNames := []string{"1st", "2nd", "3rd"}
-					for index, tp := range top10[0:3] {
-						user := model.User{Id: tp.UserId}
-						trx.Db().First(&user)
-						trx.ClearError()
-						err2 := adapters.UpdateJson(func() *gorm.DB { return trx.Db().Model(&model.User{}).Where("id = ?", tp.UserId) }, &user, "metadata", "hokm.board."+level+".old.rank", index+1)
-						if err2 != nil {
-							log.Println(err2)
-						}
-						trx.ClearError()
-						gameDataStr := ""
-						err3 := trx.Db().Model(&model.User{}).Select("metadata ->> 'hokm'").Where("id = ?", tp.UserId).First(&gameDataStr).Error
-						if err3 != nil {
-							log.Println(err3)
-							continue
-						}
-						result := map[string]interface{}{}
-						err4 := json.Unmarshal([]byte(gameDataStr), &result)
-						if err4 != nil {
-							log.Println(err4)
-							continue
-						}
-						trx.ClearError()
-						oldValRaw, ok := result["gem"]
-						if !ok {
-							oldValRaw = float64(0)
-						}
-						oldVal := oldValRaw.(float64)
-						addition := meta.Data["weekly"+rankMetaNames[index]+"reward"].(float64)
-						err5 := adapters.UpdateJson(func() *gorm.DB { return trx.Db().Model(&model.User{}).Where("id = ?", tp.UserId) }, &user, "metadata", "hokm.gem", oldVal+addition)
-						if err5 != nil {
-							log.Println(err5)
-						}
-						trx.ClearError()
-						err7 := adapters.UpdateJson(func() *gorm.DB { return trx.Db().Model(&model.User{}).Where("id = ?", tp.UserId) }, &user, "metadata", "hokm.board."+level+".old.reward.gem", addition)
-						if err7 != nil {
-							log.Println(err7)
-						}
-						trx.ClearError()
-
-						keyOfWins := "win" + fmt.Sprintf("%d", (index+1))
-						oldValRaw2, ok2 := result[keyOfWins]
-						if !ok2 {
-							oldValRaw2 = float64(0)
-						}
-						oldVal2 := oldValRaw2.(float64)
-						err6 := adapters.UpdateJson(func() *gorm.DB { return trx.Db().Model(&model.User{}).Where("id = ?", tp.UserId) }, &user, "metadata", "hokm."+keyOfWins, oldVal2+1)
-						if err6 != nil {
-							log.Println(err6)
-						}
-						trx.ClearError()
-					}
-					game_memory.ClearPlayersFromMemory(tb.Cache(), "hokm", level)
-				}
-				return nil
-			})
-		}
-	})
 
 	<-exit
 
