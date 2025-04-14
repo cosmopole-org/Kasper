@@ -40,12 +40,15 @@ func (a *Actions) Create(s abstract.IState, input inputstopics.CreateInput) (any
 	if err != nil {
 		return nil, err
 	}
-	topic = model.Topic{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Title: input.Title, Avatar: input.Avatar, SpaceId: space.Id}
+	topic = model.Topic{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Title: input.Title, Avatar: input.Avatar, SpaceId: space.Id, IsPrivate: input.IsPrivate}
 	err2 := trx.Db().Create(&topic).Error
 	if err2 != nil {
 		return nil, err2
 	}
 	trx.Mem().Put(fmt.Sprintf("city::%s", topic.Id), topic.SpaceId)
+	if input.IsPrivate {
+		trx.Mem().Put(fmt.Sprintf("privTopic::%s", topic.Id), "true")
+	}
 	future.Async(func() {
 		toolbox.Signaler().SignalGroup("topics/create", topic.SpaceId, updatestopics.Create{Topic: topic}, true, []string{state.Info().UserId()})
 	}, false)

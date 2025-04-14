@@ -15,50 +15,59 @@ import (
 	models "kasper/src/shell/layer1/model"
 	module_actor_model "kasper/src/shell/layer1/module/actor"
 	"kasper/src/shell/layer1/tools/signaler"
+	tool_file "kasper/src/shell/layer2/tools/file"
 	net_http "kasper/src/shell/layer3/tools/network/http"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
 	realip "kasper/src/shell/utils/ip"
+	"log"
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/mitchellh/mapstructure"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
-type FedCallback struct {
+type FedPacketCallback struct {
 	Callback      func([]byte, int, error)
 	UserRequestId string
 }
 
+type FedFileCallback struct {
+	Callback      *cmap.ConcurrentMap[string, func(string, error)]
+	UserRequestId string
+}
+
 type FedNet struct {
-	app        abstract.ICore
-	storage    adapters.IStorage
-	cache      adapters.ICache
-	signaler   *signaler.Signaler
-	logger     *module_logger.Logger
-	httpServer *net_http.HttpServer
-	callbacks  *cmap.ConcurrentMap[string, FedCallback]
+	app             abstract.ICore
+	storage         adapters.IStorage
+	cache           adapters.ICache
+	file            *tool_file.File
+	signaler        *signaler.Signaler
+	logger          *module_logger.Logger
+	httpServer      *net_http.HttpServer
+	packetCallbacks *cmap.ConcurrentMap[string, *FedPacketCallback]
+	fileCallbacks   *cmap.ConcurrentMap[string, *FedFileCallback]
+	fileMapLock     sync.Mutex
 }
 
 func FirstStageBackFill(core abstract.ICore, logger *module_logger.Logger) *FedNet {
-	m := cmap.New[FedCallback]()
-	return &FedNet{app: core, logger: logger, callbacks: &m}
+	m := cmap.New[*FedPacketCallback]()
+	n := cmap.New[*FedFileCallback]()
+	return &FedNet{app: core, logger: logger, packetCallbacks: &m, fileCallbacks: &n}
 }
 
-func (fed *FedNet) SecondStageForFill(f *net_http.HttpServer, storage adapters.IStorage, cache adapters.ICache, signaler *signaler.Signaler) adapters.IFederation {
+func (fed *FedNet) SecondStageForFill(f *net_http.HttpServer, storage adapters.IStorage, cache adapters.ICache, file *tool_file.File, signaler *signaler.Signaler) adapters.IFederation {
 	fed.httpServer = f
 	fed.storage = storage
 	fed.cache = cache
+	fed.file = file
 	fed.signaler = signaler
-	fed.httpServer.Server.Post("/api/federation", func(c *fiber.Ctx) error {
-		var pack models.OriginPacket
-		err := c.BodyParser(&pack)
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(models.BuildErrorJson(err.Error()))
-		}
+	fed.httpServer.Server.Post("/api/federation/packet", func(c *fiber.Ctx) error {
 		ip := realip.FromRequest(c.Context())
 		hostName := ""
 		for _, peer := range fed.app.Chain().Peers.Peers {
@@ -76,11 +85,128 @@ func (fed *FedNet) SecondStageForFill(f *net_http.HttpServer, storage adapters.I
 		}
 		fed.logger.Println("packet from ip: [", ip, "] and hostname: [", hostName, "]")
 		if hostName != "" {
+			var pack models.OriginPacket
+			err := c.BodyParser(&pack)
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(models.BuildErrorJson(err.Error()))
+			}
 			fed.HandlePacket(hostName, pack)
 			return c.Status(fiber.StatusOK).JSON(models.ResponseSimpleMessage{Message: "federation packet received"})
 		} else {
 			fed.logger.Println("hostname not known")
-			return c.Status(fiber.StatusOK).JSON(models.ResponseSimpleMessage{Message: "hostname not known"})
+			return c.Status(fiber.StatusInternalServerError).JSON(models.ResponseSimpleMessage{Message: "hostname not known"})
+		}
+	})
+	fed.httpServer.Server.Post("/api/federation/putFile", func(c *fiber.Ctx) error {
+		ip := realip.FromRequest(c.Context())
+		hostName := ""
+		for _, peer := range fed.app.Chain().Peers.Peers {
+			arr := strings.Split(peer.NetAddr, ":")
+			addr := strings.Join(arr[0:len(arr)-1], ":")
+			if addr == ip {
+				a, err := net.LookupAddr(ip)
+				if err != nil {
+					fed.logger.Println(err)
+					return errors.New("ip not friendly")
+				}
+				hostName = a[0]
+				break
+			}
+		}
+		fed.logger.Println("packet from ip: [", ip, "] and hostname: [", hostName, "]")
+		if hostName != "" {
+			data := new(models.OriginFile)
+			form, err := c.MultipartForm()
+			if err == nil {
+				var formData = map[string]any{}
+				for k, v := range form.Value {
+					formData[k] = v[0]
+				}
+				for k, v := range form.File {
+					formData[k] = v[0]
+				}
+				err := mapstructure.Decode(formData, data)
+				if err != nil {
+					return err
+				}
+				if fed.fileCallbacks.Has(data.File.Id) {
+					path := fmt.Sprintf("%s/files/%s/%s", fed.storage.StorageRoot(), data.TopicId, data.File.Id)
+					fed.file.SaveFileToStorage(fed.storage.StorageRoot(), data.Data, data.TopicId, data.File.Id)
+					fed.storage.Db().Create(&file)
+					var cb *FedFileCallback
+					var ok bool
+					func() {
+						fed.fileMapLock.Lock()
+						defer fed.fileMapLock.Unlock()
+						cb, ok = fed.fileCallbacks.Get(data.File.Id)
+						if ok {
+							fed.fileCallbacks.Remove(data.File.Id)
+						}
+					}()
+					if ok {
+						for _, callback := range cb.Callback.Items() {
+							callback(path, nil)
+						}
+					}
+				}
+				return c.Status(fiber.StatusOK).JSON(map[string]any{})
+			} else {
+				return err
+			}
+		} else {
+			fed.logger.Println("hostname not known")
+			return c.Status(fiber.StatusInternalServerError).JSON(models.ResponseSimpleMessage{Message: "hostname not known"})
+		}
+	})
+	fed.httpServer.Server.Get("/api/federation/getFile", func(c *fiber.Ctx) error {
+		ip := realip.FromRequest(c.Context())
+		hostName := ""
+		for _, peer := range fed.app.Chain().Peers.Peers {
+			arr := strings.Split(peer.NetAddr, ":")
+			addr := strings.Join(arr[0:len(arr)-1], ":")
+			if addr == ip {
+				a, err := net.LookupAddr(ip)
+				if err != nil {
+					fed.logger.Println(err)
+					return errors.New("ip not friendly")
+				}
+				hostName = a[0]
+				break
+			}
+		}
+		fed.logger.Println("packet from ip: [", ip, "] and hostname: [", hostName, "]")
+		if hostName != "" {
+			data := new(models.OriginPacket)
+			err := c.QueryParser(data)
+			if err != nil {
+				return err
+			}
+			e := fed.storage.DoTrx(func(trx adapters.ITrx) error {
+				var file = model.File{Id: data.Data}
+				e := trx.Db().First(&file).Error
+				if e != nil {
+					log.Println(e)
+					return e
+				}
+				if file.TopicId != data.TopicId {
+					return errors.New("access to file denied")
+				}
+				return nil
+			})
+			if e != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(models.ResponseSimpleMessage{Message: e.Error()})
+			}
+			fed.SendInFederationFileResByCallback(hostName, models.OriginPacket{
+				UserId:    data.UserId,
+				SpaceId:   data.SpaceId,
+				TopicId:   data.TopicId,
+				RequestId: data.RequestId,
+				Data:      data.Data,
+			})
+			return c.Status(fiber.StatusOK).JSON(models.ResponseSimpleMessage{Message: "federation packet received"})
+		} else {
+			fed.logger.Println("hostname not known")
+			return c.Status(fiber.StatusInternalServerError).JSON(models.ResponseSimpleMessage{Message: "hostname not known"})
 		}
 	})
 	return fed
@@ -141,9 +267,9 @@ func (fed *FedNet) HandlePacket(channelId string, payload models.OriginPacket) {
 			fed.signaler.JoinGroup(spaceRes.Member.SpaceId, spaceRes.Member.UserId)
 			fed.cache.Put(fmt.Sprintf(memberTemplate, spaceRes.Member.SpaceId, spaceRes.Member.UserId, spaceRes.Member.Id), spaceRes.Member.TopicId)
 		}
-		cb, ok := fed.callbacks.Get(payload.RequestId)
+		cb, ok := fed.packetCallbacks.Get(payload.RequestId)
 		if ok {
-			fed.callbacks.Remove(payload.RequestId)
+			fed.packetCallbacks.Remove(payload.RequestId)
 			if strings.HasPrefix(payload.Data, "error: ") {
 				errPack := payload.Data[len("error: "):]
 				errObj := models.Error{}
@@ -353,9 +479,9 @@ func (fed *FedNet) SendInFederation(destOrg string, packet models.OriginPacket) 
 		var statusCode int
 		var err []error
 		if fed.httpServer.Port == 443 {
-			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation").JSON(packet).Bytes()
+			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/packet").JSON(packet).Bytes()
 		} else {
-			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation").JSON(packet).Bytes()
+			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/packet").JSON(packet).Bytes()
 		}
 		if err != nil {
 			fed.logger.Println("could not send: status: %d error: %v", statusCode, err)
@@ -367,7 +493,7 @@ func (fed *FedNet) SendInFederation(destOrg string, packet models.OriginPacket) 
 	}
 }
 
-func (fed *FedNet) SendInFederationByCallback(destOrg string, packet models.OriginPacket, callback func([]byte, int, error)) {
+func (fed *FedNet) SendInFederationPacketByCallback(destOrg string, packet models.OriginPacket, callback func([]byte, int, error)) {
 	ipAddr := ""
 	ips, _ := net.LookupIP(destOrg)
 	for _, ip := range ips {
@@ -387,23 +513,135 @@ func (fed *FedNet) SendInFederationByCallback(destOrg string, packet models.Orig
 	}
 	if ok {
 		callbackId := crypto.SecureUniqueString()
-		cb := FedCallback{Callback: callback, UserRequestId: packet.RequestId}
+		cb := &FedPacketCallback{Callback: callback, UserRequestId: packet.RequestId}
 		packet.RequestId = callbackId
-		fed.callbacks.Set(callbackId, cb)
+		fed.packetCallbacks.Set(callbackId, cb)
 		future.Async(func() {
 			time.Sleep(time.Duration(120) * time.Second)
-			cb, ok := fed.callbacks.Get(callbackId)
+			cb, ok := fed.packetCallbacks.Get(callbackId)
 			if ok {
-				fed.callbacks.Remove(callbackId)
+				fed.packetCallbacks.Remove(callbackId)
 				cb.Callback([]byte(""), 0, errors.New("federation callback timeout"))
 			}
 		}, false)
 		var statusCode int
 		var err []error
 		if fed.httpServer.Port == 443 {
-			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation").JSON(packet).Bytes()
+			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/packet").JSON(packet).Bytes()
 		} else {
-			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation").JSON(packet).Bytes()
+			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/packet").JSON(packet).Bytes()
+		}
+		if err != nil {
+			fed.logger.Println("could not send: status: %d error: %v", statusCode, err)
+		} else {
+			fed.logger.Println("packet sent successfully. status: ", statusCode)
+		}
+	} else {
+		fed.logger.Println("state org not found")
+	}
+}
+
+func (fed *FedNet) SendInFederationFileReqByCallback(destOrg string, packet models.OriginPacket, callback func(string, error)) {
+	ipAddr := ""
+	ips, _ := net.LookupIP(destOrg)
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			ipAddr = ipv4.String()
+			break
+		}
+	}
+	ok := false
+	for _, peer := range fed.app.Chain().Peers.Peers {
+		arr := strings.Split(peer.NetAddr, ":")
+		addr := strings.Join(arr[0:len(arr)-1], ":")
+		if addr == ipAddr {
+			ok = true
+			break
+		}
+	}
+	if ok {
+		fileObj := model.File{Id: packet.Data}
+		e := fed.storage.Db().First(&fileObj).Error
+		if e == nil {
+			path := fmt.Sprintf("%s/files/%s/%s", fed.storage.StorageRoot(), packet.TopicId, packet.Data)
+			callback(path, nil)
+			return
+		}
+		callbackId := crypto.SecureUniqueString()
+		func() {
+			fed.fileMapLock.Lock()
+			defer fed.fileMapLock.Unlock()
+			cb, ok := fed.fileCallbacks.Get(packet.Data)
+			if ok {
+				cb.Callback.Set(callbackId, callback)
+			} else {
+				m := cmap.New[func(string, error)]()
+				m.Set(callbackId, callback)
+				cb = &FedFileCallback{Callback: &m}
+				fed.fileCallbacks.Set(packet.Data, cb)
+			}
+		}()
+		future.Async(func() {
+			time.Sleep(time.Duration(120) * time.Second)
+			cb, ok := fed.fileCallbacks.Get(packet.Data)
+			if ok {
+				cbSingle, ok := cb.Callback.Get(callbackId)
+				if ok {
+					cb.Callback.Remove(callbackId)
+					cbSingle("", errors.New("federation callback timeout"))
+				}
+			}
+		}, false)
+		var statusCode int
+		var err []error
+		if fed.httpServer.Port == 443 {
+			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/getFile").JSON(packet).Bytes()
+		} else {
+			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/getFile").JSON(packet).Bytes()
+		}
+		if err != nil {
+			fed.logger.Println("could not send: status: %d error: %v", statusCode, err)
+		} else {
+			fed.logger.Println("packet sent successfully. status: ", statusCode)
+		}
+	} else {
+		fed.logger.Println("state org not found")
+	}
+}
+
+func (fed *FedNet) SendInFederationFileResByCallback(destOrg string, packet models.OriginPacket) {
+	ipAddr := ""
+	ips, _ := net.LookupIP(destOrg)
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			ipAddr = ipv4.String()
+			break
+		}
+	}
+	ok := false
+	for _, peer := range fed.app.Chain().Peers.Peers {
+		arr := strings.Split(peer.NetAddr, ":")
+		addr := strings.Join(arr[0:len(arr)-1], ":")
+		if addr == ipAddr {
+			ok = true
+			break
+		}
+	}
+	if ok {
+		var statusCode int
+		var err []error
+		args := fiber.AcquireArgs()
+		defer fiber.ReleaseArgs(args)
+		args.Set("FileId", packet.Data)
+		args.Set("UserId", packet.UserId)
+		args.Set("SpaceId", packet.SpaceId)
+		args.Set("TopicId", packet.TopicId)
+		args.Set("RequestId", packet.RequestId)
+		path := fmt.Sprintf("%s/files/%s/%s", fed.storage.StorageRoot(), packet.TopicId, packet.Data)
+		if fed.httpServer.Port == 443 {
+			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/putFile").SendFile(path).MultipartForm(args).Bytes()
+		} else {
+			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/putFile").SendFile(path).MultipartForm(args).Bytes()
 		}
 		if err != nil {
 			fed.logger.Println("could not send: status: %d error: %v", statusCode, err)

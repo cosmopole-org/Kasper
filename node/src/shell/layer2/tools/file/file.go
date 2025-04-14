@@ -54,6 +54,14 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 	return nil
 }
 
+func (g *File) ReadFileFromStorage(storageRoot string, topicId string, key string) ([]byte, error) {
+	content, err := os.ReadFile(fmt.Sprintf("%s/files/%s/%s", storageRoot, topicId, key))
+	if err != nil {
+		return []byte{}, err
+	}
+	return content, nil
+}
+
 func (g *File) CheckFileFromGlobalStorage(storageRoot string, key string) bool {
 	if _, err := os.Stat(fmt.Sprintf("%s/%s", storageRoot, key)); errors.Is(err, os.ErrNotExist) {
 		return false

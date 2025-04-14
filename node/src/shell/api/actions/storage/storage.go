@@ -2,10 +2,12 @@ package actions_user
 
 import (
 	"errors"
+	"fmt"
 	"kasper/src/abstract"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
 	models "kasper/src/shell/api/model"
 	"kasper/src/shell/layer1/adapters"
+	modulemodel "kasper/src/shell/layer1/model"
 	modulestate "kasper/src/shell/layer1/module/state"
 	module_model "kasper/src/shell/layer2/model"
 	"log"
@@ -53,4 +55,17 @@ func (a *Actions) Upload(s abstract.IState, input inputs_storage.UploadInput) (a
 		trx.Db().Create(&file)
 		return map[string]any{"file": file}, nil
 	}
+}
+
+// Download /storage/download check [ true true true ] access [ true false false false POST ]
+func (a *Actions) Download(s abstract.IState, input inputs_storage.DownloadInput) (any, error) {
+	toolbox := abstract.UseToolbox[*module_model.ToolboxL2](a.Layer.Core().Get(2).Tools())
+	state := abstract.UseState[modulestate.IStateL1](s)
+	trx := state.Trx()
+	var file = models.File{Id: input.FileId}
+	trx.Db().First(&file)
+	if file.TopicId != state.Info().TopicId() {
+		return nil, errors.New("access to file denied")
+	}
+	return modulemodel.Command{Value: "sendFile", Data: fmt.Sprintf("%s/files/%s/%s", toolbox.Storage().StorageRoot(), state.Info().TopicId(), input.FileId)}, nil
 }

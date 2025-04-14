@@ -3,10 +3,11 @@ package inputs_topics
 import "kasper/src/shell/utils/origin"
 
 type CreateInput struct {
-	Title    string `json:"title" validate:"required"`
-	Avatar   string `json:"avatar" validate:"required"`
-	SpaceId  string `json:"spaceId" validate:"required"`
-	Metadata string `json:"metadata" validate:"required"`
+	Title     string `json:"title" validate:"required"`
+	Avatar    string `json:"avatar" validate:"required"`
+	SpaceId   string `json:"spaceId" validate:"required"`
+	Metadata  string `json:"metadata" validate:"required"`
+	IsPrivate bool   `json:"isPrivate"`
 }
 
 func (d CreateInput) GetData() any {

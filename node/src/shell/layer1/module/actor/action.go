@@ -118,14 +118,29 @@ func (a *SecureAction) SecurelyAct(layer abstract.ILayer, token string, packetId
 	var scFed int
 	var resFed any
 	var errFed error
-	toolbox.Federation().SendInFederationByCallback(origin, modulemodel.OriginPacket{Layer: layer.Index() + 1, IsResponse: false, Key: a.Key(), UserId: userId, SpaceId: input.GetSpaceId(), TopicId: input.GetTopicId(), Data: string(data), RequestId: packetId}, func(data []byte, resCode int, err error) {
-		result := map[string]any{}
-		json.Unmarshal(data, &result)
-		scFed = resCode
-		resFed = result
-		errFed = err
-		cFed <- 1
-	})
+	if a.Key() == "/storage/download" {
+		toolbox.Federation().SendInFederationFileReqByCallback(origin, modulemodel.OriginPacket{Layer: layer.Index() + 1, IsResponse: false, Key: a.Key(), UserId: userId, SpaceId: input.GetSpaceId(), TopicId: input.GetTopicId(), Data: string(data), RequestId: packetId}, func(path string, err error) {
+			if err != nil {
+				scFed = 0
+				resFed = map[string]any{}
+				errFed = err
+			} else {
+				scFed = 1
+				resFed = modulemodel.Command{Value: "sendFile", Data: path}
+				errFed = nil	
+			}
+			cFed <- 1
+		})
+	} else {
+		toolbox.Federation().SendInFederationPacketByCallback(origin, modulemodel.OriginPacket{Layer: layer.Index() + 1, IsResponse: false, Key: a.Key(), UserId: userId, SpaceId: input.GetSpaceId(), TopicId: input.GetTopicId(), Data: string(data), RequestId: packetId}, func(data []byte, resCode int, err error) {
+			result := map[string]any{}
+			json.Unmarshal(data, &result)
+			scFed = resCode
+			resFed = result
+			errFed = err
+			cFed <- 1
+		})
+	}
 	<-cFed
 	return scFed, resFed, errFed
 }

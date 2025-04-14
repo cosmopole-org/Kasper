@@ -1,10 +1,8 @@
 package social_services
 
 import (
-	"encoding/json"
 	"errors"
 	"kasper/src/abstract"
-	game_model "kasper/src/plugins/game/model"
 	inputs_message "kasper/src/plugins/social/inputs/message"
 	models "kasper/src/plugins/social/model"
 	outputs_message "kasper/src/plugins/social/outputs/message"
@@ -36,50 +34,6 @@ func Install(s adapters.IStorage, a *Actions) error {
 func (a *Actions) CreateMessage(s abstract.IState, input inputs_message.CreateMessageInput) (any, error) {
 	state := abstract.UseState[module_state.IStateL1](s)
 	trx := state.Trx()
-	if state.Info().TopicId() == ("main@" + a.Layer.Core().Id()) {
-		type sender struct {
-			Id   string         `json:"id"`
-			Data datatypes.JSON `json:"data"`
-		}
-		meta := game_model.Meta{Id: "hokm"}
-		trx.Db().First(&meta)
-		if cdRaw, ok := meta.Data["chatDisabled"]; ok {
-			if cd, ok2 := cdRaw.(bool); ok2 {
-				if cd {
-					return nil, errors.New("chat is disabled by admin")
-				}
-			}
-		}
-		trx.ClearError()
-
-		senderUser := sender{}
-		trx.Db().Model(&model.User{}).Select("id, "+adapters.BuildJsonFetcher("metadata", "hokm")+" as data").Where("id = ?", state.Info().UserId()).First(&senderUser)
-		str, convErr := json.Marshal(senderUser.Data)
-		if convErr != nil {
-			log.Println(convErr)
-		}
-		dict := map[string]any{}
-		convErr2 := json.Unmarshal(str, &dict)
-		if convErr2 != nil {
-			log.Println(convErr2)
-		}
-		chatBannedRaw, ok3 := dict["chatBanned"]
-		if ok3 {
-			chatBanned, ok := chatBannedRaw.(bool)
-			if ok && chatBanned {
-				return nil, errors.New("you are banned from chat")
-			}
-		}
-		lastBuy, ok := dict["lastChatBuy"]
-		chatPoint, ok2 := dict["chat"]
-		if !ok || !ok2 {
-			log.Println("field not found")
-		}
-		if (float64(time.Now().UnixMilli()) - lastBuy.(float64)) > (chatPoint.(float64) * 24 * 60 * 60 * 1000) {
-			return nil, errors.New("not enough chat points")
-		}
-		trx.ClearError()
-	}
 	typ := ""
 	if state.Info().IsGod() {
 		typ = "adminMessage"
