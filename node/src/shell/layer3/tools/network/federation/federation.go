@@ -129,18 +129,24 @@ func (fed *FedNet) SecondStageForFill(f *net_http.HttpServer, storage adapters.I
 				if err != nil {
 					return err
 				}
-				if fed.fileCallbacks.Has(data.File.Id) {
-					path := fmt.Sprintf("%s/files/%s/%s", fed.storage.StorageRoot(), data.TopicId, data.File.Id)
-					fed.file.SaveFileToStorage(fed.storage.StorageRoot(), data.Data, data.TopicId, data.File.Id)
+				file := model.File{}
+				e := json.Unmarshal([]byte(data.FileInfo), &file)
+				if e != nil {
+					log.Println(e)
+					return e
+				}
+				if fed.fileCallbacks.Has(file.Id) {
+					path := fmt.Sprintf("%s/files/%s/%s", fed.storage.StorageRoot(), data.TopicId, file.Id)
+					fed.file.SaveFileToStorage(fed.storage.StorageRoot(), data.Data, data.TopicId, file.Id)
 					fed.storage.Db().Create(&file)
 					var cb *FedFileCallback
 					var ok bool
 					func() {
 						fed.fileMapLock.Lock()
 						defer fed.fileMapLock.Unlock()
-						cb, ok = fed.fileCallbacks.Get(data.File.Id)
+						cb, ok = fed.fileCallbacks.Get(file.Id)
 						if ok {
-							fed.fileCallbacks.Remove(data.File.Id)
+							fed.fileCallbacks.Remove(file.Id)
 						}
 					}()
 					if ok {
@@ -196,7 +202,7 @@ func (fed *FedNet) SecondStageForFill(f *net_http.HttpServer, storage adapters.I
 			if e != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(models.ResponseSimpleMessage{Message: e.Error()})
 			}
-			fed.SendInFederationFileResByCallback(hostName, models.OriginPacket{
+			fed.SendInFederationFileResByCallback(ip, models.OriginPacket{
 				UserId:    data.UserId,
 				SpaceId:   data.SpaceId,
 				TopicId:   data.TopicId,
@@ -594,10 +600,11 @@ func (fed *FedNet) SendInFederationFileReqByCallback(destOrg string, packet mode
 		}, false)
 		var statusCode int
 		var err []error
+		query := "?SpaceId=" + packet.SpaceId + "&TopicId=" + packet.TopicId + "&Data=" + packet.Data + "&RequestId=" + packet.RequestId + "&UserId=" + packet.UserId
 		if fed.httpServer.Port == 443 {
-			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/getFile").JSON(packet).Bytes()
+			statusCode, _, err = fiber.Get("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/getFile" + query).Bytes()
 		} else {
-			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/getFile").JSON(packet).Bytes()
+			statusCode, _, err = fiber.Get("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/getFile" + query).Bytes()
 		}
 		if err != nil {
 			fed.logger.Println("could not send: status: %d error: %v", statusCode, err)
@@ -628,20 +635,23 @@ func (fed *FedNet) SendInFederationFileResByCallback(destOrg string, packet mode
 		}
 	}
 	if ok {
+		var file = model.File{Id: packet.Data}
+		fed.storage.Db().First(&file)
+		fileInfo, _ := json.Marshal(file)
 		var statusCode int
 		var err []error
 		args := fiber.AcquireArgs()
 		defer fiber.ReleaseArgs(args)
-		args.Set("FileId", packet.Data)
+		args.Set("FileInfo", string(fileInfo))
 		args.Set("UserId", packet.UserId)
 		args.Set("SpaceId", packet.SpaceId)
 		args.Set("TopicId", packet.TopicId)
 		args.Set("RequestId", packet.RequestId)
 		path := fmt.Sprintf("%s/files/%s/%s", fed.storage.StorageRoot(), packet.TopicId, packet.Data)
 		if fed.httpServer.Port == 443 {
-			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/putFile").SendFile(path).MultipartForm(args).Bytes()
+			statusCode, _, err = fiber.Post("https://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/putFile").SendFile(path, "Data").MultipartForm(args).Bytes()
 		} else {
-			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/putFile").SendFile(path).MultipartForm(args).Bytes()
+			statusCode, _, err = fiber.Post("http://" + destOrg + ":" + strconv.Itoa(fed.httpServer.Port) + "/api/federation/putFile").SendFile(path, "Data").MultipartForm(args).Bytes()
 		}
 		if err != nil {
 			fed.logger.Println("could not send: status: %d error: %v", statusCode, err)

@@ -1,12 +1,11 @@
 package module_model
 
 import (
-	"kasper/src/shell/api/model"
 	"mime/multipart"
 )
 
 type OriginFile struct {
-	File      model.File
+	FileInfo  string
 	UserId    string
 	SpaceId   string
 	TopicId   string

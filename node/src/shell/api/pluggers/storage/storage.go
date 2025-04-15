@@ -20,6 +20,10 @@
 			return utils.ExtractSecureAction(c.Logger, c.Core, c.Actions.Upload)
 		}
 		
+		func (c *Plugger) Download() abstract.IAction {
+			return utils.ExtractSecureAction(c.Logger, c.Core, c.Actions.Download)
+		}
+		
 	func (c *Plugger) Install(layer abstract.ILayer, a *actions.Actions) *Plugger {
 		err := actions.Install(abstract.UseToolbox[*module_model.ToolboxL2](layer.Core().Get(2).Tools()).Storage(), a)
 		if err != nil {

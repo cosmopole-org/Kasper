@@ -46,16 +46,6 @@ const serverAddress = '172.77.5.1:8080';
     socket.onmessage = async function (event) {
         console.log(event.data)
         if (event.data.toString() === `response EMPTY {"message":"authenticated"}`) {
-            let result3 = await request(`/player/update`, 3, {
-                gameKey: 'hokm',
-                data: {
-                    profile: {
-                        name: "kasperius",
-                        avatar: 15
-                    }
-                }
-            }, token);
-            console.log(result3);
             let result4 = await request(`/spaces/create`, 1, {
                 "title": "test tower",
                 "avatar": "0",
@@ -64,9 +54,6 @@ const serverAddress = '172.77.5.1:8080';
                 "orig": "172.77.5.2"
             }, token);
             console.log(result4);
-            // let result4 = await request(`/match/join`, 3, { gameKey: 'hokm', level: '1' }, token);
-            // let result4 = await request(`/invites/join`, 3, { gameKey: 'hokm', level: '1' }, token);
-            // console.log(result4);
         }
         socket.send("packet_received");
     };
@@ -79,9 +66,9 @@ const serverAddress = '172.77.5.1:8080';
             console.log("sent keepalive packet.");
         }, 5000);
 
-        let result = await request(`/auth/login`, 3, {}, "");
+        let result = await request(`/users/login`, 1, { username: "kasperius3rd" }, "");
         console.log(result);
-        let result2 = await authenticate(result.token);
+        let result2 = await authenticate(result.session.token);
         // let result2 = await authenticate("72aa243d-9b39-489e-bd6e-9c3c1d42b18a-543bd541-fa73-468c-92be-031fb176249f")
         console.log(result2);
     };

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"kasper/src/abstract"
 	modulelogger "kasper/src/core/module/logger"
+	inputs_storage "kasper/src/shell/api/inputs/storage"
 	"kasper/src/shell/layer1/adapters"
 	modulemodel "kasper/src/shell/layer1/model"
 	statemodule "kasper/src/shell/layer1/module/state"
@@ -119,7 +120,7 @@ func (a *SecureAction) SecurelyAct(layer abstract.ILayer, token string, packetId
 	var resFed any
 	var errFed error
 	if a.Key() == "/storage/download" {
-		toolbox.Federation().SendInFederationFileReqByCallback(origin, modulemodel.OriginPacket{Layer: layer.Index() + 1, IsResponse: false, Key: a.Key(), UserId: userId, SpaceId: input.GetSpaceId(), TopicId: input.GetTopicId(), Data: string(data), RequestId: packetId}, func(path string, err error) {
+		toolbox.Federation().SendInFederationFileReqByCallback(origin, modulemodel.OriginPacket{Layer: layer.Index() + 1, IsResponse: false, Key: a.Key(), UserId: userId, SpaceId: input.GetSpaceId(), TopicId: input.GetTopicId(), Data: input.(inputs_storage.DownloadInput).FileId, RequestId: packetId}, func(path string, err error) {
 			if err != nil {
 				scFed = 0
 				resFed = map[string]any{}
@@ -127,7 +128,7 @@ func (a *SecureAction) SecurelyAct(layer abstract.ILayer, token string, packetId
 			} else {
 				scFed = 1
 				resFed = modulemodel.Command{Value: "sendFile", Data: path}
-				errFed = nil	
+				errFed = nil
 			}
 			cFed <- 1
 		})

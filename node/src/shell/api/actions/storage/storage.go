@@ -18,13 +18,9 @@ type Actions struct {
 }
 
 func Install(s adapters.IStorage, a *Actions) error {
-	err := s.Db().AutoMigrate(&models.User{})
+	err := s.Db().AutoMigrate(&models.File{})
 	if err != nil {
 		return err
-	}
-	err2 := s.Db().AutoMigrate(&models.Session{})
-	if err2 != nil {
-		return err2
 	}
 	return nil
 }
