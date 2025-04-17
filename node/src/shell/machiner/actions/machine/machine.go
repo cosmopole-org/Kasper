@@ -65,7 +65,7 @@ func (a *Actions) Create(s abstract.IState, input inputs_machiner.CreateInput) (
 		user models.User
 	)
 	trx := state.Trx()
-	user = models.User{Metadata: datatypes.JSON([]byte(`{}`)), Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + a.Layer.Core().Id(), Name: "", Avatar: ""}
+	user = models.User{Metadata: datatypes.JSON([]byte(`{}`)), Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy(), Name: "", Avatar: ""}
 	err := trx.Db().Create(&user).Error
 	if err != nil {
 		return nil, err
@@ -103,7 +103,18 @@ func (a *Actions) Deploy(s abstract.IState, input inputs_machiner.DeployInput) (
 	}
 
 	if input.Runtime == "docker" {
-		dockerImageName := vm.MachineId + "_" + (input.Metadata["imageName"].(string))
+		if input.Metadata == nil {
+			return nil, errors.New("image name not provided")
+		}
+		imageName, ok := input.Metadata["imageName"]
+		if !ok {
+			return nil, errors.New("image name not provided")
+		}
+		in, ok2 := imageName.(string)
+		if !ok2 {
+			return nil, errors.New("image name is not string")
+		}
+		dockerImageName := vm.MachineId + "_" + in
 		dockerfileFolderPath := toolbox.Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/"+dockerImageName
 		err2 := toolbox.File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
 		if err2 != nil {

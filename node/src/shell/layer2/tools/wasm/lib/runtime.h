@@ -507,6 +507,9 @@ void WasmMac::registerHost(std::string modPath)
 
     WasmEdge_String HostName = WasmEdge_StringCreateByCString("env");
     WasmEdge_ModuleInstanceContext *HostMod = WasmEdge_ModuleInstanceCreate(HostName);
+    WasmEdge_ValType Params0[4] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
+    WasmEdge_ValType Returns0[1] = {WasmEdge_ValTypeGenI32()};
+    this->registerFunction(HostMod, "runDocker", runDocker, Params0, 4, Returns0);
     WasmEdge_ValType Params1[4] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
     WasmEdge_ValType Returns1[1] = {WasmEdge_ValTypeGenI32()};
     this->registerFunction(HostMod, "put", trx_put, Params1, 4, Returns1);
@@ -914,10 +917,12 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
 
     WasmMac *rt = (WasmMac *)data;
     auto mod = WasmEdge_VMGetActiveModule(rt->vm);
-    uint32_t keyOffset = WasmEdge_ValueGetI32(In[0]);
-    int keyL = WasmEdge_ValueGetI32(In[1]);
-    uint32_t inOffset = WasmEdge_ValueGetI32(In[2]);
-    int inL = WasmEdge_ValueGetI32(In[3]);
+    uint32_t inOffset = WasmEdge_ValueGetI32(In[0]);
+    int inL = WasmEdge_ValueGetI32(In[1]);
+    uint32_t keyOffset = WasmEdge_ValueGetI32(In[2]);
+    int keyL = WasmEdge_ValueGetI32(In[3]);
+    uint32_t ifnOffset = WasmEdge_ValueGetI32(In[4]);
+    int ifnL = WasmEdge_ValueGetI32(In[5]);
 
     auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
 
@@ -939,6 +944,15 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
 
+    unsigned char *rawIfn = new unsigned char[ifnL];
+    vector<char> rawIfnC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawIfn, ifnOffset, ifnL);
+    for (int i = 0; i < ifnL; i++)
+    {
+        rawIfnC.push_back((char)rawIfn[i]);
+    }
+    auto inputFileName = std::string(rawIfnC.begin(), rawIfnC.end());
+
     json j;
     j["key"] = "runDocker";
     json j2;
@@ -946,6 +960,7 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     j2["spaceId"] = rt->spaceId;
     j2["topicId"] = rt->topicId;
     j2["inputFile"] = text;
+    j2["inputFileDestName"] = inputFileName;
     j2["imageName"] = imageName;
     j["input"] = j2;
     std::string packet = j.dump();
@@ -992,7 +1007,7 @@ WasmEdge_Result trx_put(void *data, const WasmEdge_CallingFrameContext *, const 
 
     // WasmEdge_StringDelete(memName);
 
-    rt->trx->put(key, val);
+    rt->trx->put(rt->machineId + "::" + key, val);
 
     return WasmEdge_Result_Success;
 }
@@ -1021,7 +1036,7 @@ WasmEdge_Result trx_del(void *data, const WasmEdge_CallingFrameContext *, const 
 
     // WasmEdge_StringDelete(memName);
 
-    rt->trx->del(key);
+    rt->trx->del(rt->machineId + "::" + key);
 
     return WasmEdge_Result_Success;
 }
@@ -1049,7 +1064,7 @@ WasmEdge_Result trx_get(void *data, const WasmEdge_CallingFrameContext *, const 
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    std::string val = rt->trx->get(key);
+    std::string val = rt->trx->get(rt->machineId + "::" + key);
     int valL = val.size();
 
     WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
@@ -1099,12 +1114,14 @@ WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext
     }
     auto prefix = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    vector<std::string> vals = rt->trx->getByPrefix(prefix);
+    vector<std::string> vals = rt->trx->getByPrefix(rt->machineId + "::" + prefix);
 
     json arrOfS;
+    std::string mainKey = rt->machineId + "::";
     for (int i = 0; i < vals.size(); i++)
     {
-        arrOfS.push_back(vals[i]);
+        std::string rk = vals[i];
+        arrOfS.push_back(rk.substr(mainKey.length(), rk.length() - mainKey.length()));
     }
     json j;
     j["data"] = arrOfS;

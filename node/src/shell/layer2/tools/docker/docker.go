@@ -50,7 +50,7 @@ func (wm *Docker) SaRContainer(containerName string) error {
 	return nil
 }
 
-func (wm *Docker) RunContainer(imageName string, inputFile string) (string, error) {
+func (wm *Docker) RunContainer(imageName string, inputFile map[string]string) (string, error) {
 	ctx := context.Background()
 
 	port := "9000"
@@ -92,7 +92,7 @@ func (wm *Docker) RunContainer(imageName string, inputFile string) (string, erro
 
 	config := &container.Config{
 		Image:        imageName,
-		Env: 		  []string{},
+		Env:          []string{},
 		ExposedPorts: exposedPorts,
 		Hostname:     fmt.Sprintf("%s-hostnameexample", imageName),
 	}
@@ -111,17 +111,18 @@ func (wm *Docker) RunContainer(imageName string, inputFile string) (string, erro
 		return "", err
 	}
 
-	tarStream, err := os.Open(inputFile)
-    if err != nil {
-		log.Println(err)
-		return "", err
-    }
-
-	err = wm.client.CopyToContainer(ctx, cont.ID, "/app/input", tarStream, container.CopyToContainerOptions{})
-	if err != nil {
-		log.Println(err)
-		return "", err
-    }
+	for k, v := range inputFile {
+		tarStream, err := os.Open(k)
+		if err != nil {
+			log.Println(err)
+			return "", err
+		}
+		err = wm.client.CopyToContainer(ctx, cont.ID, "/app/input/"+v, tarStream, container.CopyToContainerOptions{})
+		if err != nil {
+			log.Println(err)
+			return "", err
+		}
+	}
 
 	wm.client.ContainerStart(ctx, cont.ID, container.StartOptions{})
 	log.Println("Container ", cont.ID, " is created")

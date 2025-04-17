@@ -123,6 +123,11 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
+		inputFileDestName, err := checkField(input, "inputFileDestName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
 		if !wm.file.CheckFileFromStorage(wm.storageRoot, topicId, inputFile) {
 			err := errors.New("input file does not exist")
 			log.Println(err)
@@ -133,7 +138,9 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		conttainerId, err := wm.docker.RunContainer(imageName, fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, topicId, inputFile))
+		inputFiles := map[string]string{}
+		inputFiles[fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, topicId, inputFile)] = inputFileDestName
+		conttainerId, err := wm.docker.RunContainer(imageName, inputFiles)
 		if err != nil {
 			log.Println(err)
 			return err.Error()
