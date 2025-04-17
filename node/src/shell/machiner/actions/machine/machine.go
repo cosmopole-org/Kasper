@@ -102,18 +102,30 @@ func (a *Actions) Deploy(s abstract.IState, input inputs_machiner.DeployInput) (
 		return nil, err
 	}
 
-	err2 := toolbox.File().SaveDataToGlobalStorage(toolbox.Storage().StorageRoot()+pluginsTemplateName+vm.MachineId, data, "module", true)
-	if err2 != nil {
-		return nil, err2
-	}
-
-	vm.Runtime = input.Runtime
-	trx.Db().Save(&vm)
-
-	if vm.Runtime == "wasm" {
-		toolbox.Wasm().Assign(vm.MachineId)
-	} else if vm.Runtime == "elpis" {
-		toolbox.Elpis().Assign(vm.MachineId)
+	if input.Runtime == "docker" {
+		dockerImageName := vm.MachineId + "_" + (input.Metadata["imageName"].(string))
+		dockerfileFolderPath := toolbox.Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/"+dockerImageName
+		err2 := toolbox.File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
+		if err2 != nil {
+			return nil, err2
+		}
+		err3 := toolbox.Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", dockerImageName)
+		if err3 != nil {
+			log.Println(err3)
+			return nil, err3
+		}
+	} else {
+		err2 := toolbox.File().SaveDataToGlobalStorage(toolbox.Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/", data, "module", true)
+		if err2 != nil {
+			return nil, err2
+		}
+		vm.Runtime = input.Runtime
+		trx.Db().Save(&vm)
+		if vm.Runtime == "wasm" {
+			toolbox.Wasm().Assign(vm.MachineId)
+		} else if vm.Runtime == "elpis" {
+			toolbox.Elpis().Assign(vm.MachineId)
+		}
 	}
 
 	return outputs_machiner.PlugInput{}, nil

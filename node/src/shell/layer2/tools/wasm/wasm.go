@@ -11,15 +11,21 @@ import "C"
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"kasper/src/abstract"
+	"kasper/src/bots/sampleBot/models"
 	"kasper/src/core/module/core/model/worker"
 	modulelogger "kasper/src/core/module/logger"
 	"kasper/src/shell/layer1/adapters"
 	adapters_model "kasper/src/shell/layer1/adapters/model"
 	module_model "kasper/src/shell/layer1/model"
 	toolboxL1 "kasper/src/shell/layer1/module/toolbox"
+	"kasper/src/shell/layer2/tools/docker"
+	tool_file "kasper/src/shell/layer2/tools/file"
+	"kasper/src/shell/utils/future"
 	"log"
 	"strings"
+	"time"
 )
 
 type Wasm struct {
@@ -27,6 +33,8 @@ type Wasm struct {
 	logger      *modulelogger.Logger
 	storageRoot string
 	storage     adapters.IStorage
+	docker      *docker.Docker
+	file        *tool_file.File
 }
 
 func (wm *Wasm) Assign(machineId string) {
@@ -88,7 +96,53 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		log.Println(err)
 		return err.Error()
 	}
-	if key == "log" {
+	if key == "runDocker" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		spaceId, err := checkField(input, "spaceId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		topicId, err := checkField(input, "topicId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		member := models.Member{}
+		err = wm.storage.Db().Where("user_id = ?", machineId).Where("space_id = ?", spaceId).Where("topc_id = ?", topicId).First(&member).Error
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		inputFile, err := checkField(input, "inputFile", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		if !wm.file.CheckFileFromStorage(wm.storageRoot, topicId, inputFile) {
+			err := errors.New("input file does not exist")
+			log.Println(err)
+			return err.Error()
+		}
+		imageName, err := checkField(input, "imageName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		conttainerId, err := wm.docker.RunContainer(imageName, fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, topicId, inputFile))
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		future.Async(func() {
+			time.Sleep(60 * time.Minute)
+			wm.docker.SaRContainer(conttainerId)
+		}, false)
+	} else if key == "log" {
 		_, err := checkField(input, "text", "")
 		if err != nil {
 			log.Println(err)
@@ -172,13 +226,15 @@ func checkField[T any](input map[string]any, fieldName string, defVal T) (T, err
 	return f, nil
 }
 
-func NewWasm(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, kvDbPath string) *Wasm {
+func NewWasm(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, kvDbPath string, docker *docker.Docker, file *tool_file.File) *Wasm {
 	storage.AutoMigrate(&adapters_model.DataUnit{})
 	wm := &Wasm{
 		app:         core,
 		logger:      logger,
 		storageRoot: storageRoot,
 		storage:     storage,
+		docker:      docker,
+		file:        file,
 	}
 	C.init(C.CString(kvDbPath))
 	return wm

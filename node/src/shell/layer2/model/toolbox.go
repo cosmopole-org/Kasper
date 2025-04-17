@@ -5,6 +5,7 @@ import (
 	modulelogger "kasper/src/core/module/logger"
 	"kasper/src/shell/layer1/adapters"
 	toolbox2 "kasper/src/shell/layer1/module/toolbox"
+	"kasper/src/shell/layer2/tools/docker"
 	"kasper/src/shell/layer2/tools/elpis"
 	toolfile "kasper/src/shell/layer2/tools/file"
 	"kasper/src/shell/layer2/tools/wasm"
@@ -16,6 +17,7 @@ type ToolboxL2 struct {
 	cache   adapters.ICache
 	elpis   *elpis.Elpis
 	wasm    *wasm.Wasm
+	docker  *docker.Docker
 	file    *toolfile.File
 }
 
@@ -35,6 +37,10 @@ func (s *ToolboxL2) Elpis() *elpis.Elpis {
 	return s.elpis
 }
 
+func (s *ToolboxL2) Docker() *docker.Docker {
+	return s.docker
+}
+
 func (s *ToolboxL2) File() *toolfile.File {
 	return s.file
 }
@@ -44,5 +50,6 @@ func (s *ToolboxL2) Dummy() {
 }
 
 func NewTools(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, kvDbPath string, cache adapters.ICache, file *toolfile.File) *ToolboxL2 {
-	return &ToolboxL2{storage: storage, cache: cache, wasm: wasm.NewWasm(core, logger, storageRoot, storage, kvDbPath), elpis: elpis.NewElpis(core, logger, storageRoot, storage), file: file}
+	dockerController := docker.NewDocker(core, logger, storageRoot, storage)
+	return &ToolboxL2{storage: storage, cache: cache, wasm: wasm.NewWasm(core, logger, storageRoot, storage, kvDbPath, dockerController, file), elpis: elpis.NewElpis(core, logger, storageRoot, storage), docker: dockerController, file: file}
 }

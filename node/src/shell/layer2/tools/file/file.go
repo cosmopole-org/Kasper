@@ -15,6 +15,14 @@ type File struct {
 	logger *modulelogger.Logger
 }
 
+func (g *File) CheckFileFromStorage(storageRoot string, topicId string, key string) bool {
+	if _, err := os.Stat(fmt.Sprintf("%s/files/%s/%s", storageRoot, topicId, key)); errors.Is(err, os.ErrNotExist) {
+		return false
+	} else {
+		return true
+	}
+}
+
 func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, topicId string, key string) error {
 	var dirPath = fmt.Sprintf("%s/files/%s", storageRoot, topicId)
 	err := os.MkdirAll(dirPath, os.ModePerm)

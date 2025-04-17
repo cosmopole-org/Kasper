@@ -131,6 +131,8 @@ public:
     function<char *(char *)> callback;
     std::string id;
     std::string machineId;
+    std::string spaceId;
+    std::string topicId;
     int index;
     Trx *trx;
     uint64_t instCounter{1};
@@ -154,7 +156,7 @@ public:
     atomic<int> step = 0;
 
     void prepareLooper();
-    WasmMac(std::string machineId, std::string modPath, function<char *(char *)> cb);
+    WasmMac(std::string machineId, std::string spaceId, std::string topicId, std::string modPath, function<char *(char *)> cb);
     WasmMac(std::string machineId, std::string vmId, int index, std::string modPath, function<char *(char *)> cb);
     void registerHost(std::string modPath);
     void registerFunction(WasmEdge_ModuleInstanceContext *HostMod, char *name, WasmEdge_HostFunc_t fn, WasmEdge_ValType *ParamList, int paramsLength, WasmEdge_ValType *ReturnList);
@@ -199,6 +201,7 @@ WasmEdge_Result trx_del(void *data, const WasmEdge_CallingFrameContext *, const 
 WasmEdge_Result trx_get(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
+WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 
 // Utils: -------------------------------------------------
 
@@ -463,11 +466,13 @@ void WasmMac::prepareLooper()
       printf("ended!\n"); });
 }
 
-WasmMac::WasmMac(std::string machineId, std::string modPath, function<char *(char *)> cb)
+WasmMac::WasmMac(std::string machineId, std::string spaceId, std::string topicId, std::string modPath, function<char *(char *)> cb)
 {
     this->onchain = false;
     this->callback = cb;
     this->machineId = machineId;
+    this->spaceId = spaceId;
+    this->topicId = topicId;
     this->id = "";
     this->index = 0;
     this->trx = new Trx();
@@ -897,6 +902,55 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
     Out[0] = WasmEdge_ValueGenI64(c);
+
+    // WasmEdge_StringDelete(memName);
+
+    return WasmEdge_Result_Success;
+}
+
+WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out)
+{
+    auto memName = WasmEdge_StringCreateByCString("memory");
+
+    WasmMac *rt = (WasmMac *)data;
+    auto mod = WasmEdge_VMGetActiveModule(rt->vm);
+    uint32_t keyOffset = WasmEdge_ValueGetI32(In[0]);
+    int keyL = WasmEdge_ValueGetI32(In[1]);
+    uint32_t inOffset = WasmEdge_ValueGetI32(In[2]);
+    int inL = WasmEdge_ValueGetI32(In[3]);
+
+    auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
+
+    unsigned char *rawKey = new unsigned char[keyL];
+    vector<char> rawKeyC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawKey, keyOffset, keyL);
+    for (int i = 0; i < keyL; i++)
+    {
+        rawKeyC.push_back((char)rawKey[i]);
+    }
+    auto text = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    unsigned char *rawIn = new unsigned char[inL];
+    vector<char> rawInC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawIn, inOffset, inL);
+    for (int i = 0; i < inL; i++)
+    {
+        rawInC.push_back((char)rawIn[i]);
+    }
+    auto imageName = std::string(rawInC.begin(), rawInC.end());
+
+    json j;
+    j["key"] = "runDocker";
+    json j2;
+    j2["machineId"] = rt->machineId;
+    j2["spaceId"] = rt->spaceId;
+    j2["topicId"] = rt->topicId;
+    j2["inputFile"] = text;
+    j2["imageName"] = imageName;
+    j["input"] = j2;
+    std::string packet = j.dump();
+
+    rt->callback(&packet[0]);
 
     // WasmEdge_StringDelete(memName);
 
