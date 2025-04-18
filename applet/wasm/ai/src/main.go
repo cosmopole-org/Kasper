@@ -12,7 +12,7 @@ import (
 
 //go:module env
 //export runDocker
-func runDocker(k int32, kl int32, v int32, lv int32, b int32, bl int32) int32
+func runDocker(k int32, kl int32, v int32, lv int32) int32
 
 //go:module env
 //export put
@@ -518,11 +518,11 @@ func ParseArgs(a int64) string {
 
 type Vm struct{}
 
-func (vm *Vm) RunDocker(imageName string, inputFileId string, inputFileName string) {
+func (vm *Vm) RunDocker(imageName string, inputFiles map[string]string) {
 	kp, kl := bytesToPointer([]byte(imageName))
-	vp, vl := bytesToPointer([]byte(inputFileId))
-	bp, bl := bytesToPointer([]byte(inputFileName))
-	runDocker(kp, kl, vp, vl, bp, bl)
+	b, _ := json.Marshal(inputFiles)
+	vp, vl := bytesToPointer(b)
+	runDocker(kp, kl, vp, vl)
 }
 
 // ---------------------------------------------------------------------------
@@ -599,7 +599,14 @@ func run(a int64) int64 {
 
 	logger.Log("hello keyhan !")
 
-	output(bytesToPointer([]byte("{ \"hello\": \"world\" }")))
+	vm := Vm{}
+
+	vm.RunDocker("ai", map[string]string{
+		"6daa3626-16d5-448d-920b-b8e13e91bafe@172.77.5.1": "main.py",
+		"d81c8cbb-910b-48ee-a0d3-01ed83c2738c@172.77.5.1": "run.sh",
+	})
+
+	output(bytesToPointer([]byte("{ \"hello\": \"kasper\" }")))
 	return 0
 }
 

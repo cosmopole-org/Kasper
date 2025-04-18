@@ -114,13 +114,12 @@ func (a *Actions) Deploy(s abstract.IState, input inputs_machiner.DeployInput) (
 		if !ok2 {
 			return nil, errors.New("image name is not string")
 		}
-		dockerImageName := vm.MachineId + "_" + in
-		dockerfileFolderPath := toolbox.Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/"+dockerImageName
+		dockerfileFolderPath := toolbox.Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/"+in
 		err2 := toolbox.File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
 		if err2 != nil {
 			return nil, err2
 		}
-		err3 := toolbox.Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", dockerImageName)
+		err3 := toolbox.Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", vm.MachineId, in)
 		if err3 != nil {
 			log.Println(err3)
 			return nil, err3

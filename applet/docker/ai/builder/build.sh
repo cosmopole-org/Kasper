@@ -6,7 +6,7 @@ rm $(pwd)/Dockerfile
 cp $(pwd)/temp.txt $(pwd)/../temp.txt
 
 curl --location '172.77.5.1:8080/machines/deploy' \
---header 'token: becfa7ad-13d4-43b7-8038-25079ba3587e-d65a4680-73e3-4878-8476-a3e2ee7d13e3' \
+--header 'token: c1e9e98d-2a0c-40df-a279-d59c63745faa-b308ccdf-920d-41f2-93da-04fb1b7d4d06' \
 --header 'layer: 1' \
 --header 'Content-Type: application/json' \
 -d @temp.txt

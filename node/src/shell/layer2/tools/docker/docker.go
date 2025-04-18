@@ -1,12 +1,12 @@
 package docker
 
 import (
-	"fmt"
 	"kasper/src/abstract"
 	modulelogger "kasper/src/core/module/logger"
 	"kasper/src/shell/layer1/adapters"
 	"kasper/src/shell/utils/crypto"
 	"log"
+	"strings"
 
 	"archive/tar"
 	"bytes"
@@ -19,7 +19,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	network "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
-	natting "github.com/docker/go-connections/nat"
 )
 
 type Docker struct {
@@ -50,58 +49,53 @@ func (wm *Docker) SaRContainer(containerName string) error {
 	return nil
 }
 
-func (wm *Docker) RunContainer(imageName string, inputFile map[string]string) (string, error) {
+func WriteToTar(inputFiles map[string]string) string {
+	tarId := crypto.SecureUniqueString()
+	buf, err := os.Create(tarId)
+	if err != nil {
+		log.Println(err)
+		return ""
+	}
+	tw := tar.NewWriter(buf)
+	defer func() {
+		tw.Close()
+		buf.Close()
+	}()
+	for path, name := range inputFiles {
+		fr, _ := os.Open(path)
+		defer fr.Close()
+		fi, _ := fr.Stat()
+		h := new(tar.Header)
+		if fi.IsDir() {
+			h.Typeflag = tar.TypeDir
+		} else {
+			h.Typeflag = tar.TypeReg
+		}
+		h.Name = name
+		h.Size = fi.Size()
+		h.Mode = int64(fi.Mode())
+		h.ModTime = fi.ModTime()
+		_ = tw.WriteHeader(h)
+		if !fi.IsDir() {
+			_, _ = io.Copy(tw, fr)
+		}
+	}
+	return tarId
+}
+
+func (wm *Docker) RunContainer(machineId string, imageName string, inputFile map[string]string) (string, error) {
 	ctx := context.Background()
 
-	port := "9000"
-	newport, err := natting.NewPort("tcp", port)
-	if err != nil {
-		log.Println("Unable to create docker port")
-		return "", err
-	}
-
-	hostConfig := &container.HostConfig{
-		PortBindings: natting.PortMap{
-			newport: []natting.PortBinding{
-				{
-					HostIP:   "0.0.0.0",
-					HostPort: port,
-				},
-			},
-		},
-		RestartPolicy: container.RestartPolicy{
-			Name: "always",
-		},
-		LogConfig: container.LogConfig{
-			Type:   "json-file",
-			Config: map[string]string{},
-		},
-	}
-
-	networkConfig := &network.NetworkingConfig{
-		EndpointsConfig: map[string]*network.EndpointSettings{},
-	}
-	gatewayConfig := &network.EndpointSettings{
-		Gateway: "gatewayname",
-	}
-	networkConfig.EndpointsConfig["bridge"] = gatewayConfig
-
-	exposedPorts := map[natting.Port]struct{}{
-		newport: {},
-	}
-
 	config := &container.Config{
-		Image:        imageName,
+		Image:        strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
 		Env:          []string{},
-		ExposedPorts: exposedPorts,
-		Hostname:     fmt.Sprintf("%s-hostnameexample", imageName),
 	}
 
 	cont, err := wm.client.ContainerCreate(
-		context.Background(),
+		ctx,
 		config,
-		hostConfig,
-		networkConfig,
+		&container.HostConfig{},
+		&network.NetworkingConfig{},
 		nil,
 		crypto.SecureUniqueString(),
 	)
@@ -111,26 +105,58 @@ func (wm *Docker) RunContainer(imageName string, inputFile map[string]string) (s
 		return "", err
 	}
 
-	for k, v := range inputFile {
-		tarStream, err := os.Open(k)
-		if err != nil {
-			log.Println(err)
-			return "", err
-		}
-		err = wm.client.CopyToContainer(ctx, cont.ID, "/app/input/"+v, tarStream, container.CopyToContainerOptions{})
-		if err != nil {
-			log.Println(err)
-			return "", err
-		}
+	tarId := WriteToTar(inputFile)
+	tarStream, err := os.Open(tarId)
+	if err != nil {
+		log.Println(err)
+		return "", err
 	}
 
-	wm.client.ContainerStart(ctx, cont.ID, container.StartOptions{})
+	err = wm.client.CopyToContainer(ctx, cont.ID, "/app/input", tarStream, container.CopyToContainerOptions{
+		AllowOverwriteDirWithFile: true,
+	})
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+
+	err = wm.client.ContainerStart(ctx, cont.ID, container.StartOptions{})
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+
 	log.Println("Container ", cont.ID, " is created")
+
+	waiter, err := wm.client.ContainerAttach(ctx, cont.ID, container.AttachOptions{
+		Stderr: true,
+		Stdout: true,
+		Stdin:  true,
+		Stream: true,
+	})
+
+	go io.Copy(os.Stdout, waiter.Reader)
+	go io.Copy(os.Stderr, waiter.Reader)
+
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+
+	statusCh, errCh := wm.client.ContainerWait(ctx, cont.ID, container.WaitConditionNotRunning)
+	select {
+	case err := <-errCh:
+		if err != nil {
+			log.Println(err)
+			return "", err
+		}
+	case <-statusCh:
+	}
 
 	return cont.ID, nil
 }
 
-func (wm *Docker) BuildImage(dockerfile string, imageName string) error {
+func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName string) error {
 	ctx := context.Background()
 
 	buf := new(bytes.Buffer)
@@ -168,7 +194,7 @@ func (wm *Docker) BuildImage(dockerfile string, imageName string) error {
 		Context:    dockerFileTarReader,
 		Dockerfile: dockerfile,
 		Remove:     true,
-		Tags:       []string{},
+		Tags:       []string{strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName},
 	}
 
 	imageBuildResponse, err := wm.client.ImageBuild(

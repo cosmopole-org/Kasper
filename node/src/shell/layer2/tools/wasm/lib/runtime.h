@@ -921,8 +921,6 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     int inL = WasmEdge_ValueGetI32(In[1]);
     uint32_t keyOffset = WasmEdge_ValueGetI32(In[2]);
     int keyL = WasmEdge_ValueGetI32(In[3]);
-    uint32_t ifnOffset = WasmEdge_ValueGetI32(In[4]);
-    int ifnL = WasmEdge_ValueGetI32(In[5]);
 
     auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
 
@@ -944,23 +942,13 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
 
-    unsigned char *rawIfn = new unsigned char[ifnL];
-    vector<char> rawIfnC{};
-    WasmEdge_MemoryInstanceGetData(mem, rawIfn, ifnOffset, ifnL);
-    for (int i = 0; i < ifnL; i++)
-    {
-        rawIfnC.push_back((char)rawIfn[i]);
-    }
-    auto inputFileName = std::string(rawIfnC.begin(), rawIfnC.end());
-
     json j;
     j["key"] = "runDocker";
     json j2;
     j2["machineId"] = rt->machineId;
     j2["spaceId"] = rt->spaceId;
     j2["topicId"] = rt->topicId;
-    j2["inputFile"] = text;
-    j2["inputFileDestName"] = inputFileName;
+    j2["inputFiles"] = text;
     j2["imageName"] = imageName;
     j["input"] = j2;
     std::string packet = j.dump();

@@ -14,6 +14,6 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY . .
+RUN mkdir /app/input
 
-ENTRYPOINT [ "bash", "/app/run.sh" ]
+ENTRYPOINT [ "bash", "/app/input/run.sh" ]

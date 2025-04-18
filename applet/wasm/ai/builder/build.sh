@@ -6,8 +6,8 @@ node index.js
 rm $(pwd)/main.wasm
 cp $(pwd)/temp.txt $(pwd)/../temp.txt
 
-curl --location 'localhost:8080/machines/deploy' \
---header 'token: 0bd6d7db-9399-4750-8dc2-509090185ea5-20bbcc3e-e00f-4eca-9cb3-49da39d950f2' \
+curl --location '172.77.5.1:8080/machines/deploy' \
+--header 'token: c1e9e98d-2a0c-40df-a279-d59c63745faa-b308ccdf-920d-41f2-93da-04fb1b7d4d06' \
 --header 'layer: 1' \
 --header 'Content-Type: application/json' \
 -d @temp.txt

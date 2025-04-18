@@ -18,7 +18,7 @@ func (d AddMemberInput) GetSpaceId() string {
 }
 
 func (d AddMemberInput) GetTopicId() string {
-	return ""
+	return d.TopicId
 }
 
 func (d AddMemberInput) GetMemberId() string {

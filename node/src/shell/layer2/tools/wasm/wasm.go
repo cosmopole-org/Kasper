@@ -113,34 +113,38 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		member := models.Member{}
-		err = wm.storage.Db().Where("user_id = ?", machineId).Where("space_id = ?", spaceId).Where("topc_id = ?", topicId).First(&member).Error
+		err = wm.storage.Db().Where("user_id = ?", machineId).Where("space_id = ?", spaceId).Where("topic_ids = ?", topicId).First(&member).Error
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
-		inputFile, err := checkField(input, "inputFile", "")
+		inputFilesStr, err := checkField(input, "inputFiles", "{}")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
-		inputFileDestName, err := checkField(input, "inputFileDestName", "")
+		inputFiles := map[string]string{}
+		err = json.Unmarshal([]byte(inputFilesStr), &inputFiles)
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
-		if !wm.file.CheckFileFromStorage(wm.storageRoot, topicId, inputFile) {
-			err := errors.New("input file does not exist")
-			log.Println(err)
-			return err.Error()
+		finalInputFiles := map[string]string{}
+		for k, v := range inputFiles {
+			if !wm.file.CheckFileFromStorage(wm.storageRoot, topicId, k) {
+				err := errors.New("input file does not exist")
+				log.Println(err)
+				return err.Error()
+			}
+			path := fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, topicId, k)
+			finalInputFiles[path] = v
 		}
 		imageName, err := checkField(input, "imageName", "")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
-		inputFiles := map[string]string{}
-		inputFiles[fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, topicId, inputFile)] = inputFileDestName
-		conttainerId, err := wm.docker.RunContainer(imageName, inputFiles)
+		conttainerId, err := wm.docker.RunContainer(machineId, imageName, finalInputFiles)
 		if err != nil {
 			log.Println(err)
 			return err.Error()
