@@ -1,6 +1,7 @@
 package tool_file
 
 import (
+	"archive/tar"
 	"bytes"
 	"errors"
 	"fmt"
@@ -57,6 +58,29 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 	}(dest)
 	log.Println("opened created file.")
 	if _, err = dest.Write(buf.Bytes()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (g *File) SaveTarFileItemToStorage(storageRoot string, fh *tar.Reader, topicId string, key string) error {
+	var dirPath = fmt.Sprintf("%s/files/%s", storageRoot, topicId)
+	err := os.MkdirAll(dirPath, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	log.Println("opened received file.")
+	dest, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, key), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	defer func(dest *os.File) {
+		err := dest.Close()
+		if err != nil {
+			g.logger.Println(err)
+		}
+	}(dest)
+	if _, err := io.Copy(dest, fh); err != nil {
 		return err
 	}
 	return nil

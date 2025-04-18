@@ -22,10 +22,8 @@ import (
 	toolboxL1 "kasper/src/shell/layer1/module/toolbox"
 	"kasper/src/shell/layer2/tools/docker"
 	tool_file "kasper/src/shell/layer2/tools/file"
-	"kasper/src/shell/utils/future"
 	"log"
 	"strings"
-	"time"
 )
 
 type Wasm struct {
@@ -144,15 +142,19 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		conttainerId, err := wm.docker.RunContainer(machineId, imageName, finalInputFiles)
+		outputFile, err := wm.docker.RunContainer(machineId, topicId, imageName, finalInputFiles)
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
-		future.Async(func() {
-			time.Sleep(60 * time.Minute)
-			wm.docker.SaRContainer(conttainerId)
-		}, false)
+		if outputFile != nil {
+			str, err := json.Marshal(outputFile)
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			return string(str)
+		}
 	} else if key == "log" {
 		_, err := checkField(input, "text", "")
 		if err != nil {

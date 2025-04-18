@@ -50,6 +50,6 @@ func (s *ToolboxL2) Dummy() {
 }
 
 func NewTools(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, kvDbPath string, cache adapters.ICache, file *toolfile.File) *ToolboxL2 {
-	dockerController := docker.NewDocker(core, logger, storageRoot, storage)
+	dockerController := docker.NewDocker(core, logger, storageRoot, storage, cache, file)
 	return &ToolboxL2{storage: storage, cache: cache, wasm: wasm.NewWasm(core, logger, storageRoot, storage, kvDbPath, dockerController, file), elpis: elpis.NewElpis(core, logger, storageRoot, storage), docker: dockerController, file: file}
 }
