@@ -4,7 +4,7 @@ let machineCode = fs.readFileSync("./Dockerfile");
 
 fs.writeFileSync("temp.txt", `{
     "runtime": "docker",
-    "machineId": "7@global",
+    "machineId": "${process.argv[2]}",
     "metadata": {
         "imageName": "ai"
     },

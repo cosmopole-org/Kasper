@@ -1,13 +1,17 @@
 #!/bin/bash
+
+token=$1
+machineId=$2
+
 rm $(pwd)/../temp.txt
 docker run --rm --mount type=bind,source=$(pwd)/..,target=/app tinygobuild
 mv $(pwd)/../main.wasm $(pwd)/main.wasm
-node index.js
+node index.js $machineId
 rm $(pwd)/main.wasm
 cp $(pwd)/temp.txt $(pwd)/../temp.txt
 
 curl --location '172.77.5.1:8080/machines/deploy' \
---header 'token: c1e9e98d-2a0c-40df-a279-d59c63745faa-b308ccdf-920d-41f2-93da-04fb1b7d4d06' \
+--header "token: $token" \
 --header 'layer: 1' \
 --header 'Content-Type: application/json' \
 -d @temp.txt

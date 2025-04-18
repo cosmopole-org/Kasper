@@ -1,6 +1,6 @@
 {
     "runtime": "docker",
-    "machineId": "7@global",
+    "machineId": "36@global",
     "metadata": {
         "imageName": "ai"
     },

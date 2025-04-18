@@ -1,6 +1,7 @@
 package main
 
 import (
+	model "applet/src/models"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -498,22 +499,13 @@ type Trx[T any] struct {
 }
 
 func ParseArgs(a int64) string {
-	// input := model.Send{}
-	args := string(pointerToBytes(a))
-	logger.Log(args)
-	if strings.Contains(args, "offchain") {
-		return "offchain"
-	} else {
-		return "onchain"
+	input := model.Send{}
+	e := json.Unmarshal(pointerToBytes(a), &input)
+	if e != nil {
+		logger.Log("unable to parse args as send.")
+		return ""
 	}
-	// logger.Log(b))
-	// // e := json.Unmarshal(b, &input)
-	// if e != nil {
-	// 	// logger.Log("unable to parse args as send.")
-	// 	return ""
-	// }
-	// logger.Log(input.Data)
-	// return input.Data
+	return input.Data
 }
 
 type Vm struct{}
@@ -597,14 +589,26 @@ func runTask(a int64) int32 {
 //export run
 func run(a int64) int64 {
 
+	input := map[string]any{}
+	inputStr := ParseArgs(a)
+	logger.Log("hi : [" + inputStr + "]")
+	err := json.Unmarshal([]byte(inputStr), &input)
+	if err != nil {
+		logger.Log(err.Error())
+		return 0
+	}
+
 	logger.Log("hello keyhan !")
 
 	vm := Vm{}
 
-	vm.RunDocker("ai", map[string]string{
-		"6daa3626-16d5-448d-920b-b8e13e91bafe@172.77.5.1": "main.py",
-		"d81c8cbb-910b-48ee-a0d3-01ed83c2738c@172.77.5.1": "run.sh",
-	})
+	filesMap := map[string]string{}
+	srcFiles := input["srcFiles"].(map[string]any)
+	for k, v := range srcFiles {
+		filesMap[k] = v.(string)
+	}
+
+	vm.RunDocker("ai", filesMap)
 
 	output(bytesToPointer([]byte("{ \"hello\": \"kasper\" }")))
 	return 0
