@@ -62,7 +62,8 @@ func (a *Actions) Create(s abstract.IState, input inputs_machiner.CreateInput) (
 	toolbox := abstract.UseToolbox[*toolbox2.ToolboxL1](a.Layer.Tools())
 	state := abstract.UseState[modulestate.IStateL1](s)
 	var (
-		user models.User
+		user    models.User
+		session models.Session
 	)
 	trx := state.Trx()
 	user = models.User{Metadata: datatypes.JSON([]byte(`{}`)), Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy(), Name: "", Avatar: ""}
@@ -76,8 +77,14 @@ func (a *Actions) Create(s abstract.IState, input inputs_machiner.CreateInput) (
 	if err2 != nil {
 		return nil, err2
 	}
+	session = models.Session{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Token: user.Id, UserId: user.Id}
+	err3 := trx.Db().Create(&session).Error
+	if err3 != nil {
+		return nil, err3
+	}
 	vm := model.Vm{MachineId: user.Id, OwnerId: state.Info().UserId()}
 	trx.Db().Create(&vm)
+	trx.Mem().Put("auth::"+session.Token, fmt.Sprintf("human/%s", user.Id))
 	trx.Mem().Put("code::"+code, user.Id)
 	return outputs_machiner.CreateOutput{User: user}, nil
 }
@@ -114,7 +121,7 @@ func (a *Actions) Deploy(s abstract.IState, input inputs_machiner.DeployInput) (
 		if !ok2 {
 			return nil, errors.New("image name is not string")
 		}
-		dockerfileFolderPath := toolbox.Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/"+in
+		dockerfileFolderPath := toolbox.Storage().StorageRoot() + pluginsTemplateName + vm.MachineId + "/" + in
 		err2 := toolbox.File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
 		if err2 != nil {
 			return nil, err2

@@ -9,6 +9,7 @@ package wasm
 import "C"
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"kasper/src/bots/sampleBot/models"
 	"kasper/src/core/module/core/model/worker"
 	modulelogger "kasper/src/core/module/logger"
+	inputs_storage "kasper/src/shell/api/inputs/storage"
 	"kasper/src/shell/layer1/adapters"
 	adapters_model "kasper/src/shell/layer1/adapters/model"
 	module_model "kasper/src/shell/layer1/model"
@@ -205,22 +207,78 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
+		spaceId, err := checkField(input, "spaceId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		topicId, err := checkField(input, "topicId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		isFile, err := checkField(input, "isFile", false)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		isBase, err := checkField(input, "isBase", false)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
 		pack, err := checkField(input, "packet", "{}")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
+		var data []byte
+		if isFile {
+			if wm.file.CheckFileFromStorage(wm.storageRoot, topicId, pack) {
+				b, err := wm.file.ReadFileFromStorage(wm.storageRoot, topicId, pack)
+				if err != nil {
+					log.Println(err)
+					return err.Error()
+				}
+				data = b
+			}
+		} else {
+			data = []byte(pack)
+		}
 
 		result := []byte("{}")
 		outputCnan := make(chan int)
-		wm.app.ExecAppletRequestOnChain(targetMachineId, k, []byte(pack), machineId, func(b []byte, i int, err error) {
-			if err != nil {
-				log.Println(err)
-				return
+		if isBase {
+			var packetData any
+			if k == "/storage/uploadData" {
+				packetData = inputs_storage.UploadDataInput{
+					Data:    base64.StdEncoding.EncodeToString(data),
+					SpaceId: spaceId,
+					TopicId: topicId,
+				}
+			} else {
+				temp := map[string]any{}
+				json.Unmarshal(data, &temp)
+				packetData = temp
 			}
-			result = b
-			outputCnan <- 1
-		})
+			wm.app.ExecBaseRequestOnChain(k, packetData, 1, machineId, func(b []byte, i int, err error) {
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				result = b
+				outputCnan <- 1
+			})
+		} else {
+			wm.app.ExecAppletRequestOnChain(topicId, targetMachineId, k, data, machineId, func(b []byte, i int, err error) {
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				result = b
+				outputCnan <- 1
+			})
+		}
 		<-outputCnan
 		return string(result)
 	}

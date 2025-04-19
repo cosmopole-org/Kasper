@@ -22,7 +22,7 @@ type ICore interface {
 	Push(ILayer)
 	Get(int) ILayer
 	Utils() IUtils
-	ExecAppletRequestOnChain(machineId string, key string, packet []byte, userId string, callback func([]byte, int, error))
+	ExecAppletRequestOnChain(topicId string, machineId string, key string, packet []byte, userId string, callback func([]byte, int, error))
 	ExecBaseRequestOnChain(key string, packet any, layer int, token string, callback func([]byte, int, error))
 	ExecAppletResponseOnChain(callbackId string, packet []byte, resCode int, e string, updates []Update, cacheUpdates []CacheUpdate)
 	ExecBaseResponseOnChain(callbackId string, packet any, resCode int, e string, updates []Update, cacheUpdates []CacheUpdate)

@@ -1,7 +1,5 @@
 package inputs_storage
 
-import "kasper/src/shell/utils/origin"
-
 type DownloadInput struct {
 	FileId  string `json:"fileId" validate:"required"`
 	SpaceId string `json:"spaceId" validate:"required"`
@@ -25,5 +23,5 @@ func (d DownloadInput) GetMemberId() string {
 }
 
 func (d DownloadInput) Origin() string {
-	return origin.FindOrigin(d.SpaceId)
+	return ""
 }

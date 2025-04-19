@@ -125,7 +125,12 @@ func (wm *Docker) RunContainer(machineId string, topicId string, imageName strin
 	cont, err := wm.client.ContainerCreate(
 		ctx,
 		config,
-		&container.HostConfig{},
+		&container.HostConfig{
+			LogConfig: container.LogConfig{
+				Type:   "json-file",
+				Config: map[string]string{},
+			},
+		},
 		&network.NetworkingConfig{},
 		nil,
 		crypto.SecureUniqueString(),

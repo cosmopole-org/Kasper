@@ -8,5 +8,5 @@ model = [
     [7, 8, 9],
 ]
 
-with open("/app/output/model.data", 'wb') as outfile:
+with open("/app/output", 'w', encoding="utf8") as outfile:
     json.dump(model, outfile)

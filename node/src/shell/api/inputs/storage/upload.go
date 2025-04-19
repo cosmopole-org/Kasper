@@ -1,7 +1,6 @@
 package inputs_storage
 
 import (
-	"kasper/src/shell/utils/origin"
 	"mime/multipart"
 )
 
@@ -29,5 +28,5 @@ func (d UploadInput) GetMemberId() string {
 }
 
 func (d UploadInput) Origin() string {
-	return origin.FindOrigin(d.SpaceId)
+	return ""
 }

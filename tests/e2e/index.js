@@ -99,8 +99,8 @@ const executeBash = async (command) => {
         "title": "test tower",
         "avatar": "0",
         "isPublic": true,
-        "tag": "kasper workspace 9",
-        "orig": "172.77.5.1"
+        "tag": "kasper workspace",
+        "orig": "global"
     }, true);
 
     let stepCreateMachine = await shootRequest("machines/create", 1, {

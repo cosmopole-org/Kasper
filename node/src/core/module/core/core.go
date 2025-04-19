@@ -150,7 +150,7 @@ func (c *Core) ClearAppPendingTrxs() {
 	c.appPendingTrxs = []*worker.Trx{}
 }
 
-func (c *Core) ExecAppletRequestOnChain(machineId string, key string, packet []byte, userId string, callback func([]byte, int, error)) {
+func (c *Core) ExecAppletRequestOnChain(topicId string, machineId string, key string, packet []byte, userId string, callback func([]byte, int, error)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
@@ -158,7 +158,7 @@ func (c *Core) ExecAppletRequestOnChain(machineId string, key string, packet []b
 	vm := mach_model.Vm{MachineId: machineId}
 	abstract.UseToolbox[*module_model.ToolboxL2](c.Get(2).Tools()).Storage().Db().First(&vm)
 	future.Async(func() {
-		c.chain <- abstract.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": false, "runtime": vm.Runtime, "userId": userId, "machineId": machineId}, Key: key, Payload: packet, Effects: abstract.Effects{DbUpdates: []abstract.Update{}, CacheUpdates: []abstract.CacheUpdate{}}}
+		c.chain <- abstract.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": false, "runtime": vm.Runtime, "userId": userId, "machineId": machineId, "topicId": topicId}, Key: key, Payload: packet, Effects: abstract.Effects{DbUpdates: []abstract.Update{}, CacheUpdates: []abstract.CacheUpdate{}}}
 	}, false)
 }
 

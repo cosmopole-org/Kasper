@@ -1,6 +1,7 @@
 package actions_user
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"kasper/src/abstract"
@@ -45,6 +46,44 @@ func (a *Actions) Upload(s abstract.IState, input inputs_storage.UploadInput) (a
 	} else {
 		var file = models.File{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), SenderId: state.Info().UserId(), TopicId: state.Info().TopicId()}
 		if err := toolbox.File().SaveFileToStorage(toolbox.Storage().StorageRoot(), input.Data, state.Info().TopicId(), file.Id); err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		trx.Db().Create(&file)
+		return map[string]any{"file": file}, nil
+	}
+}
+
+// UploadData /storage/uploadData check [ true true true ] access [ true false false false POST ]
+func (a *Actions) UploadData(s abstract.IState, input inputs_storage.UploadDataInput) (any, error) {
+	toolbox := abstract.UseToolbox[*module_model.ToolboxL2](a.Layer.Core().Get(2).Tools())
+	state := abstract.UseState[modulestate.IStateL1](s)
+	trx := state.Trx()
+	if input.FileId != "" {
+		var file = models.File{Id: input.FileId}
+		trx.Db().First(&file)
+		trx.ClearError()
+		if file.SenderId != state.Info().UserId() {
+			return nil, errors.New("access to file control denied")
+		}
+		data, err := base64.StdEncoding.DecodeString(input.Data)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		if err := toolbox.File().SaveDataToStorage(toolbox.Storage().StorageRoot(), data, state.Info().TopicId(), input.FileId); err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		return map[string]any{}, nil
+	} else {
+		var file = models.File{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), SenderId: state.Info().UserId(), TopicId: state.Info().TopicId()}
+		data, err := base64.StdEncoding.DecodeString(input.Data)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		if err := toolbox.File().SaveDataToStorage(toolbox.Storage().StorageRoot(), data, state.Info().TopicId(), file.Id); err != nil {
 			log.Println(err)
 			return nil, err
 		}

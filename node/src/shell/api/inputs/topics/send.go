@@ -1,7 +1,5 @@
 package inputs_topics
 
-import "kasper/src/shell/utils/origin"
-
 type SendInput struct {
 	Data     string `json:"data" validate:"required"`
 	UserId   string `json:"userId"`
@@ -29,5 +27,5 @@ func (d SendInput) GetMemberId() string {
 }
 
 func (d SendInput) Origin() string {
-	return origin.FindOrigin(d.SpaceId)
+	return ""
 }

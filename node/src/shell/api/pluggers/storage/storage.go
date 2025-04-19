@@ -20,6 +20,10 @@
 			return utils.ExtractSecureAction(c.Logger, c.Core, c.Actions.Upload)
 		}
 		
+		func (c *Plugger) UploadData() abstract.IAction {
+			return utils.ExtractSecureAction(c.Logger, c.Core, c.Actions.UploadData)
+		}
+		
 		func (c *Plugger) Download() abstract.IAction {
 			return utils.ExtractSecureAction(c.Logger, c.Core, c.Actions.Download)
 		}

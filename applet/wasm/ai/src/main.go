@@ -13,7 +13,7 @@ import (
 
 //go:module env
 //export runDocker
-func runDocker(k int32, kl int32, v int32, lv int32) int32
+func runDocker(k int32, kl int32, v int32, lv int32) int64
 
 //go:module env
 //export put
@@ -37,7 +37,7 @@ func consoleLog(k int32, kl int32) int32
 
 //go:module env
 //export submitOnchainTrx
-func submitOnchainTrx(tmO int32, tmL int32, keyO int32, keyL int32, inputO int32, inputL int32) int64
+func submitOnchainTrx(tmO int32, tmL int32, keyO int32, keyL int32, inputO int32, inputL int32, isFile int32, isBase int32) int64
 
 //go:module env
 //export output
@@ -470,7 +470,7 @@ func (*Db) GetByPrefix(key string) [][]byte {
 type Chain struct {
 }
 
-func (c *Chain) SubmitTrx(targetMachineId string, key string, input any) []byte {
+func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, input any) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
 	keyO, keyL := bytesToPointer([]byte(key))
 	b, e := json.Marshal(input)
@@ -479,16 +479,37 @@ func (c *Chain) SubmitTrx(targetMachineId string, key string, input any) []byte 
 		return []byte("{}")
 	}
 	inputO, inputL := bytesToPointer(b)
-	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL)
+	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, 0, 0)
 	result := pointerToBytes(resP)
 	return result
 }
 
-func (c *Chain) SubmitRawTrx(targetMachineId string, key string, input []byte) []byte {
+func (c *Chain) SubmitAppletFileTrx(targetMachineId string, fileId string) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
+	keyO, keyL := bytesToPointer([]byte("/storage/uploadData"))
+	inputO, inputL := bytesToPointer([]byte(fileId))
+	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, 1, 0)
+	result := pointerToBytes(resP)
+	return result
+}
+
+func (c *Chain) SubmitBasePacketTrx(key string, input []byte) []byte {
 	keyO, keyL := bytesToPointer([]byte(key))
-	inputO, inputL := bytesToPointer(input)
-	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL)
+	b, e := json.Marshal(input)
+	if e != nil {
+		logger.Log(e.Error())
+		return []byte("{}")
+	}
+	inputO, inputL := bytesToPointer(b)
+	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, 0, 1)
+	result := pointerToBytes(resP)
+	return result
+}
+
+func (c *Chain) SubmitBaseFileTrx(fileId string) []byte {
+	keyO, keyL := bytesToPointer([]byte("/storage/uploadData"))
+	inputO, inputL := bytesToPointer([]byte(fileId))
+	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, 1, 1)
 	result := pointerToBytes(resP)
 	return result
 }
@@ -510,11 +531,17 @@ func ParseArgs(a int64) string {
 
 type Vm struct{}
 
-func (vm *Vm) RunDocker(imageName string, inputFiles map[string]string) {
+func (vm *Vm) RunDocker(imageName string, inputFiles map[string]string) *model.File {
 	kp, kl := bytesToPointer([]byte(imageName))
 	b, _ := json.Marshal(inputFiles)
 	vp, vl := bytesToPointer(b)
-	runDocker(kp, kl, vp, vl)
+	res := pointerToBytes(runDocker(kp, kl, vp, vl))
+	file := &model.File{}
+	err := json.Unmarshal(res, file)
+	if err != nil {
+		logger.Log(err.Error())
+	}
+	return file
 }
 
 // ---------------------------------------------------------------------------
@@ -608,7 +635,10 @@ func run(a int64) int64 {
 		filesMap[k] = v.(string)
 	}
 
-	vm.RunDocker("ai", filesMap)
+	modelFile := vm.RunDocker("ai", filesMap)
+
+	chain := Chain{}
+	chain.SubmitBaseFileTrx(modelFile.Id)
 
 	output(bytesToPointer([]byte("{ \"hello\": \"kasper\" }")))
 	return 0

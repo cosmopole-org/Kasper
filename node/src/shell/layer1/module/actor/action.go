@@ -38,26 +38,27 @@ func (a *SecureAction) SecurlyActChain(layer abstract.ILayer, token string, pack
 	success, info := a.Guard.ValidateByToken(layer, token, input.GetSpaceId(), input.GetTopicId(), input.GetMemberId())
 	if !success {
 		a.core.ExecBaseResponseOnChain(packetId, abstract.EmptyPayload{}, 403, "authorization failed", []abstract.Update{}, []abstract.CacheUpdate{})
-	}
-	s := layer.Sb().NewState(info, nil, origin).(statemodule.IStateL1)
-	tb := abstract.UseToolbox[toolbox2.IToolboxL1](a.core.Get(2).Tools())
-	var sc int
-	var res any
-	updates := []abstract.Update{}
-	cacheUpdates := []abstract.CacheUpdate{}
-	err := tb.Storage().DoTrx(func(i adapters.ITrx) error {
-		s.SetTrx(i)
-		statusCode, data, err := a.Act(s, input)
-		sc = statusCode
-		res = data
-		updates = i.Updates()
-		cacheUpdates = i.Mem().Updates()
-		return err
-	})
-	if err != nil {
-		a.core.ExecBaseResponseOnChain(packetId, abstract.EmptyPayload{}, 500, err.Error(), []abstract.Update{}, []abstract.CacheUpdate{})
 	} else {
-		a.core.ExecBaseResponseOnChain(packetId, res, sc, "", updates, cacheUpdates)
+		s := layer.Sb().NewState(info, nil, origin).(statemodule.IStateL1)
+		tb := abstract.UseToolbox[toolbox2.IToolboxL1](a.core.Get(2).Tools())
+		var sc int
+		var res any
+		updates := []abstract.Update{}
+		cacheUpdates := []abstract.CacheUpdate{}
+		err := tb.Storage().DoTrx(func(i adapters.ITrx) error {
+			s.SetTrx(i)
+			statusCode, data, err := a.Act(s, input)
+			sc = statusCode
+			res = data
+			updates = i.Updates()
+			cacheUpdates = i.Mem().Updates()
+			return err
+		})
+		if err != nil {
+			a.core.ExecBaseResponseOnChain(packetId, abstract.EmptyPayload{}, 500, err.Error(), []abstract.Update{}, []abstract.CacheUpdate{})
+		} else {
+			a.core.ExecBaseResponseOnChain(packetId, res, sc, "", updates, cacheUpdates)
+		}
 	}
 }
 
