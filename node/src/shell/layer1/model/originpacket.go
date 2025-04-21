@@ -2,12 +2,11 @@ package module_model
 
 type OriginPacket struct {
 	Key        string
-	Layer      int
 	UserId     string
-	SpaceId    string
-	TopicId    string
+	PointId    string
 	RequestId  string
-	Data       string
+	Binary     []byte
+	Signature  string
 	IsResponse bool
 	Exceptions []string
 }

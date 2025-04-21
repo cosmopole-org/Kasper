@@ -2,11 +2,7 @@ package inputs_users
 
 type CreateInput struct {
 	Username  string `json:"username" validate:"required"`
-	Name      string `json:"name" validate:"required"`
-	Avatar    string `json:"avatar" validate:"required"`
-	Token     string `json:"token" validate:"required"`
-	PublicKey string `json:"publicKey"`
-	Typ       string `json:"type"`
+	PublicKey string `json:"publicKey" validate:"required"`
 }
 
 func (d CreateInput) GetData() any {

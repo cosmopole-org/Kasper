@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"kasper/src/abstract"
+	"kasper/src/abstract/adapters/tools"
+	"kasper/src/abstract/models"
+	"kasper/src/abstract/models/action"
+	"kasper/src/abstract/models/chain"
+	"kasper/src/abstract/models/info"
+	"kasper/src/abstract/models/trx"
+	"kasper/src/abstract/models/update"
 	"kasper/src/babble"
-	moduleactor "kasper/src/core/module/actor"
-	modulecoremodel "kasper/src/core/module/core/model"
-	"kasper/src/core/module/core/model/worker"
-	"kasper/src/shell/layer1/adapters"
-	moduleactormodel "kasper/src/shell/layer1/module/actor"
+	"kasper/src/core/module/actor/model/l2"
+	module_trx "kasper/src/core/module/actor/model/trx"
 	mach_model "kasper/src/shell/machiner/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
@@ -29,46 +32,27 @@ import (
 	"kasper/src/proxy/inmem"
 )
 
-type ResponseHolder struct {
-	Payload []byte
-	Effects abstract.Effects
-}
-
-type Election struct {
-	MyNum        string
-	Participants map[string]bool
-	Commits      map[string][]byte
-	Reveals      map[string]string
-}
-
 type Core struct {
 	lock           sync.Mutex
 	id             string
-	utils          abstract.IUtils
+	tools          *tools.Tools
 	gods           []string
-	layers         []abstract.ILayer
-	actor          *moduleactor.Actor
 	chain          chan any
-	chainCallbacks map[string]*ChainCallback
+	chainCallbacks map[string]*chain.ChainCallback
 	babbleInst     *babble.Babble
 	Ip             string
-	Elections      []Election
-	ElecReg        bool
-	ElecStarter    string
-	ElecStartTime  int64
-	Executors      map[string]bool
+	elections      []chain.Election
+	elecReg        bool
+	elecStarter    string
+	elecStartTime  int64
+	executors      map[string]bool
 	appPendingTrxs []*worker.Trx
+	actionStore    map[string]action.IAction
 }
 
 var MAX_VALIDATOR_COUNT = 5
 
-type ChainCallback struct {
-	Fn        func([]byte, int, error)
-	Executors map[string]bool
-	Responses map[string]string
-}
-
-func NewCore(_ string, log abstract.Log) *Core {
+func NewCore(_ string) *Core {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
 		panic(err)
@@ -81,38 +65,36 @@ func NewCore(_ string, log abstract.Log) *Core {
 	execs["172.77.5.2"] = true
 	return &Core{
 		id:             id,
-		utils:          modulecoremodel.NewUtils(log),
 		gods:           make([]string, 0),
-		layers:         make([]abstract.ILayer, 0),
-		actor:          moduleactor.NewActor(),
 		chain:          nil,
-		chainCallbacks: map[string]*ChainCallback{},
+		chainCallbacks: map[string]*chain.ChainCallback{},
 		babbleInst:     nil,
 		Ip:             localAddr,
-		Elections:      nil,
-		ElecReg:        false,
-		Executors:      execs,
+		elections:      nil,
+		elecReg:        false,
+		executors:      execs,
 	}
 }
 
-func (c *Core) Push(l abstract.ILayer) {
-	c.layers = append(c.layers, l)
+func (c *Core) ModifyStateSecurly(readonly bool, info info.IInfo, fn func (l2.State)) {
+	trx := module_trx.NewTrx(c, c.Tools().Storage, readonly)
+	defer trx.Commit()
+	s := l2.NewState(info, trx)
+	fn(s)
 }
 
-func (c *Core) Get(index int) abstract.ILayer {
-	if (index >= 1) && (index <= len(c.layers)) {
-		return c.layers[index-1]
-	} else {
-		return nil
-	}
+func (c *Core) ModifyState(readonly bool, fn func (trx.ITrx)) {
+	trx := module_trx.NewTrx(c, c.Tools().Storage, readonly)
+	defer trx.Commit()
+	fn(trx)
+}
+
+func (c *Core) Tools() *tools.Tools {
+	return c.tools
 }
 
 func (c *Core) Id() string {
 	return c.id
-}
-
-func (c *Core) Layers() []abstract.ILayer {
-	return c.layers
 }
 
 func (c *Core) Chain() *babble.Babble {
@@ -138,10 +120,10 @@ func (c *Core) AppPendingTrxs() {
 		}
 	}
 	if len(elpisTrxs) > 0 {
-		abstract.UseToolbox[*module_model.ToolboxL2](c.Get(2).Tools()).Elpis().ExecuteChainTrxsGroup(elpisTrxs)
+		c.Tools().Elpis.ExecuteChainTrxsGroup(elpisTrxs)
 	}
 	if len(wasmTrxs) > 0 {
-		abstract.UseToolbox[*module_model.ToolboxL2](c.Get(2).Tools()).Wasm().ExecuteChainTrxsGroup(wasmTrxs)
+		c.Tools().Wasm.ExecuteChainTrxsGroup(wasmTrxs)
 	}
 	c.appPendingTrxs = []*worker.Trx{}
 }
@@ -154,11 +136,12 @@ func (c *Core) ExecAppletRequestOnChain(topicId string, machineId string, key st
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
-	c.chainCallbacks[callbackId] = &ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
-	vm := mach_model.Vm{MachineId: machineId}
-	abstract.UseToolbox[*module_model.ToolboxL2](c.Get(2).Tools()).Storage().Db().First(&vm)
+	c.chainCallbacks[callbackId] = &chain.ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
+	trx := c.ModifyState(true)
+	defer trx.Commit()
+	vm := mach_model.Vm{MachineId: machineId}.Pull(trx)
 	future.Async(func() {
-		c.chain <- abstract.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": false, "runtime": vm.Runtime, "userId": userId, "machineId": machineId, "topicId": topicId}, Key: key, Payload: packet, Effects: abstract.Effects{DbUpdates: []abstract.Update{}, CacheUpdates: []abstract.CacheUpdate{}}}
+		c.chain <- chain.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": false, "runtime": vm.Runtime, "userId": userId, "machineId": machineId, "topicId": topicId}, Key: key, Payload: packet, Effects: models.Effects{DbUpdates: []models.Update{}}}
 	}, false)
 }
 
@@ -166,35 +149,35 @@ func (c *Core) ExecBaseRequestOnChain(key string, packet any, layer int, token s
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
-	c.chainCallbacks[callbackId] = &ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
+	c.chainCallbacks[callbackId] = &chain.ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
 	serialized, err := json.Marshal(packet)
 	if err == nil {
 		future.Async(func() {
-			c.chain <- abstract.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": true, "layer": layer, "token": token}, Key: key, Payload: serialized, Effects: abstract.Effects{DbUpdates: []abstract.Update{}, CacheUpdates: []abstract.CacheUpdate{}}}
+			c.chain <- chain.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": true, "layer": layer, "token": token}, Key: key, Payload: serialized, Effects: models.Effects{DbUpdates: []models.Update{}}}
 		}, false)
 	} else {
 		log.Println(err)
 	}
 }
 
-func (c *Core) ExecBaseResponseOnChain(callbackId string, packet any, resCode int, e string, updates []abstract.Update, cacheUpdates []abstract.CacheUpdate) {
+func (c *Core) ExecBaseResponseOnChain(callbackId string, packet any, resCode int, e string, updates []update.Update) {
 	serialized, err := json.Marshal(packet)
 	if err == nil {
 		future.Async(func() {
-			c.chain <- abstract.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": true, "responseCode": resCode, "error": e}, Payload: serialized, Effects: abstract.Effects{DbUpdates: updates, CacheUpdates: cacheUpdates}}
+			c.chain <- chain.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": true, "responseCode": resCode, "error": e}, Payload: serialized, Effects: chain.Effects{DbUpdates: updates}}
 		}, false)
 	} else {
 		log.Println(err)
 	}
 }
 
-func (c *Core) ExecAppletResponseOnChain(callbackId string, packet []byte, resCode int, e string, updates []abstract.Update, cacheUpdates []abstract.CacheUpdate) {
+func (c *Core) ExecAppletResponseOnChain(callbackId string, packet []byte, resCode int, e string, updates []update.Update) {
 	future.Async(func() {
-		c.chain <- abstract.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": false, "responseCode": resCode, "error": e}, Payload: packet, Effects: abstract.Effects{DbUpdates: updates, CacheUpdates: cacheUpdates}}
+		c.chain <- chain.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": false, "responseCode": resCode, "error": e}, Payload: packet, Effects: chain.Effects{DbUpdates: updates}}
 	}, false)
 }
 
-func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
+func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	switch packet.Type {
@@ -217,18 +200,18 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 				if !ok2 {
 					return
 				}
-				if c.Elections == nil {
-					c.Elections = []Election{}
+				if c.elections == nil {
+					c.elections = []chain.Election{}
 				}
 				if phase == "start-reg" {
-					c.ElecReg = true
-					c.ElecStarter = voter
-					c.ElecStartTime = time.Now().UnixMilli()
+					c.elecReg = true
+					c.elecStarter = voter
+					c.elecStartTime = time.Now().UnixMilli()
 					for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
-						c.Elections = append(c.Elections, Election{Participants: map[string]bool{}, Commits: map[string][]byte{}, Reveals: map[string]string{}})
+						c.elections = append(c.elections, chain.Election{Participants: map[string]bool{}, Commits: map[string][]byte{}, Reveals: map[string]string{}})
 					}
 					future.Async(func() {
-						c.chain <- abstract.ChainPacket{
+						c.chain <- chain.ChainPacket{
 							Type:    "election",
 							Key:     "choose-validator",
 							Meta:    map[string]any{"phase": "register", "voter": c.Ip},
@@ -238,7 +221,7 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 					if voter == c.Ip {
 						future.Async(func() {
 							time.Sleep(time.Duration(10) * time.Second)
-							c.chain <- abstract.ChainPacket{
+							c.chain <- chain.ChainPacket{
 								Type:    "election",
 								Key:     "choose-validator",
 								Meta:    map[string]any{"phase": "end-reg", "voter": c.Ip},
@@ -247,21 +230,21 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 						}, false)
 					}
 				} else if phase == "end-reg" {
-					if c.ElecStarter == voter && ((time.Now().UnixMilli() - c.ElecStartTime) > 8000) {
-						c.ElecReg = false
+					if c.elecStarter == voter && ((time.Now().UnixMilli() - c.elecStartTime) > 8000) {
+						c.elecReg = false
 						payload := [][]byte{}
 						nodeCount := c.babbleInst.Peers.Len()
 						hasher := sha256.New()
 						for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
 							r := fmt.Sprintf("%d", rand.Intn(nodeCount))
-							c.Elections[i].MyNum = r
+							c.elections[i].MyNum = r
 							hasher.Write([]byte(r))
 							bs := hasher.Sum(nil)
 							payload = append(payload, bs)
 						}
 						data, _ := json.Marshal(payload)
 						future.Async(func() {
-							c.chain <- abstract.ChainPacket{
+							c.chain <- chain.ChainPacket{
 								Type:    "election",
 								Key:     "choose-validator",
 								Meta:    map[string]any{"phase": "commit", "voter": c.Ip},
@@ -270,9 +253,9 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 						}, false)
 					}
 				} else if phase == "register" {
-					if c.ElecReg {
+					if c.elecReg {
 						for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
-							c.Elections[i].Participants[voter] = true
+							c.elections[i].Participants[voter] = true
 						}
 					}
 				} else if phase == "commit" {
@@ -284,18 +267,18 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 					if len(votes) < MAX_VALIDATOR_COUNT {
 						return
 					}
-					if c.Elections[0].Participants[voter] {
+					if c.elections[0].Participants[voter] {
 						for i := 0; i < min(MAX_VALIDATOR_COUNT, c.babbleInst.Peers.Len()); i++ {
-							c.Elections[i].Commits[voter] = votes[i]
+							c.elections[i].Commits[voter] = votes[i]
 						}
-						if len(c.Elections[0].Commits) == len(c.Elections[0].Participants) {
+						if len(c.elections[0].Commits) == len(c.elections[0].Participants) {
 							myReveals := []string{}
 							for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
-								myReveals = append(myReveals, c.Elections[i].MyNum)
+								myReveals = append(myReveals, c.elections[i].MyNum)
 							}
 							data, _ := json.Marshal(myReveals)
 							future.Async(func() {
-								c.chain <- abstract.ChainPacket{
+								c.chain <- chain.ChainPacket{
 									Type:    "election",
 									Key:     "choose-validator",
 									Meta:    map[string]any{"phase": "reveal", "voter": c.Ip},
@@ -313,18 +296,18 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 					if len(votes) < MAX_VALIDATOR_COUNT {
 						return
 					}
-					if c.Elections[0].Participants[voter] {
+					if c.elections[0].Participants[voter] {
 						for i := 0; i < min(MAX_VALIDATOR_COUNT, c.babbleInst.Peers.Len()); i++ {
-							c.Elections[i].Reveals[voter] = votes[i]
+							c.elections[i].Reveals[voter] = votes[i]
 						}
-						if len(c.Elections[0].Reveals) == len(c.Elections[0].Participants) {
-							c.Executors = map[string]bool{}
+						if len(c.elections[0].Reveals) == len(c.elections[0].Participants) {
+							c.executors = map[string]bool{}
 							nodesArr := []string{}
-							for p := range c.Elections[0].Participants {
+							for p := range c.elections[0].Participants {
 								nodesArr = append(nodesArr, p)
 							}
 							sort.Strings(nodesArr)
-							for _, elec := range c.Elections[0:min(MAX_VALIDATOR_COUNT, len(nodesArr))] {
+							for _, elec := range c.elections[0:min(MAX_VALIDATOR_COUNT, len(nodesArr))] {
 								res := -1
 								first := true
 								for v := range elec.Participants {
@@ -349,9 +332,9 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 								}
 								result := res % len(nodesArr)
 								candidate := nodesArr[result]
-								c.Executors[candidate] = true
+								c.executors[candidate] = true
 								nodesArr = append(nodesArr[:result], nodesArr[result+1:]...)
-								c.Elections = nil
+								c.elections = nil
 							}
 						}
 					}
@@ -378,15 +361,15 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 				return
 			}
 			execs := map[string]bool{}
-			for k, v := range c.Executors {
+			for k, v := range c.executors {
 				execs[k] = v
 			}
 			if requester == c.Ip {
 				c.chainCallbacks[requestId].Executors = execs
 			} else {
-				c.chainCallbacks[requestId] = &ChainCallback{Fn: nil, Executors: execs, Responses: map[string]string{}}
+				c.chainCallbacks[requestId] = &chain.ChainCallback{Fn: nil, Executors: execs, Responses: map[string]string{}}
 			}
-			if !c.Executors[c.Ip] {
+			if !c.executors[c.Ip] {
 				return
 			}
 			isBaseRaw, ok := packet.Meta["isBase"]
@@ -422,16 +405,12 @@ func (c *Core) OnChainPacket(packet abstract.ChainPacket) {
 				if !ok2 {
 					return
 				}
-				l := c.Get(int(layer))
-				if l == nil {
-					return
-				}
-				action := l.Actor().FetchAction(packet.Key)
+				action := c.actionStore[packet.Key]
 				if action == nil {
 					return
 				}
-				var input abstract.IInput
-				i, err2 := action.(*moduleactormodel.SecureAction).ParseInput("fed", string(packet.Payload))
+				var input models.IInput
+				i, err2 := action.(action.ISecureAction).ParseInput("fed", string(packet.Payload))
 				if err2 != nil {
 					log.Println(err2)
 					c.ExecBaseResponseOnChain(requestId, abstract.EmptyPayload{}, 400, "input parsing error", []abstract.Update{}, []abstract.CacheUpdate{})
@@ -601,10 +580,6 @@ func (c *Core) Load(gods []string, layers []abstract.ILayer, args []interface{})
 	}
 
 	c.babbleInst = engine
-}
-
-func (c *Core) Utils() abstract.IUtils {
-	return c.utils
 }
 
 func (c *Core) DoElection() {

@@ -1,29 +1,34 @@
 package model
 
 import (
-	"gorm.io/datatypes"
+	"kasper/src/abstract/models"
 )
 
 type User struct {
-	Id        string         `json:"id" gorm:"primaryKey;column:id"`
-	Number    int            `json:"number" gorm:"uniqueIndex;autoIncrement;column:number"`
-	Typ       string         `json:"typ" gorm:"column:type"`
-	Username  string         `json:"username" gorm:"column:username"`
-	Name      string         `json:"name" gorm:"column:name"`
-	Avatar    string         `json:"avatar" gorm:"column:avatar"`
-	PublicKey string         `json:"publicKey" gorm:"column:public_key"`
-	Metadata  datatypes.JSON `json:"-" gorm:"column:metadata"`
+	Id        string `json:"id"`
+	Typ       string `json:"type"`
+	Username  string `json:"username"`
+	PublicKey string `json:"publicKey"`
 }
 
 func (d User) Type() string {
 	return "User"
 }
 
-type PublicUser struct {
-	Id        string `json:"id" gorm:"column:id"`
-	Type      string `json:"type" gorm:"column:type"`
-	Username  string `json:"username" gorm:"column:username"`
-	Name      string `json:"name" gorm:"column:name"`
-	Avatar    string `json:"avatar" gorm:"column:avatar"`
-	PublicKey string `json:"publicKey" gorm:"column:public_key"`
+func (d User) Push(trx models.ITrx) {
+	trx.PutObj(d.Type(), d.Id, map[string][]byte{
+		"type":      []byte(d.Typ),
+		"username":  []byte(d.Username),
+		"publicKey": []byte(d.PublicKey),
+	})
+}
+
+func (d User) Pull(trx models.ITrx) User {
+	m := trx.GetObj(d.Type(), d.Id)
+	if len(m) > 0 {
+		d.Typ = string(m["type"])
+		d.Username = string(m["username"])
+		d.PublicKey = string(m["publicKey"])
+	}
+	return d
 }

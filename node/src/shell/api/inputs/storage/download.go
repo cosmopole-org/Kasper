@@ -10,16 +10,8 @@ func (d DownloadInput) GetData() any {
 	return "dummy"
 }
 
-func (d DownloadInput) GetSpaceId() string {
+func (d DownloadInput) GetPointId() string {
 	return d.SpaceId
-}
-
-func (d DownloadInput) GetTopicId() string {
-	return d.TopicId
-}
-
-func (d DownloadInput) GetMemberId() string {
-	return ""
 }
 
 func (d DownloadInput) Origin() string {

@@ -51,6 +51,6 @@ func (l *Layer) Sb() abstract.IStateBuilder {
 }
 
 func (l *Layer) InitSb(bottom abstract.IStateBuilder) abstract.IStateBuilder {
-	l.stateBuilder = modulestate.NewStateBuilder(l, bottom)
+	l.stateBuilder = modulestate.NewStateBuilder(l, bottom, l.toolbox.(*toolbox.ToolboxL1).Storage())
 	return l.stateBuilder
 }
