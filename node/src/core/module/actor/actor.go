@@ -1,24 +1,24 @@
 package module_actor
 
 import (
-	"kasper/src/abstract/models"
+	"kasper/src/abstract/models/action"
 )
 
 type Actor struct {
-	actionMap map[string]models.IAction
+	actionMap map[string]action.IAction
 }
 
 func NewActor() *Actor {
-	return &Actor{actionMap: make(map[string]models.IAction)}
+	return &Actor{actionMap: make(map[string]action.IAction)}
 }
 
 func (a *Actor) InjectService(service interface{}) {
 }
 
-func (a *Actor) InjectAction(action models.IAction) {
+func (a *Actor) InjectAction(action action.IAction) {
 	a.actionMap[action.Key()] = action
 }
 
-func (a *Actor) FetchAction(key string) models.IAction {
+func (a *Actor) FetchAction(key string) action.IAction {
 	return a.actionMap[key]
 }

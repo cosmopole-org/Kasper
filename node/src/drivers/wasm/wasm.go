@@ -13,37 +13,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"kasper/src/abstract"
-	"kasper/src/bots/sampleBot/models"
-	"kasper/src/core/module/core/model/worker"
-	modulelogger "kasper/src/core/module/logger"
+	"kasper/src/abstract/adapters/docker"
+	"kasper/src/abstract/adapters/file"
+	"kasper/src/abstract/adapters/signaler"
+	"kasper/src/abstract/adapters/storage"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
+	"kasper/src/abstract/models/update"
+	"kasper/src/abstract/models/worker"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
-	"kasper/src/shell/layer1/adapters"
-	adapters_model "kasper/src/shell/layer1/adapters/model"
-	module_model "kasper/src/shell/layer1/model"
-	toolboxL1 "kasper/src/shell/layer1/module/toolbox"
-	"kasper/src/shell/layer2/tools/docker"
-	tool_file "kasper/src/shell/layer2/tools/file"
 	"log"
 	"strings"
 )
 
 type Wasm struct {
-	app         abstract.ICore
-	logger      *modulelogger.Logger
+	app         core.ICore
 	storageRoot string
-	storage     adapters.IStorage
-	docker      *docker.Docker
-	file        *tool_file.File
+	storage     storage.IStorage
+	docker      docker.IDocker
+	file        file.IFile
 }
 
 func (wm *Wasm) Assign(machineId string) {
-	toolbox := abstract.UseToolbox[toolboxL1.IToolboxL1](wm.app.Get(1).Tools())
-	toolbox.Signaler().ListenToSingle(&module_model.Listener{
+	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: machineId,
 		Signal: func(a any) {
 			machId := C.CString(machineId)
-			astPath := C.CString(toolbox.Storage().StorageRoot() + "/machines/" + machineId + "/module")
+			astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 			data := string(a.([]byte))
 			dataParts := strings.Split(data, " ")
 			if dataParts[1] == "topics/send" {
@@ -56,14 +52,13 @@ func (wm *Wasm) Assign(machineId string) {
 }
 
 func (wm *Wasm) ExecuteChainTrxsGroup(trxs []*worker.Trx) {
-	toolbox := abstract.UseToolbox[toolboxL1.IToolboxL1](wm.app.Get(1).Tools())
 	b, e := json.Marshal(trxs)
 	if e != nil {
 		log.Println(e)
 		return
 	}
 	input := C.CString(string(b))
-	astStorePath := C.CString(toolbox.Storage().StorageRoot() + "/machines")
+	astStorePath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines")
 	C.wasmRunTrxs(astStorePath, input)
 }
 
@@ -102,19 +97,19 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		spaceId, err := checkField(input, "spaceId", "")
+		pointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
-		topicId, err := checkField(input, "topicId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
-		member := models.Member{}
-		err = wm.storage.Db().Where("user_id = ?", machineId).Where("space_id = ?", spaceId).Where("topic_ids = ?", topicId).First(&member).Error
-		if err != nil {
+		found := false
+		wm.app.ModifyState(true, func(trx trx.ITrx) {
+			if trx.GetLink("member::" + pointId + "::" + machineId) == "true" {
+				found = true
+			}
+		})
+		if !found {
+			err := errors.New("access denied")
 			log.Println(err)
 			return err.Error()
 		}
@@ -131,12 +126,12 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		finalInputFiles := map[string]string{}
 		for k, v := range inputFiles {
-			if !wm.file.CheckFileFromStorage(wm.storageRoot, topicId, k) {
+			if !wm.file.CheckFileFromStorage(wm.storageRoot, pointId, k) {
 				err := errors.New("input file does not exist")
 				log.Println(err)
 				return err.Error()
 			}
-			path := fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, topicId, k)
+			path := fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, pointId, k)
 			finalInputFiles[path] = v
 		}
 		imageName, err := checkField(input, "imageName", "")
@@ -144,7 +139,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		outputFile, err := wm.docker.RunContainer(machineId, topicId, imageName, finalInputFiles)
+		outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, finalInputFiles)
 		if err != nil {
 			log.Println(err)
 			return err.Error()
@@ -190,7 +185,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), int(resCode), e, []abstract.Update{{Data: "kvstore: " + changes}}, []abstract.CacheUpdate{})
+		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), "#appletsign", int(resCode), e, []update.Update{{Val: []byte("applet: " + changes)}})
 	} else if key == "submitOnchainTrx" {
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
@@ -207,12 +202,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		spaceId, err := checkField(input, "spaceId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
-		topicId, err := checkField(input, "topicId", "")
+		pointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
@@ -234,8 +224,8 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		var data []byte
 		if isFile {
-			if wm.file.CheckFileFromStorage(wm.storageRoot, topicId, pack) {
-				b, err := wm.file.ReadFileFromStorage(wm.storageRoot, topicId, pack)
+			if wm.file.CheckFileFromStorage(wm.storageRoot, pointId, pack) {
+				b, err := wm.file.ReadFileFromStorage(wm.storageRoot, pointId, pack)
 				if err != nil {
 					log.Println(err)
 					return err.Error()
@@ -249,19 +239,13 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		result := []byte("{}")
 		outputCnan := make(chan int)
 		if isBase {
-			var packetData any
 			if k == "/storage/uploadData" {
-				packetData = inputs_storage.UploadDataInput{
+				data, _ = json.Marshal(inputs_storage.UploadDataInput{
 					Data:    base64.StdEncoding.EncodeToString(data),
-					SpaceId: spaceId,
-					TopicId: topicId,
-				}
-			} else {
-				temp := map[string]any{}
-				json.Unmarshal(data, &temp)
-				packetData = temp
+					SpaceId: pointId,
+				})
 			}
-			wm.app.ExecBaseRequestOnChain(k, packetData, 1, machineId, func(b []byte, i int, err error) {
+			wm.app.ExecBaseRequestOnChain(k, data, "#appletsign", machineId, func(b []byte, i int, err error) {
 				if err != nil {
 					log.Println(err)
 					return
@@ -270,7 +254,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 				outputCnan <- 1
 			})
 		} else {
-			wm.app.ExecAppletRequestOnChain(topicId, targetMachineId, k, data, machineId, func(b []byte, i int, err error) {
+			wm.app.ExecAppletRequestOnChain(pointId, targetMachineId, k, data, "#appletsign", machineId, func(b []byte, i int, err error) {
 				if err != nil {
 					log.Println(err)
 					return
@@ -297,11 +281,9 @@ func checkField[T any](input map[string]any, fieldName string, defVal T) (T, err
 	return f, nil
 }
 
-func NewWasm(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, kvDbPath string, docker *docker.Docker, file *tool_file.File) *Wasm {
-	storage.AutoMigrate(&adapters_model.DataUnit{})
+func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDbPath string, docker docker.IDocker, file file.IFile) *Wasm {
 	wm := &Wasm{
 		app:         core,
-		logger:      logger,
 		storageRoot: storageRoot,
 		storage:     storage,
 		docker:      docker,

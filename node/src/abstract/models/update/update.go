@@ -1,5 +1,7 @@
 package update
 
 type Update struct {
-	Data string `json:"data"`
+	Typ string `json:"type"`
+	Key string `json:"key"`
+	Val []byte `json:"val"`
 }

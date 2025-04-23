@@ -1,17 +1,18 @@
 package net_http
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"kasper/src/abstract"
+	iaction "kasper/src/abstract/models/action"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/input"
 	modulelogger "kasper/src/core/module/logger"
 	modulemodel "kasper/src/shell/layer1/model"
-	"kasper/src/shell/layer2/tools/wasm/model"
 	"kasper/src/shell/utils/future"
 	realip "kasper/src/shell/utils/ip"
 
-	// "log"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -19,21 +20,23 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+
+	"kasper/src/drivers/wasm/model"
 )
 
 type HttpServer struct {
-	app     abstract.ICore
+	app     core.ICore
 	shadows map[string]bool
-	Server  *fiber.App
+	server  *fiber.App
 	logger  *modulelogger.Logger
-	Port    int
+	port    int
 }
 
 type EmptySuccessResponse struct {
 	Success bool `json:"success"`
 }
 
-func ParseInput[T abstract.IInput](c *fiber.Ctx) (T, error) {
+func ParseInput[T input.IInput](c *fiber.Ctx) (T, []byte, string, error) {
 	data := new(T)
 	form, err := c.MultipartForm()
 	if err == nil {
@@ -46,84 +49,78 @@ func ParseInput[T abstract.IInput](c *fiber.Ctx) (T, error) {
 		}
 		err := mapstructure.Decode(formData, data)
 		if err != nil {
-			return *data, err
+			return *data, []byte{}, "", err
 		}
 	} else {
 		if c.Method() == "GET" {
 			err := c.QueryParser(data)
 			if err != nil {
-				return *data, err
+				return *data, []byte{}, "", err
 			}
-			return *data, nil
+			return *data, []byte{}, "", nil
 		}
-		err := c.BodyParser(data)
-		if err != nil {
-			return *data, err
+		b := c.BodyRaw()
+		signatureLength := int32(binary.BigEndian.Uint32(b[:4]))
+		signature := b[4:signatureLength]
+		body := b[4+signatureLength:]
+		err2 := json.Unmarshal(body, data)
+		if err2 != nil {
+			return *data, []byte{}, "", errors.New("json input parsing error")
 		}
+		return *data, body, string(signature), err
 	}
-	return *data, nil
+	return *data, []byte{}, "", nil
 }
 
-func parseGlobally(c *fiber.Ctx) (abstract.IInput, error) {
+func parseGlobally(c *fiber.Ctx) (input.IInput, []byte, string, error) {
 	if c.Method() == "GET" {
 		params, err := json.Marshal(c.AllParams())
 		if err != nil {
-			return nil, err
+			return nil, []byte{}, "", err
 		}
-		return model.WasmInput{Data: string(params)}, nil
+		return model.WasmInput{Data: string(params)}, []byte{}, "", nil
 	}
-	return model.WasmInput{Data: string(c.BodyRaw())}, nil
+	b := c.BodyRaw()
+	signatureLength := int32(binary.BigEndian.Uint32(b[:4]))
+	signature := b[4:signatureLength]
+	body := b[4+signatureLength:]
+	return model.WasmInput{Data: string(body)}, body, string(signature), nil
 }
 
 func (hs *HttpServer) handleRequest(c *fiber.Ctx) error {
-	var token = ""
-	tokenHeader := c.GetReqHeaders()["Token"]
-	if tokenHeader != nil {
-		token = tokenHeader[0]
+	var userId = ""
+	userIdHeader := c.GetReqHeaders()["UserId"]
+	if userIdHeader != nil {
+		userId = userIdHeader[0]
 	}
 	var requestId = ""
 	requestIdHeader := c.GetReqHeaders()["RequestId"]
 	if requestIdHeader != nil {
 		requestId = requestIdHeader[0]
 	}
-	var layerNum = 0
-	layerNumHeader := c.GetReqHeaders()["Layer"]
-	if layerNumHeader == nil {
-		layerNum = 1
-	} else {
-		ln, err := strconv.ParseInt(layerNumHeader[0], 10, 32)
-		if err != nil {
-			hs.logger.Println(err)
-			return c.Status(fiber.StatusBadRequest).JSON(modulemodel.BuildErrorJson("layer number not specified"))
-		}
-		layerNum = int(ln)
-	}
-	layer := hs.app.Get(layerNum)
-	action := layer.Actor().FetchAction(c.Path())
+	action := hs.app.Actor().FetchAction(c.Path())
 	if action == nil {
 		return c.Status(fiber.StatusNotFound).JSON(modulemodel.BuildErrorJson("action not found"))
 	}
-	var input abstract.IInput
-	if action.(*moduleactormodel.SecureAction).HasGlobalParser() {
+	var input input.IInput
+	var bodyData []byte
+	var signature string
+	if action.(iaction.ISecureAction).HasGlobalParser() {
 		var err1 error
-		input, err1 = parseGlobally(c)
+		input, bodyData, signature, err1 = parseGlobally(c)
 		if err1 != nil {
 			hs.logger.Println(err1)
 			return c.Status(fiber.StatusBadRequest).JSON(modulemodel.BuildErrorJson(err1.Error()))
 		}
 	} else {
-		i, err2 := action.(*moduleactormodel.SecureAction).ParseInput("http", c)
-		if err2 != nil {
-			hs.logger.Println(err2)
-			return c.Status(fiber.StatusBadRequest).JSON(err2.Error())
+		var err1 error
+		input, bodyData, signature, err1 = action.(iaction.ISecureAction).ParseInput("ws", c)
+		if err1 != nil {
+			hs.logger.Println(err1)
+			return c.Status(fiber.StatusBadRequest).JSON(err1.Error())
 		}
-		input = i
 	}
-	// log.Println("input of request : ---------------------")
-	// log.Println(input)
-	// log.Println("----------------------------------------")
-	statusCode, result, err := action.(*moduleactormodel.SecureAction).SecurelyAct(layer, token, requestId, input, realip.FromRequest(c.Context()))
-	// log.Println(statusCode, result, err)
+	statusCode, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, requestId, bodyData, signature, input, realip.FromRequest(c.Context()))
 	if statusCode == 1 {
 		return handleResultOfFunc(c, result)
 	} else if err != nil {
@@ -137,30 +134,26 @@ func (hs *HttpServer) handleRequest(c *fiber.Ctx) error {
 }
 
 func (hs *HttpServer) Listen(port int) {
-	hs.Port = port
-	hs.Server.Use(cors.New(cors.Config{
+	hs.port = port
+	hs.server.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 	}))
-	hs.Server.Get("/", func(c *fiber.Ctx) error {
+	hs.server.Get("/", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).Send([]byte("hello world"))
 	})
-	hs.Server.Use(recover.New())
-	hs.Server.Get("/.well-known/acme-challenge/FcSacjLJlVPjUd9KyEeqGGjNPx87s1d5d_IWjGWA1iQ", func(c *fiber.Ctx) error {
-		c.Status(fiber.StatusOK).SendString("FcSacjLJlVPjUd9KyEeqGGjNPx87s1d5d_IWjGWA1iQ.STrdEMUitBXXsTS69K9R85ZIe4IQBqIGDBkgJdRB1hk")
-		return nil
-	})
-	hs.Server.Use(func(c *fiber.Ctx) error {
+	hs.server.Use(recover.New())
+	hs.server.Use(func(c *fiber.Ctx) error {
 		return hs.handleRequest(c)
 	})
 	hs.logger.Println("Listening to rest port ", port, "...")
 	future.Async(func() {
 		if port == 443 {
-			err := hs.Server.ListenTLS(fmt.Sprintf(":%d", port), "./cert.pem", "./cert.key")
+			err := hs.server.ListenTLS(fmt.Sprintf(":%d", port), "./cert.pem", "./cert.key")
 			if err != nil {
 				hs.logger.Println(err)
 			}
 		} else {
-			err := hs.Server.Listen(fmt.Sprintf(":%d", port))
+			err := hs.server.Listen(fmt.Sprintf(":%d", port))
 			if err != nil {
 				hs.logger.Println(err)
 			}
@@ -185,15 +178,23 @@ func (hs *HttpServer) AddShadow(key string) {
 	hs.shadows[key] = true
 }
 
-func New(core abstract.ICore, logger *modulelogger.Logger, maxReqSize int) *HttpServer {
+func (hs *HttpServer) Port() int {
+	return hs.port
+}
+
+func (hs *HttpServer) Server() *fiber.App {
+	return hs.server
+}
+
+func New(core core.ICore, logger *modulelogger.Logger, maxReqSize int) *HttpServer {
 	if maxReqSize > 0 {
-		return &HttpServer{app: core, logger: logger, shadows: map[string]bool{}, Server: fiber.New(fiber.Config{
+		return &HttpServer{app: core, logger: logger, shadows: map[string]bool{}, server: fiber.New(fiber.Config{
 			BodyLimit:    maxReqSize,
 			WriteTimeout: time.Duration(20) * time.Second,
 			ReadTimeout:  time.Duration(20) * time.Second,
 		})}
 	} else {
-		return &HttpServer{app: core, logger: logger, shadows: map[string]bool{}, Server: fiber.New(fiber.Config{
+		return &HttpServer{app: core, logger: logger, shadows: map[string]bool{}, server: fiber.New(fiber.Config{
 			WriteTimeout: time.Duration(20) * time.Second,
 			ReadTimeout:  time.Duration(20) * time.Second,
 		})}

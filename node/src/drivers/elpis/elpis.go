@@ -8,13 +8,10 @@ import "C"
 import (
 	"encoding/json"
 	"errors"
-	"kasper/src/abstract"
-	"kasper/src/core/module/core/model/worker"
-	modulelogger "kasper/src/core/module/logger"
-	"kasper/src/shell/layer1/adapters"
-	adapters_model "kasper/src/shell/layer1/adapters/model"
-	module_model "kasper/src/shell/layer1/model"
-	toolboxL1 "kasper/src/shell/layer1/module/toolbox"
+	"kasper/src/abstract/adapters/signaler"
+	"kasper/src/abstract/adapters/storage"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/worker"
 	"log"
 	"strings"
 
@@ -22,18 +19,16 @@ import (
 )
 
 type Elpis struct {
-	app         abstract.ICore
-	logger      *modulelogger.Logger
+	app         core.ICore
 	storageRoot string
-	storage     adapters.IStorage
+	storage     storage.IStorage
 }
 
 func (wm *Elpis) Assign(machineId string) {
-	toolbox := abstract.UseToolbox[toolboxL1.IToolboxL1](wm.app.Get(1).Tools())
-	toolbox.Signaler().ListenToSingle(&module_model.Listener{
+	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: machineId,
 		Signal: func(a any) {
-			astPath := C.CString(toolbox.Storage().StorageRoot() + "/machines/" + machineId + "/module")
+			astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 			data := string(a.([]byte))
 			dataParts := strings.Split(data, " ")
 			if dataParts[1] == "topics/send" {
@@ -99,11 +94,9 @@ func checkField[T any](input map[string]any, fieldName string, defVal T) (T, err
 	return f, nil
 }
 
-func NewElpis(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage) *Elpis {
-	storage.AutoMigrate(&adapters_model.DataUnit{})
+func NewElpis(core core.ICore, storageRoot string, storage storage.IStorage) *Elpis {
 	wm := &Elpis{
 		app:         core,
-		logger:      logger,
 		storageRoot: storageRoot,
 		storage:     storage,
 	}

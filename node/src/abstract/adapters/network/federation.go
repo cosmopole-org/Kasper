@@ -7,6 +7,6 @@ import (
 type IFederation interface {
 	SendInFederation(destOrg string, packet models.OriginPacket)
 	SendInFederationPacketByCallback(destOrg string, packet models.OriginPacket, callback func([]byte, int, error))
-	SendInFederationFileReqByCallback(destOrg string, packet models.OriginPacket, callback func(string, error))
-	SendInFederationFileResByCallback(destOrg string, packet models.OriginPacket)
+	SendInFederationFileReqByCallback(destOrg string, fileId string, packet models.OriginPacket, callback func(string, error))
+	SendInFederationFileResByCallback(destOrg string, packet models.OriginFileRes)
 }

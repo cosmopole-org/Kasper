@@ -10,15 +10,7 @@ func (d GetInput) GetData() any {
 	return "dummy"
 }
 
-func (d GetInput) GetSpaceId() string {
-	return ""
-}
-
-func (d GetInput) GetTopicId() string {
-	return ""
-}
-
-func (d GetInput) GetMemberId() string {
+func (d GetInput) GetPointId() string {
 	return ""
 }
 

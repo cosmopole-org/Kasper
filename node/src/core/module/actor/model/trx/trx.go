@@ -5,8 +5,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"kasper/src/abstract/adapters/storage"
-	"kasper/src/abstract/models"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
+	"kasper/src/abstract/models/update"
 	"log"
 
 	"github.com/dgraph-io/badger"
@@ -15,11 +16,11 @@ import (
 type TrxWrapper struct {
 	core    core.ICore
 	dbTrx   *badger.Txn
-	Changes []models.Update
+	Changes []update.Update
 }
 
-func NewTrx(core core.ICore, storage storage.IStorage, readonly bool) models.ITrx {
-	tw := &TrxWrapper{core: core, Changes: []models.Update{}}
+func NewTrx(core core.ICore, storage storage.IStorage, readonly bool) trx.ITrx {
+	tw := &TrxWrapper{core: core, Changes: []update.Update{}}
 	tw.dbTrx = storage.KvDb().NewTransaction(!readonly)
 	return tw
 }
@@ -192,6 +193,6 @@ func (tw *TrxWrapper) GetPubKey(key string) *rsa.PublicKey {
 	}
 }
 
-func (tw *TrxWrapper) Updates() []models.Update {
+func (tw *TrxWrapper) Updates() []update.Update {
 	return tw.Changes
 }

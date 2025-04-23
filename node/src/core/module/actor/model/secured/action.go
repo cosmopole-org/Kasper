@@ -1,4 +1,4 @@
-package l3
+package secured
 
 import (
 	"encoding/json"
@@ -7,8 +7,9 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/input"
 	"kasper/src/abstract/models/update"
-	"kasper/src/core/module/actor/model/l2"
+	"kasper/src/abstract/state"
 	modulelogger "kasper/src/core/module/logger"
+	inputs_storage "kasper/src/shell/api/inputs/storage"
 	modulemodel "kasper/src/shell/layer1/model"
 )
 
@@ -37,16 +38,17 @@ func (a *SecureAction) ParseInput(protocol string, raw interface{}) (input.IInpu
 func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, origin string) {
 	success, info := a.Guard.CheckValidity(a.core, packetBinary, packetSignature, userId, input.GetPointId())
 	if !success {
-		a.core.ExecBaseResponseOnChain(packetId, core.EmptyPayload{}, 403, "authorization failed", []update.Update{})
+		data := []byte("{}")
+		a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 403, "authorization failed", []update.Update{})
 	} else {
-		a.core.ModifyStateSecurly(false, info, func(s l2.State) {
-			updates := []update.Update{}
+		a.core.ModifyStateSecurly(false, info, func(s state.IState) {
 			sc, res, err := a.Act(s, input)
-			updates = s.Trx().Updates()
 			if err != nil {
-				a.core.ExecBaseResponseOnChain(packetId, core.EmptyPayload{}, 500, err.Error(), []update.Update{})
+				data := []byte("{}")
+				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 500, err.Error(), []update.Update{})
 			} else {
-				a.core.ExecBaseResponseOnChain(packetId, res, sc, "", updates)
+				data, _ := json.Marshal(res)
+				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), sc, "", s.Trx().Updates())
 			}
 		})
 	}
@@ -62,7 +64,7 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 		var res any
 		var sc int
 		var e error
-		a.core.ExecBaseRequestOnChain(a.Key(), userId, packetBinary, packetSignature, func(data []byte, resCode int, err error) {
+		a.core.ExecBaseRequestOnChain(a.Key(), packetBinary, packetSignature, userId, func(data []byte, resCode int, err error) {
 			result := map[string]any{}
 			json.Unmarshal(data, &result)
 			res = result
@@ -81,7 +83,7 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 			var sc int
 			var res any
 			var err error
-			a.core.ModifyStateSecurly(false, info, func(s l2.State) {
+			a.core.ModifyStateSecurly(false, info, func(s state.IState) {
 				sc, res, err = a.Act(s, input)
 			})
 			return sc, res, err
@@ -96,7 +98,12 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 	var resFed any
 	var errFed error
 	if a.Key() == "/storage/download" {
-		a.core.Tools().Network.Federation().SendInFederationFileReqByCallback(origin, modulemodel.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(path string, err error) {
+		inp := inputs_storage.DownloadInput{}
+		err := json.Unmarshal(packetBinary, &inp)
+		if err != nil {
+			return 0, nil, err			
+		}
+		a.core.Tools().Network().Federation().SendInFederationFileReqByCallback(origin, inp.FileId, modulemodel.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(path string, err error) {
 			if err != nil {
 				scFed = 0
 				resFed = map[string]any{}
@@ -109,7 +116,7 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 			cFed <- 1
 		})
 	} else {
-		a.core.Tools().Network.Federation().SendInFederationPacketByCallback(origin, modulemodel.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(data []byte, resCode int, err error) {
+		a.core.Tools().Network().Federation().SendInFederationPacketByCallback(origin, modulemodel.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(data []byte, resCode int, err error) {
 			result := map[string]any{}
 			json.Unmarshal(data, &result)
 			scFed = resCode
@@ -130,7 +137,7 @@ func (a *SecureAction) SecurelyActFed(userId string, packetBinary []byte, packet
 	var sc int
 	var res any
 	var err error
-	a.core.ModifyStateSecurly(false, info, func(s l2.State) {
+	a.core.ModifyStateSecurly(false, info, func(s state.IState) {
 		sc, res, err = a.Act(s, input)
 		if res != nil {
 			executable, ok := res.(func() (any, error))

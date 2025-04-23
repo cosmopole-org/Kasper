@@ -1,11 +1,9 @@
 package tool_storage
 
 import (
-	// "encoding/json"
-	"context"
 	"encoding/binary"
 	"fmt"
-	"kasper/src/abstract/models"
+	"kasper/src/abstract/models/core"
 	modulelogger "kasper/src/core/module/logger"
 	"log"
 	"os"
@@ -18,17 +16,12 @@ import (
 )
 
 type StorageManager struct {
-	core        models.ICore
+	core        core.ICore
 	logger      *modulelogger.Logger
 	storageRoot string
 	sqldb       *gorm.DB
 	kvdb        *badger.DB
 	lock        sync.Mutex
-}
-
-type TrxWrapper struct {
-	core    models.ICore
-	Changes []models.Update
 }
 
 func (sm *StorageManager) StorageRoot() string {
@@ -39,24 +32,6 @@ func (sm *StorageManager) SqlDb() *gorm.DB {
 }
 func (sm *StorageManager) KvDb() *badger.DB {
 	return sm.kvdb
-}
-
-type Recorder struct {
-	Updates []models.Update
-	Tw      *TrxWrapper
-}
-
-func (r Recorder) LogMode(logger.LogLevel) logger.Interface {
-	return r
-}
-func (r Recorder) Info(context.Context, string, ...interface{}) {
-
-}
-func (r Recorder) Warn(context.Context, string, ...interface{}) {
-
-}
-func (r Recorder) Error(context.Context, string, ...interface{}) {
-
 }
 
 func (sm *StorageManager) GenId(origin string) string {
@@ -101,12 +76,7 @@ func (sm *StorageManager) GenId(origin string) string {
 	}
 }
 
-func (r Recorder) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	sql, _ := fc()
-	r.Tw.Changes = append(r.Tw.Changes, models.Update{Data: sql})
-}
-
-func NewStorage(core models.ICore, logger2 *modulelogger.Logger, storageRoot string, dialector gorm.Dialector) *StorageManager {
+func NewStorage(core core.ICore, logger2 *modulelogger.Logger, storageRoot string, dialector gorm.Dialector) *StorageManager {
 	logger2.Println("connecting to database...")
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // tools writer

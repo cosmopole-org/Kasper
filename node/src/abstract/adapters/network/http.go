@@ -6,4 +6,5 @@ type IHttp interface {
 	Listen(int)
 	AddShadow(key string)
 	Server() *fiber.App
+	Port() int
 }

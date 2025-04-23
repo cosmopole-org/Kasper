@@ -4,61 +4,61 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"kasper/src/abstract"
-	moduleactormodel "kasper/src/core/module/actor/model"
+	"kasper/src/abstract/models/action"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
+	"kasper/src/abstract/state"
+	"kasper/src/core/module/actor/model/base"
+	mainstate "kasper/src/core/module/actor/model/state"
 	inputsusers "kasper/src/shell/api/inputs/users"
 	models "kasper/src/shell/api/model"
 	outputsusers "kasper/src/shell/api/outputs/users"
-	"kasper/src/shell/layer1/adapters"
-	modulestate "kasper/src/shell/layer1/module/state"
 
 	"github.com/mitchellh/mapstructure"
 )
 
 type Actions struct {
-	Layer abstract.ILayer
+	app core.ICore
 }
 
-func Install(s adapters.IStorage, a *Actions) error {
-	s.DoTrx(func(trx abstract.ITrx) error {
-		for _, godUsername := range a.Layer.Core().Gods() {
+func Install(a *Actions) error {
+	a.app.ModifyState(false, func(trx trx.ITrx) {
+		for _, godUsername := range a.app.Gods() {
 			var user = models.User{}
 			userId := ""
-			userStr := trx.GetIndex("User", godUsername+"@"+a.Layer.Core().Id(), "username", "id")
+			userStr := trx.GetIndex("User", godUsername+"@"+a.app.Id(), "username", "id")
 			if userStr == "" {
 				var (
 					user    models.User
 					session models.Session
 				)
-				user = models.User{Id: trx.GenId(a.Layer.Core().Id()), Typ: "human", PublicKey: "", Username: godUsername + "@" + a.Layer.Core().Id()}
-				trx.PutObj(user.Id, user)
-				session = models.Session{Id: trx.GenId(a.Layer.Core().Id()), UserId: user.Id}
-				trx.PutObj(session.Id, session)
+				user = models.User{Id: a.app.Tools().Storage().GenId(a.app.Id()), Typ: "human", PublicKey: "", Username: godUsername + "@" + a.app.Id()}
+				session = models.Session{Id: a.app.Tools().Storage().GenId(a.app.Id()), UserId: user.Id}
+				user.Push(trx)
+				session.Push(trx)
 				userId = user.Id
 			} else {
 				userId = user.Id
 			}
 			trx.PutLink("god::"+userId, "true")
 		}
-		return nil
 	})
 	return nil
 }
 
 // Authenticate /users/authenticate check [ true false false ] access [ true false false false POST ]
-func (a *Actions) Authenticate(s abstract.IState, _ inputsusers.AuthenticateInput) (any, error) {
-	state := abstract.UseState[modulestate.IStateL1](s)
-	_, res, _ := a.Layer.Actor().FetchAction("/users/get").Act(a.Layer.Sb().NewState(moduleactormodel.NewInfo("", "", "", ""), state.Trx()), inputsusers.GetInput{UserId: state.Info().UserId()})
+func (a *Actions) Authenticate(state state.IState, _ inputsusers.AuthenticateInput) (any, error) {
+	_, res, _ := a.app.Actor().FetchAction("/users/get").Act(mainstate.NewState(base.NewInfo("", ""), state.Trx()), inputsusers.GetInput{UserId: state.Info().UserId()})
 	return outputsusers.AuthenticateOutput{Authenticated: true, User: res.(outputsusers.GetOutput).User}, nil
 }
 
 // Login /users/register check [ false false false ] access [ true false false false POST ]
-func (a *Actions) Register(s abstract.IState, input inputsusers.LoginInput) (any, error) {
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) Register(state state.IState, input inputsusers.LoginInput) (any, error) {
 	trx := state.Trx()
-	if trx.HasIndex("User", input.Username+"@"+a.Layer.Core().Id(), "username", "id") {
+	if trx.HasIndex("User", input.Username+"@"+a.app.Id(), "username", "id") {
 		key, err := rsa.GenerateKey(rand.Reader, 4096)
 		if err != nil {
 			return nil, err
@@ -80,10 +80,13 @@ func (a *Actions) Register(s abstract.IState, input inputsusers.LoginInput) (any
 		pubKey = pubKey[len("-----BEGIN RSA PUBLIC KEY-----\n") : len(pubKey)-len("\n-----END RSA PUBLIC KEY-----\n")]
 		privKey := string(keyPEM)
 		privKey = privKey[len("-----BEGIN RSA PRIVATE KEY-----\n") : len(privKey)-len("\n-----END RSA PRIVATE KEY-----\n")]
-		_, res, err2 := a.Layer.Actor().FetchAction("/users/create").(abstract.ISecureAction).SecurelyAct(a.Layer.Core().Get(1), "", "", inputsusers.CreateInput{
+		req := inputsusers.CreateInput{
 			Username:  input.Username,
 			PublicKey: pubKey,
-		}, a.Layer.Core().Id())
+		}
+		bin, _ := json.Marshal(req)
+		sign := a.app.SignPacket(bin)
+		_, res, err2 := a.app.Actor().FetchAction("/users/create").(action.ISecureAction).SecurelyAct("", "", bin, sign, req, a.app.Id())
 		if err2 != nil {
 			return nil, err2
 		}
@@ -95,8 +98,7 @@ func (a *Actions) Register(s abstract.IState, input inputsusers.LoginInput) (any
 }
 
 // Create /users/create check [ false false false ] access [ true false false false POST ]
-func (a *Actions) Create(s abstract.IState, input inputsusers.CreateInput) (any, error) {
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any, error) {
 	var (
 		user    models.User
 		session models.Session
@@ -105,21 +107,19 @@ func (a *Actions) Create(s abstract.IState, input inputsusers.CreateInput) (any,
 	if trx.HasIndex("User", input.Username+"@"+state.Dummy(), "username", "id") {
 		return nil, errors.New("username already exists")
 	}
-	user = models.User{Id: trx.GenId(input.Origin()), Typ: "human", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy()}
-	trx.PutObj(user.Id, user)
-	session = models.Session{Id: trx.GenId(input.Origin()), UserId: user.Id}
-	trx.PutObj(session.Id, session)
+	user = models.User{Id: a.app.Tools().Storage().GenId(input.Origin()), Typ: "human", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy()}
+	session = models.Session{Id: a.app.Tools().Storage().GenId(input.Origin()), UserId: user.Id}
+	user.Push(trx)
+	session.Push(trx)
 	return outputsusers.CreateOutput{User: user, Session: session}, nil
 }
 
 // Get /users/get check [ false false false ] access [ true false false false GET ]
-func (a *Actions) Get(s abstract.IState, input inputsusers.GetInput) (any, error) {
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, error) {
 	trx := state.Trx()
-	// models.User{Id: input.UserId}.
-	// user, err := adapters.ParseObj[models.User](trx.GetBytes("obj::User::" + ))
-	if err != nil {
-		return nil, err
+	if !trx.HasObj("User", input.UserId) {
+		return nil, errors.New("user not found")
 	}
+	user := models.User{Id: input.UserId}.Pull(trx)
 	return outputsusers.GetOutput{User: user}, nil
 }

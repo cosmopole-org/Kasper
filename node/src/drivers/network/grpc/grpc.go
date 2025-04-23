@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"kasper/src/abstract"
+	iaction "kasper/src/abstract/models/action"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/input"
 	modulelogger "kasper/src/core/module/logger"
 	"kasper/src/shell/utils/future"
+	"log"
 	"net"
-	"strconv"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -20,18 +22,18 @@ import (
 )
 
 type GrpcServer struct {
-	app    abstract.ICore
+	app    core.ICore
 	Server *grpc.Server
 	logger *modulelogger.Logger
 }
 
-func ParseInput[T abstract.IInput](i interface{}) (abstract.IInput, error) {
+func ParseInput[T input.IInput](i interface{}) (input.IInput, []byte, string, error) {
 	body := new(T)
 	err := mapstructure.Decode(i, body)
 	if err != nil {
-		return nil, errors.New("invalid input format")
+		return nil, []byte{}, "", errors.New("invalid input format")
 	}
-	return *body, nil
+	return *body, []byte{}, "", nil
 }
 
 func (gs *GrpcServer) serverInterceptor(
@@ -54,40 +56,32 @@ func (gs *GrpcServer) serverInterceptor(
 	if !ok {
 		return nil, status.Errorf(codes.Unauthenticated, "Metadata not provided")
 	}
-	tokenHeader, ok := md["token"]
+	userIdHeader, ok := md["userId"]
 	if !ok {
 		return nil, status.Errorf(codes.Unauthenticated, "Authorization token is not supplied")
 	}
-	token := tokenHeader[0]
+	userId := userIdHeader[0]
 	reqIdHeader, ok := md["requestId"]
 	if !ok {
 		return nil, status.Errorf(codes.Unauthenticated, "RequestId is not supplied")
 	}
 	requestId := reqIdHeader[0]
-	layerHeader, ok := md["layer"]
-	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "layer is not supplied")
-	}
-	layerNumStr := layerHeader[0]
-	layerNum, err := strconv.Atoi(layerNumStr)
-	if err != nil {
-		gs.logger.Println(err)
-	}
-	layer := gs.app.Get(layerNum)
-	action := layer.Actor().FetchAction(key)
+	action := gs.app.Actor().FetchAction(key)
 	if action == nil {
 		return nil, status.Errorf(codes.NotFound, "action not found")
 	}
-	input, err := action.(*moduleactormodel.SecureAction).ParseInput("grpc", req)
+	input, _, _, err := action.(iaction.ISecureAction).ParseInput("grpc", req)
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, err.Error())
 	}
-	res, _, err := action.(*moduleactormodel.SecureAction).SecurelyAct(layer, token, requestId, input, "")
-	if err != nil {
-		return nil, status.Errorf(codes.Unauthenticated, err.Error())
-	} else {
-		return res, nil
-	}
+	log.Println(input, requestId, userId)
+	// res, _, err := action.(iaction.ISecureAction).SecurelyAct(userId, requestId, , input, "")
+	// if err != nil {
+		// return nil, status.Errorf(codes.Unauthenticated, err.Error())
+	// } else {
+	// 	return res, nil
+	// }
+	return nil, errors.New("not implemented")
 }
 
 func (gs *GrpcServer) Listen(port int) {
@@ -104,7 +98,7 @@ func (gs *GrpcServer) Listen(port int) {
 	}, false)
 }
 
-func New(core abstract.ICore, logger *modulelogger.Logger) *GrpcServer {
+func New(core core.ICore, logger *modulelogger.Logger) *GrpcServer {
 	gs := &GrpcServer{app: core, logger: logger}
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(gs.serverInterceptor),

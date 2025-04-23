@@ -2,40 +2,68 @@ package module_core
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kasper/src/abstract/adapters/docker"
+	"kasper/src/abstract/adapters/elpis"
+	"kasper/src/abstract/adapters/file"
+	"kasper/src/abstract/adapters/network"
+	"kasper/src/abstract/adapters/security"
+	"kasper/src/abstract/adapters/signaler"
+	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/adapters/tools"
-	"kasper/src/abstract/models"
+	"kasper/src/abstract/adapters/wasm"
 	"kasper/src/abstract/models/action"
+	iaction "kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/chain"
+	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/info"
+	"kasper/src/abstract/models/input"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/models/update"
+	"kasper/src/abstract/models/worker"
+	"kasper/src/abstract/state"
 	"kasper/src/babble"
-	"kasper/src/core/module/actor/model/l2"
+	mainstate "kasper/src/core/module/actor/model/state"
 	module_trx "kasper/src/core/module/actor/model/trx"
 	mach_model "kasper/src/shell/machiner/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
 	"log"
-	"math/rand"
 	"net"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
-	module_model "kasper/src/shell/layer2/model"
+	mathrand "math/rand"
+
+	cryp "crypto"
+	"crypto/rand"
 
 	"kasper/src/proxy/inmem"
 )
 
+type Tools struct {
+	Security security.ISecurity
+	Signaler signaler.ISignaler
+	Storage  storage.IStorage
+	Network  network.INetwork
+	File     file.IFile
+	Wasm     wasm.IWasm
+	Elpis    elpis.IElpis
+	Docker   docker.IDocker
+}
+
 type Core struct {
 	lock           sync.Mutex
 	id             string
-	tools          *tools.Tools
+	tools          tools.ITools
 	gods           []string
 	chain          chan any
 	chainCallbacks map[string]*chain.ChainCallback
@@ -47,7 +75,8 @@ type Core struct {
 	elecStartTime  int64
 	executors      map[string]bool
 	appPendingTrxs []*worker.Trx
-	actionStore    map[string]action.IAction
+	actionStore    action.IActor
+	privKey        *rsa.PrivateKey
 }
 
 var MAX_VALIDATOR_COUNT = 5
@@ -76,20 +105,24 @@ func NewCore(_ string) *Core {
 	}
 }
 
-func (c *Core) ModifyStateSecurly(readonly bool, info info.IInfo, fn func (l2.State)) {
-	trx := module_trx.NewTrx(c, c.Tools().Storage, readonly)
+func (c *Core) Actor() action.IActor {
+	return c.actionStore
+}
+
+func (c *Core) ModifyStateSecurly(readonly bool, info info.IInfo, fn func(state.IState)) {
+	trx := module_trx.NewTrx(c, c.Tools().Storage(), readonly)
 	defer trx.Commit()
-	s := l2.NewState(info, trx)
+	s := mainstate.NewState(info, trx)
 	fn(s)
 }
 
-func (c *Core) ModifyState(readonly bool, fn func (trx.ITrx)) {
-	trx := module_trx.NewTrx(c, c.Tools().Storage, readonly)
+func (c *Core) ModifyState(readonly bool, fn func(trx.ITrx)) {
+	trx := module_trx.NewTrx(c, c.Tools().Storage(), readonly)
 	defer trx.Commit()
 	fn(trx)
 }
 
-func (c *Core) Tools() *tools.Tools {
+func (c *Core) Tools() tools.ITools {
 	return c.tools
 }
 
@@ -120,10 +153,10 @@ func (c *Core) AppPendingTrxs() {
 		}
 	}
 	if len(elpisTrxs) > 0 {
-		c.Tools().Elpis.ExecuteChainTrxsGroup(elpisTrxs)
+		c.Tools().Elpis().ExecuteChainTrxsGroup(elpisTrxs)
 	}
 	if len(wasmTrxs) > 0 {
-		c.Tools().Wasm.ExecuteChainTrxsGroup(wasmTrxs)
+		c.Tools().Wasm().ExecuteChainTrxsGroup(wasmTrxs)
 	}
 	c.appPendingTrxs = []*worker.Trx{}
 }
@@ -132,57 +165,64 @@ func (c *Core) ClearAppPendingTrxs() {
 	c.appPendingTrxs = []*worker.Trx{}
 }
 
-func (c *Core) ExecAppletRequestOnChain(topicId string, machineId string, key string, packet []byte, userId string, callback func([]byte, int, error)) {
+func (c *Core) SignPacket(data []byte) string {
+	hashed := sha256.Sum256(data)
+	signature, err := rsa.SignPKCS1v15(rand.Reader, c.privKey, cryp.SHA256, hashed[:])
+	if err != nil {
+		panic(err)
+	}
+	return base64.StdEncoding.EncodeToString(signature)
+}
+
+func (c *Core) ExecAppletRequestOnChain(pointId string, machineId string, key string, payload []byte, signature string, userId string, callback func([]byte, int, error)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
 	c.chainCallbacks[callbackId] = &chain.ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
-	trx := c.ModifyState(true)
-	defer trx.Commit()
-	vm := mach_model.Vm{MachineId: machineId}.Pull(trx)
+	var runtimeType string
+	c.ModifyState(true, func(trx trx.ITrx) {
+		vm := mach_model.Vm{MachineId: machineId}.Pull(trx)
+		runtimeType = vm.Runtime
+	})
 	future.Async(func() {
-		c.chain <- chain.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": false, "runtime": vm.Runtime, "userId": userId, "machineId": machineId, "topicId": topicId}, Key: key, Payload: packet, Effects: models.Effects{DbUpdates: []models.Update{}}}
+		c.chain <- chain.ChainAppletRequest{Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload, Runtime: runtimeType}
 	}, false)
 }
 
-func (c *Core) ExecBaseRequestOnChain(key string, packet any, layer int, token string, callback func([]byte, int, error)) {
+func (c *Core) ExecAppletResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update) {
+	future.Async(func() {
+		c.chain <- chain.ChainResponse{Signature: signature, Executor: c.id, RequestId: callbackId, ResCode: resCode, Err: e, Payload: packet, Effects: chain.Effects{DbUpdates: updates}}
+	}, false)
+}
+
+func (c *Core) ExecBaseRequestOnChain(key string, payload []byte, signature string, userId string, callback func([]byte, int, error)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
 	c.chainCallbacks[callbackId] = &chain.ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
-	serialized, err := json.Marshal(packet)
-	if err == nil {
-		future.Async(func() {
-			c.chain <- chain.ChainPacket{Type: "request", Meta: map[string]any{"requester": c.Ip, "origin": c.id, "requestId": callbackId, "isBase": true, "layer": layer, "token": token}, Key: key, Payload: serialized, Effects: models.Effects{DbUpdates: []models.Update{}}}
-		}, false)
-	} else {
-		log.Println(err)
-	}
-}
-
-func (c *Core) ExecBaseResponseOnChain(callbackId string, packet any, resCode int, e string, updates []update.Update) {
-	serialized, err := json.Marshal(packet)
-	if err == nil {
-		future.Async(func() {
-			c.chain <- chain.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": true, "responseCode": resCode, "error": e}, Payload: serialized, Effects: chain.Effects{DbUpdates: updates}}
-		}, false)
-	} else {
-		log.Println(err)
-	}
-}
-
-func (c *Core) ExecAppletResponseOnChain(callbackId string, packet []byte, resCode int, e string, updates []update.Update) {
 	future.Async(func() {
-		c.chain <- chain.ChainPacket{Type: "response", Meta: map[string]any{"executor": c.Ip, "requestId": callbackId, "isBase": false, "responseCode": resCode, "error": e}, Payload: packet, Effects: chain.Effects{DbUpdates: updates}}
+		c.chain <- chain.ChainBaseRequest{Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload}
 	}, false)
 }
 
-func (c *Core) OnChainPacket(packet chain.ChainPacket) {
+func (c *Core) ExecBaseResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update) {
+	future.Async(func() {
+		c.chain <- chain.ChainResponse{Signature: signature, Executor: c.id, RequestId: callbackId, ResCode: resCode, Err: e, Payload: packet, Effects: chain.Effects{DbUpdates: updates}}
+	}, false)
+}
+
+func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	switch packet.Type {
+	switch typ {
 	case "election":
 		{
+			packet := chain.ChainElectionPacket{}
+			err := json.Unmarshal(trxPayload, &packet)
+			if err != nil {
+				log.Println(err)
+				return
+			}
 			if packet.Key == "choose-validator" {
 				phaseRaw, ok := packet.Meta["phase"]
 				if !ok {
@@ -211,7 +251,7 @@ func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 						c.elections = append(c.elections, chain.Election{Participants: map[string]bool{}, Commits: map[string][]byte{}, Reveals: map[string]string{}})
 					}
 					future.Async(func() {
-						c.chain <- chain.ChainPacket{
+						c.chain <- chain.ChainElectionPacket{
 							Type:    "election",
 							Key:     "choose-validator",
 							Meta:    map[string]any{"phase": "register", "voter": c.Ip},
@@ -221,7 +261,7 @@ func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 					if voter == c.Ip {
 						future.Async(func() {
 							time.Sleep(time.Duration(10) * time.Second)
-							c.chain <- chain.ChainPacket{
+							c.chain <- chain.ChainElectionPacket{
 								Type:    "election",
 								Key:     "choose-validator",
 								Meta:    map[string]any{"phase": "end-reg", "voter": c.Ip},
@@ -236,7 +276,7 @@ func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 						nodeCount := c.babbleInst.Peers.Len()
 						hasher := sha256.New()
 						for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
-							r := fmt.Sprintf("%d", rand.Intn(nodeCount))
+							r := fmt.Sprintf("%d", mathrand.Intn(nodeCount))
 							c.elections[i].MyNum = r
 							hasher.Write([]byte(r))
 							bs := hasher.Sum(nil)
@@ -244,7 +284,7 @@ func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 						}
 						data, _ := json.Marshal(payload)
 						future.Async(func() {
-							c.chain <- chain.ChainPacket{
+							c.chain <- chain.ChainElectionPacket{
 								Type:    "election",
 								Key:     "choose-validator",
 								Meta:    map[string]any{"phase": "commit", "voter": c.Ip},
@@ -278,7 +318,7 @@ func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 							}
 							data, _ := json.Marshal(myReveals)
 							future.Async(func() {
-								c.chain <- chain.ChainPacket{
+								c.chain <- chain.ChainElectionPacket{
 									Type:    "election",
 									Key:     "choose-validator",
 									Meta:    map[string]any{"phase": "reveal", "voter": c.Ip},
@@ -342,136 +382,87 @@ func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 			}
 			break
 		}
-	case "request":
+	case "baseRequest":
 		{
-			requesterRaw, ok := packet.Meta["requester"]
-			if !ok {
-				return
-			}
-			requester, ok2 := requesterRaw.(string)
-			if !ok2 {
-				return
-			}
-			requestIdRaw, ok := packet.Meta["requestId"]
-			if !ok {
-				return
-			}
-			requestId, ok2 := requestIdRaw.(string)
-			if !ok2 {
+			packet := chain.ChainBaseRequest{}
+			err := json.Unmarshal(trxPayload, &packet)
+			if err != nil {
+				log.Println(err)
 				return
 			}
 			execs := map[string]bool{}
 			for k, v := range c.executors {
 				execs[k] = v
 			}
-			if requester == c.Ip {
-				c.chainCallbacks[requestId].Executors = execs
+			if packet.Submitter == c.id {
+				c.chainCallbacks[packet.RequestId].Executors = execs
 			} else {
-				c.chainCallbacks[requestId] = &chain.ChainCallback{Fn: nil, Executors: execs, Responses: map[string]string{}}
+				c.chainCallbacks[packet.RequestId] = &chain.ChainCallback{Fn: nil, Executors: execs, Responses: map[string]string{}}
 			}
 			if !c.executors[c.Ip] {
 				return
 			}
-			isBaseRaw, ok := packet.Meta["isBase"]
-			if !ok {
+			userId := ""
+			if strings.HasPrefix(packet.Author, "user::") {
+				userId = packet.Author[len("user::"):]
+			}
+			action := c.actionStore.FetchAction(packet.Key)
+			if action == nil {
 				return
 			}
-			isBase, ok2 := isBaseRaw.(bool)
-			if !ok2 {
+			var input input.IInput
+			i, bodyData, signature, err2 := action.(iaction.ISecureAction).ParseInput("fed", string(packet.Payload))
+			if err2 != nil {
+				log.Println(err2)
+				c.ExecBaseResponseOnChain(packet.RequestId, packet.Payload, packet.Signatures[1], 400, "input parsing error", []update.Update{})
 				return
 			}
-			if isBase {
-				layerRaw, ok := packet.Meta["layer"]
-				if !ok {
-					return
-				}
-				layer, ok2 := layerRaw.(float64)
-				if !ok2 {
-					return
-				}
-				originRaw, ok := packet.Meta["origin"]
-				if !ok {
-					return
-				}
-				origin, ok2 := originRaw.(string)
-				if !ok2 {
-					return
-				}
-				tokenRaw, ok := packet.Meta["token"]
-				if !ok {
-					return
-				}
-				token, ok2 := tokenRaw.(string)
-				if !ok2 {
-					return
-				}
-				action := c.actionStore[packet.Key]
-				if action == nil {
-					return
-				}
-				var input models.IInput
-				i, err2 := action.(action.ISecureAction).ParseInput("fed", string(packet.Payload))
-				if err2 != nil {
-					log.Println(err2)
-					c.ExecBaseResponseOnChain(requestId, abstract.EmptyPayload{}, 400, "input parsing error", []abstract.Update{}, []abstract.CacheUpdate{})
-					return
-				}
-				input = i
-				action.(abstract.ISecureAction).SecurlyActChain(l, token, requestId, input, origin)
+			input = i
+			action.(iaction.ISecureAction).SecurlyActChain(userId, packet.RequestId, bodyData, signature, input, packet.Submitter)
+			break
+		}
+	case "appRequest":
+		{
+			packet := chain.ChainAppletRequest{}
+			err := json.Unmarshal(trxPayload, &packet)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			execs := map[string]bool{}
+			for k, v := range c.executors {
+				execs[k] = v
+			}
+			if packet.Submitter == c.id {
+				c.chainCallbacks[packet.RequestId].Executors = execs
 			} else {
-				userIdRaw, ok := packet.Meta["userId"]
-				if !ok {
-					return
-				}
-				userId, ok2 := userIdRaw.(string)
-				if !ok2 {
-					return
-				}
-				machineIdRaw, ok := packet.Meta["machineId"]
-				if !ok {
-					return
-				}
-				machineId, ok2 := machineIdRaw.(string)
-				if !ok2 {
-					return
-				}
-				runtimeRaw, ok := packet.Meta["runtime"]
-				if !ok {
-					return
-				}
-				runtimeId, ok2 := runtimeRaw.(string)
-				if !ok2 {
-					return
-				}
-				c.appPendingTrxs = append(c.appPendingTrxs, &worker.Trx{CallbackId: requestId, Runtime: runtimeId, UserId: userId, MachineId: machineId, Key: packet.Key, Payload: string(packet.Payload)})
+				c.chainCallbacks[packet.RequestId] = &chain.ChainCallback{Fn: nil, Executors: execs, Responses: map[string]string{}}
 			}
+			if !c.executors[c.Ip] {
+				return
+			}
+			userId := ""
+			if strings.HasPrefix(packet.Author, "user::") {
+				userId = packet.Author[len("user::"):]
+			}
+			c.appPendingTrxs = append(c.appPendingTrxs, &worker.Trx{CallbackId: packet.RequestId, Runtime: packet.Runtime, UserId: userId, MachineId: packet.MachineId, Key: packet.Key, Payload: string(packet.Payload)})
 			break
 		}
 	case "response":
 		{
-			execitorAddrRaw, ok := packet.Meta["executor"]
-			if !ok {
+			packet := chain.ChainResponse{}
+			err := json.Unmarshal(trxPayload, &packet)
+			if err != nil {
+				log.Println(err)
 				return
 			}
-			execitorAddr, ok2 := execitorAddrRaw.(string)
-			if !ok2 {
-				return
-			}
-			callbackIdRaw, ok := packet.Meta["requestId"]
-			if !ok {
-				return
-			}
-			callbackId, ok2 := callbackIdRaw.(string)
-			if !ok2 {
-				return
-			}
-			callback, ok3 := c.chainCallbacks[callbackId]
+			callback, ok3 := c.chainCallbacks[packet.RequestId]
 			if ok3 {
-				if !callback.Executors[execitorAddr] {
+				if !callback.Executors[packet.Executor] {
 					return
 				}
-				str, _ := json.Marshal(ResponseHolder{Payload: packet.Payload, Effects: packet.Effects})
-				callback.Responses[execitorAddr] = string(str)
+				str, _ := json.Marshal(core.ResponseHolder{Payload: packet.Payload, Effects: packet.Effects})
+				callback.Responses[packet.Executor] = string(str)
 				if len(callback.Responses) < len(callback.Executors) {
 					return
 				}
@@ -488,48 +479,27 @@ func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 					return
 				}
 				if !callback.Executors[c.Ip] {
-					tb := abstract.UseToolbox[*module_model.ToolboxL2](c.Get(2).Tools())
-					kvstoreKeyword := "kvstore: "
-					tb.Storage().DoTrx(func(trx adapters.ITrx) error {
+					kvstoreKeyword := "applet: "
+					c.ModifyState(false, func(trx trx.ITrx) {
 						for _, ef := range packet.Effects.DbUpdates {
-							if (len(ef.Data) > len(kvstoreKeyword)) && (ef.Data[0:len(kvstoreKeyword)] == kvstoreKeyword) {
-								tb.Wasm().ExecuteChainEffects(ef.Data[0:len(kvstoreKeyword)])
+							if (len(ef.Val) > len(kvstoreKeyword)) && (string(ef.Val[0:len(kvstoreKeyword)]) == kvstoreKeyword) {
+								c.tools.Wasm().ExecuteChainEffects(string(ef.Val[len(kvstoreKeyword):]))
 							} else {
-								trx.Db().Exec(ef.Data)
+								if ef.Typ == "put" {
+									trx.PutBytes(ef.Key, ef.Val)
+								} else if ef.Typ == "del" {
+									trx.DelKey(ef.Key)
+								}
 							}
 						}
-						return nil
 					})
-					for _, ef := range packet.Effects.CacheUpdates {
-						if ef.Typ == "put" {
-							tb.Cache().Put(ef.Key, ef.Val)
-						} else if ef.Typ == "del" {
-							tb.Cache().Del(ef.Key)
-						}
-					}
 				}
-				delete(c.chainCallbacks, callbackId)
+				delete(c.chainCallbacks, packet.RequestId)
 				if callback.Fn != nil {
-					resCodeRaw, ok := packet.Meta["responseCode"]
-					if !ok {
-						return
-					}
-					resCode, ok2 := resCodeRaw.(float64)
-					if !ok2 {
-						return
-					}
-					errCodeRaw, ok3 := packet.Meta["error"]
-					if !ok3 {
-						return
-					}
-					errCode, ok4 := errCodeRaw.(string)
-					if !ok4 {
-						return
-					}
-					if errCode == "" {
-						callback.Fn(packet.Payload, int(resCode), nil)
+					if packet.Err == "" {
+						callback.Fn(packet.Payload, packet.ResCode, nil)
 					} else {
-						callback.Fn(packet.Payload, int(resCode), errors.New(errCode))
+						callback.Fn(packet.Payload, packet.ResCode, errors.New(packet.Err))
 					}
 				}
 			}
@@ -538,46 +508,56 @@ func (c *Core) OnChainPacket(packet chain.ChainPacket) {
 	}
 }
 
-func (c *Core) NewHgHandler() *abstract.HgHandler {
-	return &abstract.HgHandler{
+func (c *Core) NewHgHandler() *core.HgHandler {
+	return &core.HgHandler{
 		Sigma: c,
 	}
 }
 
-func (c *Core) Load(gods []string, layers []abstract.ILayer, args []interface{}) {
+func (c *Core) Load(gods []string, args map[string]interface{}) {
 	c.gods = gods
-	c.layers = layers
-	var output = args
-	for i := len(layers) - 1; i >= 0; i-- {
-		output = layers[i].BackFill(c, output...)
-	}
 
-	engine := output[0].(*babble.Babble)
-	proxy := output[1].(*inmem.InmemProxy)
+	engine := args["babbleEngine"].(*babble.Babble)
+	proxy := args["babbleProxy"].(*inmem.InmemProxy)
 
 	c.chain = make(chan any, 1)
 	future.Async(func() {
 		for {
 			op := <-c.chain
-			serialized, err := json.Marshal(op)
-			if err == nil {
-				log.Println(string(serialized))
-				proxy.SubmitTx(serialized)
-			} else {
-				log.Println(err)
+			typ := ""
+			switch op.(type) {
+			case chain.ChainBaseRequest:
+				{
+					typ = "baseRequest"
+					break
+				}
+			case chain.ChainResponse:
+				{
+					typ = "response"
+					break
+				}
+			case chain.ChainAppletRequest:
+				{
+					typ = "appRequest"
+					break
+				}
+			case chain.ChainElectionPacket:
+				{
+					typ = "election"
+					break
+				}
+			}
+			if typ != "" {
+				serialized, err := json.Marshal(op)
+				if err == nil {
+					log.Println(string(serialized))
+					proxy.SubmitTx([]byte(typ + "::" + string(serialized)))
+				} else {
+					log.Println(err)
+				}
 			}
 		}
 	}, true)
-
-	var sb abstract.IStateBuilder
-	for i := 0; i < len(layers); i++ {
-		sb = layers[i].InitSb(sb)
-		if i > 0 {
-			layers[i].ForFill(c, layers[i-1].Tools())
-		} else {
-			layers[i].ForFill(c)
-		}
-	}
 
 	c.babbleInst = engine
 }
@@ -585,9 +565,9 @@ func (c *Core) Load(gods []string, layers []abstract.ILayer, args []interface{})
 func (c *Core) DoElection() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.ElecReg = true
+	c.elecReg = true
 	future.Async(func() {
-		c.chain <- abstract.ChainPacket{
+		c.chain <- chain.ChainElectionPacket{
 			Type:    "election",
 			Key:     "choose-validator",
 			Meta:    map[string]any{"phase": "start-reg", "voter": c.Ip},

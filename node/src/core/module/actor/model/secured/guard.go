@@ -1,8 +1,8 @@
-package l3
+package secured
 
 import (
 	"kasper/src/abstract/models/core"
-	model "kasper/src/core/module/actor/model/l1"
+	model "kasper/src/core/module/actor/model/base"
 )
 
 type Guard struct {
@@ -15,14 +15,14 @@ func (g *Guard) CheckValidity(app core.ICore, packet []byte, signature string, u
 	if !g.IsUser {
 		return true, model.NewInfo("", "")
 	}
-	identified, _, isGod := app.Tools().Security.AuthWithSignature(userId, packet, signature)
+	identified, _, isGod := app.Tools().Security().AuthWithSignature(userId, packet, signature)
 	if !identified {
 		return false, &model.Info{}
 	}
 	if !g.IsInSpace {
 		return true, model.NewGodInfo(userId, "", isGod)
 	}
-    hasAccess := app.Tools().Security.HasAccessToPoint(userId, pointId)
+	hasAccess := app.Tools().Security().HasAccessToPoint(userId, pointId)
 	if hasAccess {
 		return false, &model.Info{}
 	}
@@ -33,9 +33,6 @@ func (g *Guard) CheckIdentity(app core.ICore, packet []byte, signature string, u
 	if !g.IsUser {
 		return true
 	}
-	identified, _, _ := app.Tools().Security.AuthWithSignature(userId, packet, signature)
-	if !identified {
-		return false
-	}
-	return true
+	identified, _, _ := app.Tools().Security().AuthWithSignature(userId, packet, signature)
+	return identified
 }

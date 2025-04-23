@@ -104,7 +104,7 @@ func (p *Signaler) SignalUser(key string, respondToId string, listenerId string,
 			}
 			message = string(msg)
 		}
-		p.Federation.SendInFederation(origin, models.OriginPacket{IsResponse: false, Key: updatePrefix + key, UserId: listenerId, Data: message})
+		p.Federation.SendInFederation(origin, models.OriginPacket{IsResponse: false, Key: updatePrefix + key, UserId: listenerId, Binary: []byte(message), Signature: ""})
 	}
 }
 
@@ -183,7 +183,7 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 			message = string(msg)
 		}
 		for k, v := range foreignersMap {
-			p.Federation.SendInFederation(k, models.OriginPacket{IsResponse: false, Key: groupUpdatePrefix + key, SpaceId: groupId, Exceptions: v, Data: message})
+			p.Federation.SendInFederation(k, models.OriginPacket{IsResponse: false, Key: groupUpdatePrefix + key, PointId: groupId, Exceptions: v, Binary: []byte(message), Signature: ""})
 		}
 	}
 }

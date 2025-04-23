@@ -12,7 +12,8 @@ import (
 	"kasper/src/abstract/adapters/security"
 	"kasper/src/abstract/adapters/signaler"
 	"kasper/src/abstract/adapters/storage"
-	absmodels "kasper/src/abstract/models"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
 	cryp "kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/vaidate"
 	"log"
@@ -20,7 +21,7 @@ import (
 )
 
 type Security struct {
-	app         absmodels.ICore
+	app         core.ICore
 	storage     storage.IStorage
 	signaler    signaler.ISignaler
 	storageRoot string
@@ -43,8 +44,6 @@ type Location struct {
 	PointId  string
 }
 
-const memberTemplate = "member::%s::%s::%s"
-const cityTemplate = "city::%s"
 const keysFolderName = "keys"
 
 func (sm *Security) LoadKeys() {
@@ -115,8 +114,8 @@ func (sm *Security) Decrypt(tag string, cipherText string) string {
 
 func (sm *Security) AuthWithSignature(userId string, packet []byte, signatureBase64 string) (bool, string, bool) {
 	var publicKey *rsa.PublicKey
-	sm.app.ModifyState(true, func(trx absmodels.ITrx) {
-		trx.GetPubKey(userId)
+	sm.app.ModifyState(true, func(trx trx.ITrx) {
+		publicKey = trx.GetPubKey(userId)
 	})
 	if publicKey == nil {
 		return false, "", false
@@ -133,7 +132,7 @@ func (sm *Security) AuthWithSignature(userId string, packet []byte, signatureBas
 	} else {
 		var userType = ""
 		var isGod = false
-		sm.app.ModifyState(true, func(trx absmodels.ITrx) {
+		sm.app.ModifyState(true, func(trx trx.ITrx) {
 			userType = string(trx.GetColumn("User", userId, "type"))
 			isGod = (trx.GetString("god::"+userId) == "true")
 		})
@@ -146,7 +145,7 @@ func (sm *Security) HasAccessToPoint(userId string, pointId string) bool {
 		return false
 	}
 	found := false
-	sm.app.ModifyState(true, func(trx absmodels.ITrx) {
+	sm.app.ModifyState(true, func(trx trx.ITrx) {
 		if trx.GetLink("member::" + userId + "::" + pointId) == "true" {
 			found = true
 		}

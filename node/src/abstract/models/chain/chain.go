@@ -2,12 +2,41 @@ package chain
 
 import "kasper/src/abstract/models/update"
 
-type ChainPacket struct {
+type ChainBaseRequest struct {
+	Key        string
+	Author     string
+	Submitter  string
+	Payload    []byte
+	Signatures []string
+	RequestId  string
+}
+
+type ChainResponse struct {
+	Executor  string
+	Payload   []byte
+	Signature string
+	RequestId string
+	Effects   Effects
+	ResCode   int
+	Err       string
+}
+
+type ChainAppletRequest struct {
+	MachineId  string
+	Key        string
+	Author     string
+	Submitter  string
+	Payload    []byte
+	Signatures []string
+	RequestId  string
+	Runtime    string
+}
+
+type ChainElectionPacket struct {
 	Type    string
-	Meta    map[string]any
 	Key     string
+	Meta    map[string]any
 	Payload []byte
-	Effects Effects
 }
 
 type Election struct {
@@ -24,5 +53,5 @@ type ChainCallback struct {
 }
 
 type Effects struct {
-	DbUpdates    []update.Update      `json:"dbUpdates"`
+	DbUpdates []update.Update `json:"dbUpdates"`
 }

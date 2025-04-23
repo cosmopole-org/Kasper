@@ -2,14 +2,12 @@ package docker
 
 import (
 	"errors"
-	"kasper/src/abstract"
-	module_actor_model "kasper/src/core/module/actor/model"
+	"kasper/src/abstract/adapters/file"
+	"kasper/src/abstract/adapters/storage"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
 	modulelogger "kasper/src/core/module/logger"
 	models "kasper/src/shell/api/model"
-	"kasper/src/shell/layer1/adapters"
-	"kasper/src/shell/layer1/module/state"
-	module_trx "kasper/src/shell/layer1/module/trx"
-	tool_file "kasper/src/shell/layer2/tools/file"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
 
@@ -30,12 +28,10 @@ import (
 )
 
 type Docker struct {
-	app         abstract.ICore
-	logger      *modulelogger.Logger
+	app         core.ICore
 	storageRoot string
-	storage     adapters.IStorage
-	cache       adapters.ICache
-	file        *tool_file.File
+	storage     storage.IStorage
+	file        file.IFile
 	client      *client.Client
 }
 
@@ -93,7 +89,7 @@ func WriteToTar(inputFiles map[string]string) string {
 	return tarId
 }
 
-func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, topicId string) (*models.File, error) {
+func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, pointId string) (*models.File, error) {
 	header, err := tr.Next()
 
 	switch {
@@ -104,14 +100,14 @@ func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, topicId string) 
 	}
 
 	if header.Typeflag == tar.TypeReg {
-		var file = &models.File{Id: wm.storage.GenId(wm.app.Id()), OwnerId: machineId, TopicId: topicId}
-		if err := wm.file.SaveTarFileItemToStorage(wm.storageRoot, tr, topicId, file.Id); err != nil {
+		var file = &models.File{Id: wm.storage.GenId(wm.app.Id()), OwnerId: machineId, PointId: pointId}
+		if err := wm.file.SaveTarFileItemToStorage(wm.storageRoot, tr, pointId, file.Id); err != nil {
 			log.Println(err)
 			return nil, err
 		}
-		trx := module_trx.NewTrx(wm.app, wm.storage, false)
-		defer trx.Commit()
-		file.Push(trx)
+		wm.app.ModifyState(false, func(trx trx.ITrx) {
+			file.Push(trx)
+		})
 		return file, nil
 	}
 	err2 := errors.New("not a file")
@@ -119,7 +115,7 @@ func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, topicId string) 
 	return nil, err2
 }
 
-func (wm *Docker) RunContainer(machineId string, topicId string, imageName string, inputFile map[string]string) (*models.File, error) {
+func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, inputFile map[string]string) (*models.File, error) {
 	ctx := context.Background()
 
 	config := &container.Config{
@@ -206,7 +202,7 @@ func (wm *Docker) RunContainer(machineId string, topicId string, imageName strin
 	}
 	defer reader.Close()
 	r := tar.NewReader(reader)
-	file, err := wm.readFromTar(r, machineId, topicId)
+	file, err := wm.readFromTar(r, machineId, pointId)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -274,17 +270,15 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 	return nil
 }
 
-func NewDocker(core abstract.ICore, logger *modulelogger.Logger, storageRoot string, storage adapters.IStorage, cache adapters.ICache, file *tool_file.File) *Docker {
+func NewDocker(core core.ICore, logger *modulelogger.Logger, storageRoot string, storage storage.IStorage, file file.IFile) *Docker {
 	client, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		log.Println("Unable to create docker client: ", err.Error())
 	}
 	wm := &Docker{
 		app:         core,
-		logger:      logger,
 		storageRoot: storageRoot,
 		storage:     storage,
-		cache:       cache,
 		file:        file,
 		client:      client,
 	}

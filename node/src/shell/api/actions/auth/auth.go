@@ -1,32 +1,30 @@
 package actions_auth
 
 import (
-	"kasper/src/abstract"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/state"
 	inputsauth "kasper/src/shell/api/inputs/auth"
 	outputsauth "kasper/src/shell/api/outputs/auth"
-	"kasper/src/shell/layer1/adapters"
-	tb "kasper/src/shell/layer1/module/toolbox"
 	"strings"
 )
 
 type Actions struct {
-	Layer abstract.ILayer
+	app core.ICore
 }
 
-func Install(s adapters.IStorage, a *Actions) error {
+func Install(a *Actions) error {
 	return nil
 }
 
 // GetServerPublicKey /auths/getServerPublicKey check [ false false false ] access [ true false false false GET ]
-func (a *Actions) GetServerPublicKey(_ abstract.IState, _ inputsauth.GetServerKeyInput) (any, error) {
-	toolbox := abstract.UseToolbox[*tb.ToolboxL1](a.Layer.Tools())
-	return &outputsauth.GetServerKeyOutput{PublicKey: string(toolbox.Security().FetchKeyPair("server_key")[1])}, nil
+func (a *Actions) GetServerPublicKey(_ state.IState, _ inputsauth.GetServerKeyInput) (any, error) {
+	return &outputsauth.GetServerKeyOutput{PublicKey: string(a.app.Tools().Security().FetchKeyPair("server_key")[1])}, nil
 }
 
 // GetServersMap /auths/getServersMap check [ false false false ] access [ true false false false GET ]
-func (a *Actions) GetServersMap(_ abstract.IState, _ inputsauth.GetServersMapInput) (any, error) {
+func (a *Actions) GetServersMap(_ state.IState, _ inputsauth.GetServersMapInput) (any, error) {
 	m := []string{}
-	for _, peer := range a.Layer.Core().Chain().Peers.Peers {
+	for _, peer := range a.app.Chain().Peers.Peers {
 		arr := strings.Split(peer.NetAddr, ":")
 		m = append(m, strings.Join(arr[0:len(arr)-1], ":"))
 	}

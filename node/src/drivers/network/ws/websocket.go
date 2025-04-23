@@ -115,7 +115,7 @@ func connectListener(ws *WsServer, sig signaler.ISignaler, uid string, conn *web
 	return lis, q
 }
 
-func (ws *WsServer) Load(actionFinder func(string) action.ISecureAction, httpServer network.IHttp, security security.ISecurity, sig signaler.ISignaler, storage storage.IStorage) {
+func (ws *WsServer) Load(actor action.IActor, httpServer network.IHttp, security security.ISecurity, sig signaler.ISignaler, storage storage.IStorage) {
 	httpServer.Server().Get("/ws", websocket.New(func(conn *websocket.Conn) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -246,8 +246,8 @@ func (ws *WsServer) Load(actionFinder func(string) action.ISecureAction, httpSer
 	}, cfg))
 }
 
-func New(actionFinder func(string) action.ISecureAction, httpServer network.IHttp, security security.ISecurity, signaler signaler.ISignaler, storage storage.IStorage) *WsServer {
+func New(actor action.IActor, httpServer network.IHttp, security security.ISecurity, signaler signaler.ISignaler, storage storage.IStorage) *WsServer {
 	ws := &WsServer{}
-	ws.Load(actionFinder, httpServer, security, signaler, storage)
+	ws.Load(actor, httpServer, security, signaler, storage)
 	return ws
 }

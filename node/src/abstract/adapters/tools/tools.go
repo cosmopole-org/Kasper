@@ -11,13 +11,13 @@ import (
 	"kasper/src/abstract/adapters/wasm"
 )
 
-type Tools struct {
-	Security security.ISecurity
-	Signaler signaler.ISignaler
-	Storage  storage.IStorage
-	Network  network.INetwork
-	File     file.IFile
-	Wasm     wasm.IWasm
-	Elpis    elpis.IElpis
-	Docker   docker.IDocker
+type ITools interface {
+	Security() security.ISecurity
+	Signaler() signaler.ISignaler
+	Storage()  storage.IStorage
+	Network()  network.INetwork
+	File()     file.IFile
+	Wasm()     wasm.IWasm
+	Elpis()    elpis.IElpis
+	Docker()   docker.IDocker
 }
