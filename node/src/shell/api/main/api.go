@@ -3,8 +3,8 @@
 
 		import (
 			"reflect"
-			"kasper/src/abstract"
-			module_logger "kasper/src/core/module/logger"
+			iaction "kasper/src/abstract/models/action"
+			"kasper/src/abstract/models/core"
 
 		
 			plugger_auth "kasper/src/shell/api/pluggers/auth"
@@ -33,7 +33,7 @@
 				f := s.Method(i)
 				if f.Name != "Install" {
 					result := f.Func.Call([]reflect.Value{reflect.ValueOf(plugger)})
-					action := result[0].Interface().(abstract.IAction)
+					action := result[0].Interface().(iaction.IAction)
 					core.Actor().InjectAction(action)
 				}
 			}
@@ -43,32 +43,32 @@
 		
 				a_auth := &action_auth.Actions{App: core}
 				p_auth := plugger_auth.New(a_auth, core)
-				PlugThePlugger(p_auth)
+				PlugThePlugger(core, p_auth)
 				p_auth.Install(a_auth)
 			
 				a_dummy := &action_dummy.Actions{App: core}
 				p_dummy := plugger_dummy.New(a_dummy, core)
-				PlugThePlugger(p_dummy)
+				PlugThePlugger(core, p_dummy)
 				p_dummy.Install(a_dummy)
 			
 				a_invite := &action_invite.Actions{App: core}
 				p_invite := plugger_invite.New(a_invite, core)
-				PlugThePlugger(p_invite)
+				PlugThePlugger(core, p_invite)
 				p_invite.Install(a_invite)
 			
 				a_point := &action_point.Actions{App: core}
 				p_point := plugger_point.New(a_point, core)
-				PlugThePlugger(p_point)
+				PlugThePlugger(core, p_point)
 				p_point.Install(a_point)
 			
 				a_storage := &action_storage.Actions{App: core}
 				p_storage := plugger_storage.New(a_storage, core)
-				PlugThePlugger(p_storage)
+				PlugThePlugger(core, p_storage)
 				p_storage.Install(a_storage)
 			
 				a_user := &action_user.Actions{App: core}
 				p_user := plugger_user.New(a_user, core)
-				PlugThePlugger(p_user)
+				PlugThePlugger(core, p_user)
 				p_user.Install(a_user)
 			
 		}

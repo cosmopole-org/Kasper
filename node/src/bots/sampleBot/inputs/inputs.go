@@ -1,7 +1,5 @@
 package inputs
 
-import "kasper/src/bots/sampleBot/models"
-
 type HelloInput struct {
 	Name string `json:"name"`
 }
@@ -14,18 +12,4 @@ type ByeInput struct{}
 
 type ByeOutput struct {
 	Message string `json:"message"`
-}
-
-// game
-
-type CreateGameInput struct {
-	Players []models.Player `json:"players"`
-}
-
-type SpecifyHokmInput struct {
-	Hokm string `json:"hokm"`
-}
-
-type PlayGameInput struct {
-	Action string `json:"action"`
 }

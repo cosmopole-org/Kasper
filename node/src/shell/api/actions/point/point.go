@@ -171,21 +171,32 @@ func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, 
 	return outputs_points.JoinOutput{}, nil
 }
 
-// Send /points/signal check [ true true true ] access [ true false false false POST ]
-func (a *Actions) Signal(state state.IState, input inputs_points.SendInput) (any, error) {
+// Signal /points/signal check [ true true true ] access [ true false false false POST ]
+func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (any, error) {
 	trx := state.Trx()
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
 	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	if input.Type == "broadcast" {
 		var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data}
+		if point.PersHist {
+			a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data)
+		}
 		a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
-		return outputs_points.SendOutput{Passed: true}, nil
+		return outputs_points.SignalOutput{Passed: true}, nil
 	} else if input.Type == "single" {
-		if trx.GetLink("member::" + point.Id + "::" + input.UserId) == "true" {
+		if trx.GetLink("member::"+point.Id+"::"+input.UserId) == "true" {
 			var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data}
+			if point.PersHist {
+				a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data)
+			}
 			a.App.Tools().Signaler().SignalUser("points/signal", "", input.UserId, p, true)
-			return outputs_points.SendOutput{Passed: true}, nil
+			return outputs_points.SignalOutput{Passed: true}, nil
 		}
 	}
-	return outputs_points.SendOutput{Passed: false}, nil
+	return outputs_points.SignalOutput{Passed: false}, nil
+}
+
+// History /points/history check [ true true true ] access [ true false false false POST ]
+func (a *Actions) History(state state.IState, input inputs_points.HistoryInput) (any, error) {
+	return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().ReadPointLogs(state.Info().PointId())}, nil
 }

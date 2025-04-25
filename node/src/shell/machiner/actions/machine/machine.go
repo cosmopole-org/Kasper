@@ -16,7 +16,7 @@ import (
 const pluginsTemplateName = "/machines/"
 
 type Actions struct {
-	app core.ICore
+	App core.ICore
 }
 
 func Install(a *Actions) error {
@@ -30,8 +30,8 @@ func (a *Actions) Create(state state.IState, input inputs_machiner.CreateInput) 
 		session models.Session
 	)
 	trx := state.Trx()
-	user = models.User{Id: a.app.Tools().Storage().GenId(input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy()}
-	session = models.Session{Id: a.app.Tools().Storage().GenId(input.Origin()), UserId: user.Id}
+	user = models.User{Id: a.App.Tools().Storage().GenId(input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy()}
+	session = models.Session{Id: a.App.Tools().Storage().GenId(input.Origin()), UserId: user.Id}
 	vm := model.Vm{MachineId: user.Id, OwnerId: state.Info().UserId()}
 	user.Push(trx)
 	session.Push(trx)
@@ -65,27 +65,27 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 		if !ok2 {
 			return nil, errors.New("image name is not string")
 		}
-		dockerfileFolderPath := a.app.Tools().Storage().StorageRoot() + pluginsTemplateName + vm.MachineId + "/" + in
-		err2 := a.app.Tools().File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
+		dockerfileFolderPath := a.App.Tools().Storage().StorageRoot() + pluginsTemplateName + vm.MachineId + "/" + in
+		err2 := a.App.Tools().File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
 		if err2 != nil {
 			return nil, err2
 		}
-		err3 := a.app.Tools().Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", vm.MachineId, in)
+		err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", vm.MachineId, in)
 		if err3 != nil {
 			log.Println(err3)
 			return nil, err3
 		}
 	} else {
-		err2 := a.app.Tools().File().SaveDataToGlobalStorage(a.app.Tools().Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/", data, "module", true)
+		err2 := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/", data, "module", true)
 		if err2 != nil {
 			return nil, err2
 		}
 		vm.Runtime = input.Runtime
 		vm.Push(trx)
 		if vm.Runtime == "wasm" {
-			a.app.Tools().Wasm().Assign(vm.MachineId)
+			a.App.Tools().Wasm().Assign(vm.MachineId)
 		} else if vm.Runtime == "elpis" {
-			a.app.Tools().Elpis().Assign(vm.MachineId)
+			a.App.Tools().Elpis().Assign(vm.MachineId)
 		}
 	}
 	return outputs_machiner.PlugInput{}, nil

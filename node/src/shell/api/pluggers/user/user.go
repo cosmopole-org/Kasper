@@ -2,33 +2,31 @@
 	package plugger_user
 
 	import (
-		"kasper/src/abstract"
+		"kasper/src/abstract/models/core"
 		"kasper/src/shell/utils"
-		module_logger "kasper/src/core/module/logger"
+	    iaction "kasper/src/abstract/models/action"
 		actions "kasper/src/shell/api/actions/user"
-		"kasper/src/shell/layer2/model"
 	)
 	
 	type Plugger struct {
 		Id      *string
 		Actions *actions.Actions
-		Logger *module_logger.Logger
 		Core core.ICore
 	}
 	
-		func (c *Plugger) Authenticate() abstract.IAction {
+		func (c *Plugger) Authenticate() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Authenticate)
 		}
 		
-		func (c *Plugger) Login() abstract.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.Login)
+		func (c *Plugger) Register() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Register)
 		}
 		
-		func (c *Plugger) Create() abstract.IAction {
+		func (c *Plugger) Create() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Create)
 		}
 		
-		func (c *Plugger) Get() abstract.IAction {
+		func (c *Plugger) Get() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Get)
 		}
 		

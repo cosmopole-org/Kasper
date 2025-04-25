@@ -1,5 +1,5 @@
 package outputs_points
 
-type SendOutput struct {
+type SignalOutput struct {
 	Passed bool `json:"passed"`
 }

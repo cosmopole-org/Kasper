@@ -55,7 +55,7 @@ func (a *Actions) Authenticate(state state.IState, _ inputsusers.AuthenticateInp
 	return outputsusers.AuthenticateOutput{Authenticated: true, User: res.(outputsusers.GetOutput).User}, nil
 }
 
-// Login /users/register check [ false false false ] access [ true false false false POST ]
+// Register /users/register check [ false false false ] access [ true false false false POST ]
 func (a *Actions) Register(state state.IState, input inputsusers.LoginInput) (any, error) {
 	trx := state.Trx()
 	if trx.HasIndex("User", input.Username+"@"+a.App.Id(), "username", "id") {

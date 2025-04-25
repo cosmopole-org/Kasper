@@ -1,20 +1,20 @@
 package inputs_points
 
-type SendInput struct {
+type SignalInput struct {
 	Type    string `json:"type" validate:"required"`
 	Data    string `json:"data" validate:"required"`
 	PointId string `json:"pointId" validate:"required"`
 	UserId  string `json:"userId"`
 }
 
-func (d SendInput) GetData() any {
+func (d SignalInput) GetData() any {
 	return "dummy"
 }
 
-func (d SendInput) GetPointId() string {
+func (d SignalInput) GetPointId() string {
 	return d.PointId
 }
 
-func (d SendInput) Origin() string {
+func (d SignalInput) Origin() string {
 	return ""
 }

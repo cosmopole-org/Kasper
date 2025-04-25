@@ -21,7 +21,7 @@ func main() {
 		import (
 			"reflect"
 			iaction "kasper/src/abstract/models/action"
-			module_logger "kasper/src/core/module/logger"
+			"kasper/src/abstract/models/core"
 
 		`
 		entries, err := os.ReadDir(actionsFolder)
@@ -59,7 +59,7 @@ func main() {
 			code += `
 				a_` + serviceName + ` := &action_` + serviceName + `.Actions{App: core}
 				p_` + serviceName + ` := plugger_` + serviceName + `.New(a_` + serviceName + `, core)
-				PlugThePlugger(p_` + serviceName + `)
+				PlugThePlugger(core, p_` + serviceName + `)
 				p_` + serviceName + `.Install(a_` + serviceName + `)
 			`
 		}

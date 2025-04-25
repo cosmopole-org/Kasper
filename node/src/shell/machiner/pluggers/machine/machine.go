@@ -1,11 +1,11 @@
 
-	package plugger_auth
+	package plugger_machine
 
 	import (
 		"kasper/src/abstract/models/core"
 		"kasper/src/shell/utils"
 	    iaction "kasper/src/abstract/models/action"
-		actions "kasper/src/shell/api/actions/auth"
+		actions "kasper/src/shell/machiner/actions/machine"
 	)
 	
 	type Plugger struct {
@@ -14,12 +14,12 @@
 		Core core.ICore
 	}
 	
-		func (c *Plugger) GetServerPublicKey() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.GetServerPublicKey)
+		func (c *Plugger) Create() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Create)
 		}
 		
-		func (c *Plugger) GetServersMap() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.GetServersMap)
+		func (c *Plugger) Deploy() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Deploy)
 		}
 		
 	func (c *Plugger) Install(a *actions.Actions) *Plugger {
@@ -31,7 +31,7 @@
 	}
 
 	func New(actions *actions.Actions, core core.ICore) *Plugger {
-		id := "auth"
+		id := "machine"
 		return &Plugger{Id: &id, Actions: actions, Core: core}
 	}
 	

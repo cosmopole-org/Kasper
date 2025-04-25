@@ -2,29 +2,27 @@
 	package plugger_dummy
 
 	import (
-		"kasper/src/abstract"
+		"kasper/src/abstract/models/core"
 		"kasper/src/shell/utils"
-		module_logger "kasper/src/core/module/logger"
+	    iaction "kasper/src/abstract/models/action"
 		actions "kasper/src/shell/api/actions/dummy"
-		"kasper/src/shell/layer2/model"
 	)
 	
 	type Plugger struct {
 		Id      *string
 		Actions *actions.Actions
-		Logger *module_logger.Logger
 		Core core.ICore
 	}
 	
-		func (c *Plugger) Hello() abstract.IAction {
+		func (c *Plugger) Hello() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Hello)
 		}
 		
-		func (c *Plugger) Time() abstract.IAction {
+		func (c *Plugger) Time() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Time)
 		}
 		
-		func (c *Plugger) Ping() abstract.IAction {
+		func (c *Plugger) Ping() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Ping)
 		}
 		

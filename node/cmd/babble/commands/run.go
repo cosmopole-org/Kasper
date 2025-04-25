@@ -2,7 +2,6 @@ package commands
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"os/exec"
 	"path/filepath"
@@ -10,12 +9,18 @@ import (
 	"strings"
 	"time"
 
+	"kasper/src/abstract/adapters/signaler"
+	"kasper/src/abstract/models/trx"
 	"kasper/src/bots/sampleBot"
-	models_hokmaent "kasper/src/bots/sampleBot/models"
+	actor_info "kasper/src/core/module/actor/model/base"
+	actor_state "kasper/src/core/module/actor/model/state"
 	module_logger "kasper/src/core/module/logger"
-	plugger_social "kasper/src/plugins/social/main"
 	kasper "kasper/src/shell"
+	inputs_points "kasper/src/shell/api/inputs/points"
 	inputs_users "kasper/src/shell/api/inputs/users"
+	plugger_api "kasper/src/shell/api/main"
+	outputs_users "kasper/src/shell/api/outputs/users"
+	plugger_machiner "kasper/src/shell/machiner/main"
 	"kasper/src/shell/utils/future"
 
 	"kasper/src/babble"
@@ -48,26 +53,6 @@ func NewRunCmd() *cobra.Command {
 /*******************************************************************************
 * RUN
 *******************************************************************************/
-
-func getEnvWithDefault(key, fallback string) string {
-	value := os.Getenv(key)
-	if len(value) == 0 {
-		return fallback
-	}
-	return value
-}
-
-func getDSN(ipAddress string) string {
-	tidbHost := getEnvWithDefault("TIDB_HOST", ipAddress)
-	tidbPort := getEnvWithDefault("TIDB_PORT", "4000")
-	tidbUser := getEnvWithDefault("TIDB_USER", "root")
-	tidbPassword := getEnvWithDefault("TIDB_PASSWORD", "")
-	tidbDBName := getEnvWithDefault("TIDB_DB_NAME", "test")
-	useSSL := getEnvWithDefault("USE_SSL", "false")
-
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&tls=%s",
-		tidbUser, tidbPassword, tidbHost, tidbPort, tidbDBName, useSSL)
-}
 
 var exit = make(chan int, 1)
 
@@ -127,10 +112,10 @@ func RunNet() error {
 	
 	portStr := os.Getenv("MAINPORT")
 	port, _ := strconv.ParseInt(portStr, 10, 64)
-	plugger_api.PlugAll(app.Get(1), logger, app)
-	plugger_machiner.PlugAll(app.Get(1), logger, app)
+	plugger_api.PlugAll(app)
+	plugger_machiner.PlugAll(app)
 
-	abstract.UseToolbox[*module_model3.ToolboxL3](app.Get(3).Tools()).Net().Run(
+	app.Tools().Network().Run(
 		map[string]int{
 			"http": int(port),
 		},
@@ -139,42 +124,34 @@ func RunNet() error {
 	time.Sleep(time.Duration(5) * time.Second)
 
 	var sampleBotUserId string
-	var sampleBotUserToken string
-	e2 := abstract.UseToolbox[module_model1.IToolboxL1](app.Get(2).Tools()).Storage().DoTrx(func(trx adapters.ITrx) error {
-		_, res, err := app.Get(1).Actor().FetchAction("/users/login").Act(app.Get(1).Sb().NewState(actor_model.NewInfo("", "", "", ""), trx), inputs_users.LoginInput{
+	app.ModifyState(false, func(trx trx.ITrx) {
+		_, res, err := app.Actor().FetchAction("/users/login").Act(actor_state.NewState(actor_info.NewInfo("", ""), trx), inputs_users.LoginInput{
 			Username: "sampleBot",
 		})
 		if err != nil {
 			log.Println(err)
-			return err
+			panic(err)
 		}
 		sampleBotUserId = res.(outputs_users.LoginOutput).User.Id
-		sampleBotUserToken = res.(outputs_users.LoginOutput).Session.Token
-		return nil
 	})
-	if e2 != nil {
-		panic(e2)
-	}
 	ha := &hokmagent.HokmAgent{}
-	ha.Install(app, sampleBotUserToken)
-	abstract.UseToolbox[*module_model1.ToolboxL1](app.Get(1).Tools()).Signaler().ListenToSingle(&module_model.Listener{
+	ha.Install(app, sampleBotUserId)
+	app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: sampleBotUserId,
 		Signal: func(a any) {
 			data := string(a.([]byte))
 			dataParts := strings.Split(data, " ")
 			if dataParts[1] == "topics/send" {
 				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
-				var inp models_hokmaent.Send
+				var inp inputs_points.SignalInput
 				e := json.Unmarshal([]byte(data), &inp)
 				if e != nil {
 					log.Println(e)
 				}
-				ha.OnTopicSend(inp)
+				ha.OnSignal(inp)
 			}
 		},
 	})
-
-	plugger_social.PlugAll(app.Get(2), logger, app)
 
 	<-exit
 

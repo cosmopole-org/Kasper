@@ -11,15 +11,7 @@ func (d DeployInput) GetData() any {
 	return "dummy"
 }
 
-func (d DeployInput) GetSpaceId() string {
-	return ""
-}
-
-func (d DeployInput) GetTopicId() string {
-	return ""
-}
-
-func (d DeployInput) GetMemberId() string {
+func (d DeployInput) GetPointId() string {
 	return ""
 }
 

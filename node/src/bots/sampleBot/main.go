@@ -3,41 +3,43 @@ package hokmagent
 import (
 	"encoding/json"
 	"fmt"
-	"kasper/src/abstract"
-	inputs_topics "kasper/src/shell/api/inputs/topics"
-	"kasper/src/bots/sampleBot/models"
-	"kasper/src/shell/layer1/adapters"
-	module_model "kasper/src/shell/layer2/model"
+	"kasper/src/abstract/models/action"
+	"kasper/src/abstract/models/core"
+	inputs_points "kasper/src/shell/api/inputs/points"
+	"kasper/src/shell/utils/crypto"
 )
 
 type HokmAgent struct {
-	Core  abstract.ICore
-	Store adapters.IStorage
-	Token string
+	Core  core.ICore
+	UserId string
 }
 
-func (h *HokmAgent) Install(c abstract.ICore, t string) {
-	h.Token = t
+func (h *HokmAgent) Install(c core.ICore, uid string) {
+	h.UserId = uid
 	h.Core = c
-	h.Store = abstract.UseToolbox[*module_model.ToolboxL2](c.Get(2).Tools()).Storage()
 }
 
-func (h *HokmAgent) OnTopicSend(input models.Send) any {
-
+func (h *HokmAgent) OnSignal(input inputs_points.SignalInput) any {
 	return map[string]any{}
 }
 
-func (h *HokmAgent) SendTopicPacket(typ string, spaceId string, topicId string, memberId string, recvId string, data any) {
-	innerData, err2 := json.Marshal(data)
-	if err2 != nil {
-		fmt.Println(err2)
+func (h *HokmAgent) SendTopicPacket(typ string, pointId string, userId string, data any) {
+	innerData, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println(err)
 		return
 	}
-	packet := inputs_topics.SendInput{Type: typ, SpaceId: spaceId, TopicId: topicId, MemberId: memberId, RecvId: recvId, Data: string(innerData)}
-	h.Core.Get(1).Actor().FetchAction("/topics/send").(abstract.ISecureAction).SecurelyAct(
-		h.Core.Get(1),
-		h.Token,
-		"",
+	packet := inputs_points.SignalInput{Type: typ, PointId: pointId, UserId: userId, Data: string(innerData)}
+	packetBinary, err := json.Marshal(packet)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	h.Core.Actor().FetchAction("/points/signal").(action.ISecureAction).SecurelyAct(
+		h.UserId,
+		crypto.SecureUniqueString(),
+		packetBinary,
+		"#botsign",
 		packet,
 		"",
 	)

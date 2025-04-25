@@ -2,33 +2,31 @@
 	package plugger_invite
 
 	import (
-		"kasper/src/abstract"
+		"kasper/src/abstract/models/core"
 		"kasper/src/shell/utils"
-		module_logger "kasper/src/core/module/logger"
+	    iaction "kasper/src/abstract/models/action"
 		actions "kasper/src/shell/api/actions/invite"
-		"kasper/src/shell/layer2/model"
 	)
 	
 	type Plugger struct {
 		Id      *string
 		Actions *actions.Actions
-		Logger *module_logger.Logger
 		Core core.ICore
 	}
 	
-		func (c *Plugger) Create() abstract.IAction {
+		func (c *Plugger) Create() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Create)
 		}
 		
-		func (c *Plugger) Cancel() abstract.IAction {
+		func (c *Plugger) Cancel() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Cancel)
 		}
 		
-		func (c *Plugger) Accept() abstract.IAction {
+		func (c *Plugger) Accept() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Accept)
 		}
 		
-		func (c *Plugger) Decline() abstract.IAction {
+		func (c *Plugger) Decline() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Decline)
 		}
 		

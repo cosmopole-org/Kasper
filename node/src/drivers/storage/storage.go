@@ -1,37 +1,66 @@
 package tool_storage
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"kasper/src/abstract/models/core"
-	modulelogger "kasper/src/core/module/logger"
+	"kasper/src/abstract/models/packet"
 	"log"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/dgraph-io/badger"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+
+	gocql "github.com/gocql/gocql"
 )
 
 type StorageManager struct {
 	core        core.ICore
-	logger      *modulelogger.Logger
 	storageRoot string
-	sqldb       *gorm.DB
 	kvdb        *badger.DB
+	tsdb        *gocql.Session
 	lock        sync.Mutex
 }
 
 func (sm *StorageManager) StorageRoot() string {
 	return sm.storageRoot
 }
-func (sm *StorageManager) SqlDb() *gorm.DB {
-	return sm.sqldb
-}
 func (sm *StorageManager) KvDb() *badger.DB {
 	return sm.kvdb
+}
+
+func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string) {
+	sm.lock.Lock()
+	defer sm.lock.Unlock()
+	ctx := context.Background()
+	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data) VALUES (?, ?, ?)`,
+		gocql.TimeUUID(), pointId, userId, data).WithContext(ctx).Exec(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (sm *StorageManager) ReadPointLogs(pointId string) []packet.LogPacket {
+	sm.lock.Lock()
+	defer sm.lock.Unlock()
+	ctx := context.Background()
+	scanner := sm.tsdb.Query(`SELECT id, user_id, data FROM storage WHERE point_id = ?`, pointId).WithContext(ctx).Iter().Scanner()
+	var err error
+	logs := []packet.LogPacket{}
+	for scanner.Next() {
+		var id gocql.UUID
+		var userId string
+		var data string
+			err = scanner.Scan(&id, &userId, &data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data})
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return logs
 }
 
 func (sm *StorageManager) GenId(origin string) string {
@@ -76,27 +105,18 @@ func (sm *StorageManager) GenId(origin string) string {
 	}
 }
 
-func NewStorage(core core.ICore, logger2 *modulelogger.Logger, storageRoot string, dialector gorm.Dialector) *StorageManager {
-	logger2.Println("connecting to database...")
-	newLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags), // tools writer
-		logger.Config{
-			SlowThreshold:             time.Second, // Slow SQL threshold
-			LogLevel:                  logger.Info, // Log level
-			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
-			ParameterizedQueries:      true,        // Don't include params in the SQL log
-			Colorful:                  false,       // Disable color
-		},
-	)
-	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: newLogger.LogMode(logger.Silent),
-	})
-	if err != nil {
-		panic("failed to connect database")
-	}
+func NewStorage(core core.ICore, storageRoot string) *StorageManager {
+	log.Println("connecting to database...")
 	kvdb, err := badger.Open(badger.DefaultOptions(os.Getenv("BASE_DB_PATH")).WithSyncWrites(true))
 	if err != nil {
 		panic(err)
 	}
-	return &StorageManager{core: core, sqldb: db, kvdb: kvdb, storageRoot: storageRoot, logger: logger2}
+	cluster := gocql.NewCluster("localhost:9042")
+	cluster.Keyspace = "example"
+	cluster.Consistency = gocql.Quorum
+	session, err := cluster.CreateSession()
+	if err != nil {
+		panic(err)
+	}
+	return &StorageManager{core: core, tsdb: session, kvdb: kvdb, storageRoot: storageRoot}
 }
