@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/input"
@@ -9,8 +10,6 @@ import (
 	"kasper/src/core/module/actor/model/secured"
 	"kasper/src/shell/utils/vaidate"
 	"strings"
-
-	"github.com/gofiber/fiber/v2"
 )
 
 func ExtractAction[T input.IInput](app core.ICore, actionFunc func(state.IState, T) (any, error)) action.IAction {
@@ -26,46 +25,14 @@ func ExtractSecureAction[T input.IInput](app core.ICore, actionFunc func(state.I
 	action := mainaction.NewAction(app.ModifyState, key, func(state state.IState, input input.IInput) (any, error) {
 		return actionFunc(state, input.(T))
 	})
-	return secured.NewSecureAction(action, guard, app, map[string]actor.Parse{
-		"http": func(i interface{}) (abstract.IInput, error) {
-			input, err := net_http.ParseInput[T](i.(*fiber.Ctx))
+	return secured.NewSecureAction(action, guard, app, map[string]secured.Parse{
+		"tcp": func(i interface{}) (input.IInput, error) {
+			input := new(T)
+			err := json.Unmarshal(i.([]byte), input)
 			if err == nil {
 				err2 := vaidate.Validate.Struct(input)
 				if err2 == nil {
-					return input, nil
-				}
-				return nil, err2
-			}
-			return nil, err
-		},
-		"push": func(i interface{}) (abstract.IInput, error) {
-			input, err := net_pusher.ParseInput[T](i.(string))
-			if err == nil {
-				err2 := vaidate.Validate.Struct(input)
-				if err2 == nil {
-					return input, nil
-				}
-				return nil, err2
-			}
-			return nil, err
-		},
-		"grpc": func(i interface{}) (abstract.IInput, error) {
-			input, err := net_grpc.ParseInput[T](i)
-			if err == nil {
-				err2 := vaidate.Validate.Struct(input)
-				if err2 == nil {
-					return input, nil
-				}
-				return nil, err2
-			}
-			return nil, err
-		},
-		"fed": func(i interface{}) (abstract.IInput, error) {
-			input, err := net_federation.ParseInput[T](i.(string))
-			if err == nil {
-				err2 := vaidate.Validate.Struct(input)
-				if err2 == nil {
-					return input, nil
+					return *input, nil
 				}
 				return nil, err2
 			}
@@ -74,7 +41,7 @@ func ExtractSecureAction[T input.IInput](app core.ICore, actionFunc func(state.I
 	})
 }
 
-func ExtractActionMetadata(function interface{}) (string, *actor.Guard) {
+func ExtractActionMetadata(function interface{}) (string, *secured.Guard) {
 	var ts = strings.Split(FuncDescription(function), " ")
 	var tokens []string
 	for _, token := range ts {
@@ -83,12 +50,9 @@ func ExtractActionMetadata(function interface{}) (string, *actor.Guard) {
 		}
 	}
 	var key = tokens[0]
-	var guard *actor.Guard
+	var guard *secured.Guard
 	if tokens[1] == "check" && tokens[2] == "[" && tokens[6] == "]" {
-		guard = &actor.Guard{IsUser: tokens[3] == "true", IsInSpace: tokens[4] == "true", IsInTopic: tokens[5] == "true"}
-		//if tokens[7] == "access" && tokens[8] == "[" && tokens[14] == "]" {
-		//	access = Access{Http: tokens[9] == "true", Ws: tokens[10] == "true", Grpc: tokens[11] == "true", Fed: tokens[12] == "true", ActionType: tokens[13]}
-		//}
+		guard = &secured.Guard{IsUser: tokens[3] == "true", IsInSpace: tokens[4] == "true", IsInTopic: tokens[5] == "true"}
 	}
 	return key, guard
 }

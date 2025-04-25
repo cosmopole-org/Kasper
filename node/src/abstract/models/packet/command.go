@@ -1,4 +1,4 @@
-package module_model
+package packet
 
 type Command struct {
 	Value string

@@ -104,7 +104,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		found := false
 		wm.app.ModifyState(true, func(trx trx.ITrx) {
-			if trx.GetLink("member::" + pointId + "::" + machineId) == "true" {
+			if trx.GetLink("member::"+pointId+"::"+machineId) == "true" {
 				found = true
 			}
 		})
@@ -242,7 +242,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			if k == "/storage/uploadData" {
 				data, _ = json.Marshal(inputs_storage.UploadDataInput{
 					Data:    base64.StdEncoding.EncodeToString(data),
-					SpaceId: pointId,
+					PointId: pointId,
 				})
 			}
 			wm.app.ExecBaseRequestOnChain(k, data, "#appletsign", machineId, func(b []byte, i int, err error) {

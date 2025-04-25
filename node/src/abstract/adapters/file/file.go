@@ -15,4 +15,5 @@ type IFile interface {
 	ReadFileFromGlobalStorage(storageRoot string, key string) (string, error)
 	SaveFileToGlobalStorage(storageRoot string, fh *multipart.FileHeader, key string, overwrite bool) error
 	SaveDataToGlobalStorage(storageRoot string, data []byte, key string, overwrite bool) error
+	ReadFileByPath(path string) ([]byte, error)
 }

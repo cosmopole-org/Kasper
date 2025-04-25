@@ -6,20 +6,18 @@ import (
 	"os"
 
 	cmd "kasper/cmd/babble/commands"
-	"kasper/src/abstract"
-	tb "kasper/src/shell/layer2/model"
 )
 
 import "C"
 
 //export elpisCallback
 func elpisCallback(dataRaw *C.char) *C.char {
-	return C.CString(abstract.UseToolbox[*tb.ToolboxL2](cmd.KasperApp.Get(2).Tools()).Elpis().ElpisCallback(C.GoString(dataRaw)))
+	return C.CString(cmd.KasperApp.Tools().Elpis().ElpisCallback(C.GoString(dataRaw)))
 }
 
 //export wasmCallback
 func wasmCallback(dataRaw *C.char) *C.char {
-	return C.CString(abstract.UseToolbox[*tb.ToolboxL2](cmd.KasperApp.Get(2).Tools()).Wasm().WasmCallback(C.GoString(dataRaw)))
+	return C.CString(cmd.KasperApp.Tools().Wasm().WasmCallback(C.GoString(dataRaw)))
 }
 
 func main() {

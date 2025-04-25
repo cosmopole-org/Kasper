@@ -6,6 +6,7 @@ import (
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/input"
+	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/state"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
@@ -100,20 +101,20 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 		if err != nil {
 			return 0, nil, err			
 		}
-		a.core.Tools().Network().Federation().SendInFederationFileReqByCallback(origin, inp.FileId, modulemodel.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(path string, err error) {
+		a.core.Tools().Network().Federation().SendInFederationFileReqByCallback(origin, inp.FileId, packet.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(path string, err error) {
 			if err != nil {
 				scFed = 0
 				resFed = map[string]any{}
 				errFed = err
 			} else {
 				scFed = 1
-				resFed = modulemodel.Command{Value: "sendFile", Data: path}
+				resFed = packet.Command{Value: "sendFile", Data: path}
 				errFed = nil
 			}
 			cFed <- 1
 		})
 	} else {
-		a.core.Tools().Network().Federation().SendInFederationPacketByCallback(origin, modulemodel.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(data []byte, resCode int, err error) {
+		a.core.Tools().Network().Federation().SendInFederationPacketByCallback(origin, packet.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(data []byte, resCode int, err error) {
 			result := map[string]any{}
 			json.Unmarshal(data, &result)
 			scFed = resCode

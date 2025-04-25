@@ -7,16 +7,12 @@ import (
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
 	modulelogger "kasper/src/core/module/logger"
-	netgrpc "kasper/src/drivers/network/grpc"
-	nethttp "kasper/src/drivers/network/http"
-	netws "kasper/src/drivers/network/ws"
+	"kasper/src/drivers/network/tcp"
 )
 
 type Network struct {
 	core core.ICore
-	Http *nethttp.HttpServer
-	Grpc *netgrpc.GrpcServer
-	Ws   *netws.WsServer
+	Tcp  network.ITcp
 	Fed  network.IFederation
 }
 
@@ -26,24 +22,17 @@ func NewNetwork(
 	storage storage.IStorage,
 	security security.ISecurity,
 	signaler signaler.ISignaler) *Network {
-	hs := nethttp.New(core, logger, 0)
 	net := &Network{
 		core: core,
-		Http: hs,
-		Ws:   netws.New(core.Actor(), hs, security, signaler, storage),
-		Grpc: netgrpc.New(core, logger),
+		Tcp: tcp.NewTcp(core),
 	}
 	return net
 }
 
 func (net *Network) Run(ports map[string]int) {
-	httpPort, ok := ports["http"]
+	tcpPort, ok := ports["tcp"]
 	if ok {
-		net.Http.Listen(httpPort)
-	}
-	grpcPort, ok3 := ports["grpc"]
-	if ok3 {
-		net.Grpc.Listen(grpcPort)
+		net.Tcp.Listen(tcpPort)
 	}
 	net.core.Run()
 }

@@ -10,16 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"kasper/src/abstract"
-	module_logger "kasper/src/core/module/logger"
-	plugger_social "kasper/src/plugins/social/main"
-	sigma "kasper/src/shell"
-	inputs_users "kasper/src/shell/api/inputs/users"
-	plugger_api "kasper/src/shell/api/main"
-	outputs_users "kasper/src/shell/api/outputs/users"
 	"kasper/src/bots/sampleBot"
 	models_hokmaent "kasper/src/bots/sampleBot/models"
-	plugger_machiner "kasper/src/shell/machiner/main"
+	module_logger "kasper/src/core/module/logger"
+	plugger_social "kasper/src/plugins/social/main"
+	kasper "kasper/src/shell"
+	inputs_users "kasper/src/shell/api/inputs/users"
 	"kasper/src/shell/utils/future"
 
 	"kasper/src/babble"
@@ -30,25 +26,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"gorm.io/driver/mysql"
-	// "gorm.io/driver/postgres"
-
-	"kasper/src/shell/layer1/adapters"
-	layer1 "kasper/src/shell/layer1/layer"
-	module_model "kasper/src/shell/layer1/model"
-	module_model1 "kasper/src/shell/layer1/module/toolbox"
-	layer2 "kasper/src/shell/layer2/layer"
-	layer3 "kasper/src/shell/layer3/layer"
-	module_model3 "kasper/src/shell/layer3/model"
-
-	actor_model "kasper/src/core/module/actor/model"
-
 	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
-var KasperApp sigma.Sigma
+var KasperApp kasper.Kasper
 
 // NewRunCmd returns the command that starts a Babble node
 func NewRunCmd() *cobra.Command {
@@ -111,9 +94,8 @@ func RunNet() error {
 		panic(err2)
 	}
 
-	app := sigma.NewApp(sigma.Config{
-		Id:  os.Getenv("ORIGIN"),
-		Log: logger.Println,
+	app := kasper.NewApp(kasper.Config{
+		Id: os.Getenv("ORIGIN"),
 	})
 
 	KasperApp = app
@@ -122,17 +104,10 @@ func RunNet() error {
 		"ProxyAddr":  _config.ProxyAddr,
 		"ClientAddr": _config.ClientAddr,
 	}).Debug("Config Proxy")
-
 	handler := app.NewHgHandler()
-
-	// We create an InmemProxy based on the handler.
 	proxy := inmem.NewInmemProxy(handler, nil)
-
-	// Set the AppProxy in the Babble configuration.
 	_config.Babble.Proxy = proxy
-
 	engine := babble.NewBabble(&_config.Babble)
-
 	if err := engine.Init(); err != nil {
 		_config.Babble.Logger().Error("Cannot initialize engine:", err)
 		return err
@@ -142,32 +117,14 @@ func RunNet() error {
 		[]string{
 			"keyhan",
 		},
-		[]abstract.ILayer{
-			layer1.New(),
-			layer2.New(),
-			layer3.New(),
-		},
-		[]interface{}{
-			logger,
-			os.Getenv("STORAGE_ROOT_PATH"),
-			// postgres.Open(os.Getenv("DB_URI")),
-			mysql.Open(getDSN(app.IpAddr())),
-			os.Getenv("REDIS_URI"),
-			engine,
-			proxy,
-			os.Getenv("APPLET_DB_PATH"),
+		map[string]interface{}{
+			"storageRoot":  os.Getenv("STORAGE_ROOT_PATH"),
+			"babbleEngine": engine,
+			"babbleProxy":  proxy,
+			"appletDbPath": os.Getenv("APPLET_DB_PATH"),
 		},
 	)
-
-	defer func() {
-		tbl2 := abstract.UseToolbox[module_model1.IToolboxL1](app.Get(2).Tools())
-		dbraw, errdb := tbl2.Storage().Db().DB()
-		if errdb != nil {
-			log.Println(errdb)
-		}
-		dbraw.Close()
-	}()
-
+	
 	portStr := os.Getenv("MAINPORT")
 	port, _ := strconv.ParseInt(portStr, 10, 64)
 	plugger_api.PlugAll(app.Get(1), logger, app)
@@ -192,7 +149,7 @@ func RunNet() error {
 			return err
 		}
 		sampleBotUserId = res.(outputs_users.LoginOutput).User.Id
-	    sampleBotUserToken = res.(outputs_users.LoginOutput).Session.Token
+		sampleBotUserToken = res.(outputs_users.LoginOutput).Session.Token
 		return nil
 	})
 	if e2 != nil {

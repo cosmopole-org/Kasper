@@ -109,6 +109,14 @@ func (g *File) SaveTarFileItemToStorage(storageRoot string, fh *tar.Reader, topi
 	return nil
 }
 
+func (g *File) ReadFileByPath(path string) ([]byte, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return []byte{}, err
+	}
+	return content, nil
+}
+
 func (g *File) ReadFileFromStorage(storageRoot string, topicId string, key string) ([]byte, error) {
 	content, err := os.ReadFile(fmt.Sprintf("%s/files/%s/%s", storageRoot, topicId, key))
 	if err != nil {

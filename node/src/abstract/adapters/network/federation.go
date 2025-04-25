@@ -1,12 +1,10 @@
 package network
 
-import (
-	models "kasper/src/shell/layer1/model"
-)
+import "kasper/src/abstract/models/packet"
 
 type IFederation interface {
-	SendInFederation(destOrg string, packet models.OriginPacket)
-	SendInFederationPacketByCallback(destOrg string, packet models.OriginPacket, callback func([]byte, int, error))
-	SendInFederationFileReqByCallback(destOrg string, fileId string, packet models.OriginPacket, callback func(string, error))
-	SendInFederationFileResByCallback(destOrg string, packet models.OriginFileRes)
+	SendInFederation(destOrg string, pack packet.OriginPacket)
+	SendInFederationPacketByCallback(destOrg string, packet packet.OriginPacket, callback func([]byte, int, error))
+	SendInFederationFileReqByCallback(destOrg string, fileId string, packet packet.OriginPacket, callback func(string, error))
+	SendInFederationFileResByCallback(destOrg string, packet packet.OriginFileRes)
 }

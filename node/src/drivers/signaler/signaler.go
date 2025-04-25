@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"kasper/src/abstract/adapters/network"
 	"kasper/src/abstract/adapters/signaler"
+	packetmodel "kasper/src/abstract/models/packet"
 	module_logger "kasper/src/core/module/logger"
-	models "kasper/src/shell/layer1/model"
 	"strings"
 	"sync"
 
@@ -104,7 +104,7 @@ func (p *Signaler) SignalUser(key string, respondToId string, listenerId string,
 			}
 			message = string(msg)
 		}
-		p.Federation.SendInFederation(origin, models.OriginPacket{IsResponse: false, Key: updatePrefix + key, UserId: listenerId, Binary: []byte(message), Signature: ""})
+		p.Federation.SendInFederation(origin, packetmodel.OriginPacket{IsResponse: false, Key: updatePrefix + key, UserId: listenerId, Binary: []byte(message), Signature: ""})
 	}
 }
 
@@ -183,7 +183,7 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 			message = string(msg)
 		}
 		for k, v := range foreignersMap {
-			p.Federation.SendInFederation(k, models.OriginPacket{IsResponse: false, Key: groupUpdatePrefix + key, PointId: groupId, Exceptions: v, Binary: []byte(message), Signature: ""})
+			p.Federation.SendInFederation(k, packetmodel.OriginPacket{IsResponse: false, Key: groupUpdatePrefix + key, PointId: groupId, Exceptions: v, Binary: []byte(message), Signature: ""})
 		}
 	}
 }

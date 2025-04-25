@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/state"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
 	models "kasper/src/shell/api/model"
-	modulemodel "kasper/src/shell/layer1/model"
 	"log"
 )
 
@@ -94,5 +94,5 @@ func (a *Actions) Download(state state.IState, input inputs_storage.DownloadInpu
 	if file.PointId != state.Info().PointId() {
 		return nil, errors.New("access to file denied")
 	}
-	return modulemodel.Command{Value: "sendFile", Data: fmt.Sprintf("%s/files/%s/%s", a.app.Tools().Storage().StorageRoot(), state.Info().PointId(), input.FileId)}, nil
+	return packet.Command{Value: "sendFile", Data: fmt.Sprintf("%s/files/%s/%s", a.app.Tools().Storage().StorageRoot(), state.Info().PointId(), input.FileId)}, nil
 }

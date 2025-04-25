@@ -12,10 +12,9 @@ import (
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/worker"
+	inputs_points "kasper/src/shell/api/inputs/points"
 	"log"
 	"strings"
-
-	inputs_topics "kasper/src/shell/api/inputs/topics"
 )
 
 type Elpis struct {
@@ -33,7 +32,7 @@ func (wm *Elpis) Assign(machineId string) {
 			dataParts := strings.Split(data, " ")
 			if dataParts[1] == "topics/send" {
 				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
-				var inp inputs_topics.SendInput
+				var inp inputs_points.SendInput
 				e := json.Unmarshal([]byte(data), &inp)
 				if e != nil {
 					log.Println(e)

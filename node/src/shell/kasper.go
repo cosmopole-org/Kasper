@@ -1,12 +1,12 @@
 package kasper
 
 import (
-	"kasper/src/abstract"
+	"kasper/src/abstract/models/core"
 	modulecore "kasper/src/core/module/core"
 )
 
-type Sigma abstract.ICore
+type Kasper core.ICore
 
-func NewApp(config Config) Sigma {
-	return modulecore.NewCore(config.Id, config.Log)
+func NewApp(config Config) Kasper {
+	return modulecore.NewCore(config.Id)
 }
