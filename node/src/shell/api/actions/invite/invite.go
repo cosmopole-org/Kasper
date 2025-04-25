@@ -2,147 +2,99 @@ package actions_invite
 
 import (
 	"errors"
-	"fmt"
-	"kasper/src/abstract"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/state"
 	inputsinvites "kasper/src/shell/api/inputs/invites"
 	"kasper/src/shell/api/model"
 	outputsinvites "kasper/src/shell/api/outputs/invites"
 	updatesinvites "kasper/src/shell/api/updates/invites"
-	"kasper/src/shell/layer1/adapters"
-	modulestate "kasper/src/shell/layer1/module/state"
-	toolbox2 "kasper/src/shell/layer1/module/toolbox"
+	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/future"
+	"log"
 )
 
-const inviteNotFoundError = "invite not found"
-
-var memberTemplate = "member::%s::%s::%s"
-
 type Actions struct {
-	Layer abstract.ILayer
+	app core.ICore
 }
 
-func Install(s adapters.IStorage, a *Actions) error {
-	return s.Db().AutoMigrate(&model.Invite{})
+func Install(a *Actions) error {
+	return nil
 }
 
 // Create /invites/create check [ true true false ] access [ true false false false POST ]
-func (a *Actions) Create(s abstract.IState, input inputsinvites.CreateInput) (any, error) {
-	toolbox := abstract.UseToolbox[*toolbox2.ToolboxL1](a.Layer.Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
-	var invite model.Invite
+func (a *Actions) Create(state state.IState, input inputsinvites.CreateInput) (any, error) {
 	trx := state.Trx()
-	space := model.Space{Id: input.SpaceId}
-	err := trx.Db().First(&space).Error
-	if err != nil {
-		return nil, err
+	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("you are not admin")
 	}
-	invite = model.Invite{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), UserId: input.UserId, SpaceId: input.SpaceId}
-	err2 := trx.Db().Create(&invite).Error
-	if err2 != nil {
-		return nil, err2
+	if !trx.HasObj("Point", state.Info().PointId()) {
+		return nil, errors.New("point not found")
 	}
+	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	trx.PutLink("invite::"+point.Id+"::"+input.UserId, "true")
 	future.Async(func() {
-		toolbox.Signaler().SignalUser("invites/create", "", input.UserId, updatesinvites.Create{Invite: invite}, true)
+		a.app.Tools().Signaler().SignalUser("invites/create", "", input.UserId, updatesinvites.Create{PointId: point.Id}, true)
 	}, false)
-	return outputsinvites.CreateOutput{Invite: invite}, nil
+	return outputsinvites.CreateOutput{}, nil
 }
 
 // Cancel /invites/cancel check [ true true false ] access [ true false false false POST ]
-func (a *Actions) Cancel(s abstract.IState, input inputsinvites.CancelInput) (any, error) {
-	toolbox := abstract.UseToolbox[*toolbox2.ToolboxL1](a.Layer.Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
-	var invite model.Invite
+func (a *Actions) Cancel(state state.IState, input inputsinvites.CancelInput) (any, error) {
 	trx := state.Trx()
-	admin := model.Admin{UserId: state.Info().UserId(), SpaceId: input.SpaceId}
-	err := trx.Db().First(&admin).Error
-	if err != nil {
-		return nil, err
+	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("you are not admin")
 	}
-	invite = model.Invite{Id: input.InviteId}
-	err2 := trx.Db().First(&invite).Error
-	if err2 != nil {
-		return nil, err2
+	if trx.GetLink("invite::"+state.Info().PointId()+"::"+input.UserId) != "true" {
+		return nil, errors.New("invitation does not exist")
 	}
-	if invite.SpaceId != input.SpaceId {
-		return nil, errors.New(inviteNotFoundError)
-	}
-	err3 := trx.Db().Delete(&invite).Error
-	if err3 != nil {
-		return nil, err3
-	}
+	trx.DelKey("link::invite::" + state.Info().PointId() + "::" + input.UserId)
 	future.Async(func() {
-		toolbox.Signaler().SignalUser("invites/cancel", "", invite.UserId, updatesinvites.Cancel{Invite: invite}, true)
+		a.app.Tools().Signaler().SignalUser("invites/cancel", "", input.UserId, updatesinvites.Cancel{PointId: state.Info().PointId()}, true)
 	}, false)
-	return outputsinvites.CancelOutput{Invite: invite}, nil
+	return outputsinvites.CancelOutput{}, nil
 }
 
 // Accept /invites/accept check [ true false false ] access [ true false false false POST ]
-func (a *Actions) Accept(s abstract.IState, input inputsinvites.AcceptInput) (any, error) {
-	toolbox := abstract.UseToolbox[*toolbox2.ToolboxL1](a.Layer.Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
-	var member model.Member
+func (a *Actions) Accept(state state.IState, input inputsinvites.AcceptInput) (any, error) {
 	trx := state.Trx()
-	invite := model.Invite{Id: input.InviteId}
-	err := trx.Db().First(&invite).Error
+	if trx.GetLink("invite::"+input.PointId+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("invitation does not exist")
+	}
+	trx.DelKey("link::invite::" + input.PointId + "::" + state.Info().UserId())
+	trx.PutLink("member::"+input.PointId+"::"+state.Info().UserId(), "true")
+	a.app.Tools().Signaler().JoinGroup(input.PointId, state.Info().UserId())
+	admins, err := trx.GetLinksList("admin::"+input.PointId+"::", -1, -1)
 	if err != nil {
+		log.Println(err)
 		return nil, err
-	}
-	if invite.UserId != state.Info().UserId() {
-		return nil, errors.New(inviteNotFoundError)
-	}
-	err2 := trx.Db().Delete(&invite).Error
-	if err2 != nil {
-		return nil, err2
-	}
-	member = model.Member{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), UserId: invite.UserId, SpaceId: invite.SpaceId, TopicId: "*", Metadata: ""}
-	err3 := trx.Db().Create(&member).Error
-	if err3 != nil {
-		return nil, err3
-	}
-	toolbox.Signaler().JoinGroup(member.SpaceId, member.UserId)
-	trx.Mem().Put(fmt.Sprintf(memberTemplate, member.SpaceId, member.UserId, member.Id), member.TopicId)
-	var admins []model.Admin
-	err4 := trx.Db().Where("space_id = ?", invite.SpaceId).Find(&admins).Error
-	if err4 != nil {
-		return nil, err4
 	}
 	for _, admin := range admins {
 		future.Async(func() {
-			toolbox.Signaler().SignalUser("invites/accept", "", admin.UserId, updatesinvites.Accept{Invite: invite}, true)
+			a.app.Tools().Signaler().SignalUser("invites/accept", "", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
 		}, false)
 	}
+	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	future.Async(func() {
-		toolbox.Signaler().SignalGroup("spaces/userJoined", invite.SpaceId, updatesinvites.Accept{Invite: invite}, true, []string{})
+		a.app.Tools().Signaler().SignalGroup("spaces/userJoined", input.PointId, updates_points.Join{PointId: input.PointId, User: user}, true, []string{})
 	}, false)
-	return outputsinvites.AcceptOutput{Member: member}, nil
+	return outputsinvites.AcceptOutput{}, nil
 }
 
 // Decline /invites/decline check [ true false false ] access [ true false false false POST ]
-func (a *Actions) Decline(s abstract.IState, input inputsinvites.DeclineInput) (any, error) {
-	toolbox := abstract.UseToolbox[*toolbox2.ToolboxL1](a.Layer.Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) Decline(state state.IState, input inputsinvites.DeclineInput) (any, error) {
 	trx := state.Trx()
-	invite := model.Invite{Id: input.InviteId}
-	err := trx.Db().First(&invite).Error
+	if trx.GetLink("invite::"+input.PointId+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("invitation does not exist")
+	}
+	trx.DelKey("link::invite::" + input.PointId + "::" + state.Info().UserId())
+	admins, err := trx.GetLinksList("admin::"+input.PointId+"::", -1, -1)
 	if err != nil {
+		log.Println(err)
 		return nil, err
-	}
-	if invite.UserId != state.Info().UserId() {
-		return nil, errors.New(inviteNotFoundError)
-	}
-	err2 := trx.Db().Delete(&invite).Error
-	if err2 != nil {
-		return nil, err2
-	}
-	var admins []model.Admin
-	err3 := trx.Db().Where("space_id = ?", invite.SpaceId).Find(&admins).Error
-	if err3 != nil {
-		return nil, err3
 	}
 	for _, admin := range admins {
 		future.Async(func() {
-			toolbox.Signaler().SignalUser("invites/decline", "", admin.UserId, updatesinvites.Accept{Invite: invite}, true)
+			a.app.Tools().Signaler().SignalUser("invites/decline", "", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
 		}, false)
 	}
 	return outputsinvites.DeclineOutput{}, nil

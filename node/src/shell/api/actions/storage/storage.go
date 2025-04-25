@@ -4,66 +4,58 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"kasper/src/abstract"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/state"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
 	models "kasper/src/shell/api/model"
-	"kasper/src/shell/layer1/adapters"
 	modulemodel "kasper/src/shell/layer1/model"
-	modulestate "kasper/src/shell/layer1/module/state"
-	module_model "kasper/src/shell/layer2/model"
 	"log"
 )
 
 type Actions struct {
-	Layer abstract.ILayer
+	app core.ICore
 }
 
-func Install(s adapters.IStorage, a *Actions) error {
-	err := s.Db().AutoMigrate(&models.File{})
-	if err != nil {
-		return err
-	}
+func Install(a *Actions) error {
 	return nil
 }
 
 // Upload /storage/upload check [ true true true ] access [ true false false false POST ]
-func (a *Actions) Upload(s abstract.IState, input inputs_storage.UploadInput) (any, error) {
-	toolbox := abstract.UseToolbox[*module_model.ToolboxL2](a.Layer.Core().Get(2).Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) Upload(state state.IState, input inputs_storage.UploadInput) (any, error) {
 	trx := state.Trx()
 	if input.FileId != "" {
-		var file = models.File{Id: input.FileId}
-		trx.Db().First(&file)
-		trx.ClearError()
-		if file.SenderId != state.Info().UserId() {
+		if !trx.HasObj("File", input.FileId) {
+			return nil, errors.New("file not found")	
+		}
+		var file = models.File{Id: input.FileId}.Pull(trx)
+		if file.OwnerId != state.Info().UserId() {
 			return nil, errors.New("access to file control denied")
 		}
-		if err := toolbox.File().SaveFileToStorage(toolbox.Storage().StorageRoot(), input.Data, state.Info().TopicId(), input.FileId); err != nil {
+		if err := a.app.Tools().File().SaveFileToStorage(a.app.Tools().Storage().StorageRoot(), input.Data, state.Info().PointId(), input.FileId); err != nil {
 			log.Println(err)
 			return nil, err
 		}
 		return map[string]any{}, nil
 	} else {
-		var file = models.File{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), SenderId: state.Info().UserId(), TopicId: state.Info().TopicId()}
-		if err := toolbox.File().SaveFileToStorage(toolbox.Storage().StorageRoot(), input.Data, state.Info().TopicId(), file.Id); err != nil {
+		var file = models.File{Id: a.app.Tools().Storage().GenId(input.Origin()), OwnerId: state.Info().UserId(), PointId: state.Info().PointId()}
+		if err := a.app.Tools().File().SaveFileToStorage(a.app.Tools().Storage().StorageRoot(), input.Data, state.Info().PointId(), file.Id); err != nil {
 			log.Println(err)
 			return nil, err
 		}
-		trx.Db().Create(&file)
+		file.Push(trx)
 		return map[string]any{"file": file}, nil
 	}
 }
 
 // UploadData /storage/uploadData check [ true true true ] access [ true false false false POST ]
-func (a *Actions) UploadData(s abstract.IState, input inputs_storage.UploadDataInput) (any, error) {
-	toolbox := abstract.UseToolbox[*module_model.ToolboxL2](a.Layer.Core().Get(2).Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) UploadData(state state.IState, input inputs_storage.UploadDataInput) (any, error) {
 	trx := state.Trx()
 	if input.FileId != "" {
-		var file = models.File{Id: input.FileId}
-		trx.Db().First(&file)
-		trx.ClearError()
-		if file.SenderId != state.Info().UserId() {
+		if !trx.HasObj("File", input.FileId) {
+			return nil, errors.New("file not found")	
+		}
+		var file = models.File{Id: input.FileId}.Pull(trx)
+		if file.OwnerId != state.Info().UserId() {
 			return nil, errors.New("access to file control denied")
 		}
 		data, err := base64.StdEncoding.DecodeString(input.Data)
@@ -71,36 +63,36 @@ func (a *Actions) UploadData(s abstract.IState, input inputs_storage.UploadDataI
 			log.Println(err)
 			return nil, err
 		}
-		if err := toolbox.File().SaveDataToStorage(toolbox.Storage().StorageRoot(), data, state.Info().TopicId(), input.FileId); err != nil {
+		if err := a.app.Tools().File().SaveDataToStorage(a.app.Tools().Storage().StorageRoot(), data, state.Info().PointId(), input.FileId); err != nil {
 			log.Println(err)
 			return nil, err
 		}
 		return map[string]any{}, nil
 	} else {
-		var file = models.File{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), SenderId: state.Info().UserId(), TopicId: state.Info().TopicId()}
+		var file = models.File{Id: a.app.Tools().Storage().GenId(input.Origin()), OwnerId: state.Info().UserId(), PointId: state.Info().PointId()}
 		data, err := base64.StdEncoding.DecodeString(input.Data)
 		if err != nil {
 			log.Println(err)
 			return nil, err
 		}
-		if err := toolbox.File().SaveDataToStorage(toolbox.Storage().StorageRoot(), data, state.Info().TopicId(), file.Id); err != nil {
+		if err := a.app.Tools().File().SaveDataToStorage(a.app.Tools().Storage().StorageRoot(), data, state.Info().PointId(), file.Id); err != nil {
 			log.Println(err)
 			return nil, err
 		}
-		trx.Db().Create(&file)
+		file.Push(trx)
 		return map[string]any{"file": file}, nil
 	}
 }
 
 // Download /storage/download check [ true true true ] access [ true false false false POST ]
-func (a *Actions) Download(s abstract.IState, input inputs_storage.DownloadInput) (any, error) {
-	toolbox := abstract.UseToolbox[*module_model.ToolboxL2](a.Layer.Core().Get(2).Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) Download(state state.IState, input inputs_storage.DownloadInput) (any, error) {
 	trx := state.Trx()
-	var file = models.File{Id: input.FileId}
-	trx.Db().First(&file)
-	if file.TopicId != state.Info().TopicId() {
+	if !trx.HasObj("File", input.FileId) {
+		return nil, errors.New("file not found")	
+	}
+	var file = models.File{Id: input.FileId}.Pull(trx)
+	if file.PointId != state.Info().PointId() {
 		return nil, errors.New("access to file denied")
 	}
-	return modulemodel.Command{Value: "sendFile", Data: fmt.Sprintf("%s/files/%s/%s", toolbox.Storage().StorageRoot(), state.Info().TopicId(), input.FileId)}, nil
+	return modulemodel.Command{Value: "sendFile", Data: fmt.Sprintf("%s/files/%s/%s", a.app.Tools().Storage().StorageRoot(), state.Info().PointId(), input.FileId)}, nil
 }

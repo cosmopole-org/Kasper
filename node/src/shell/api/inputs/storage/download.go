@@ -2,8 +2,7 @@ package inputs_storage
 
 type DownloadInput struct {
 	FileId  string `json:"fileId" validate:"required"`
-	SpaceId string `json:"spaceId" validate:"required"`
-	TopicId string `json:"topicId" validate:"required"`
+	PointId string `json:"pointId" validate:"required"`
 }
 
 func (d DownloadInput) GetData() any {
@@ -11,7 +10,7 @@ func (d DownloadInput) GetData() any {
 }
 
 func (d DownloadInput) GetPointId() string {
-	return d.SpaceId
+	return d.PointId
 }
 
 func (d DownloadInput) Origin() string {

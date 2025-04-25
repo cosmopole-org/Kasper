@@ -1,9 +1,3 @@
-package outputs_spaces
+package outputs_points
 
-import (
-	models "kasper/src/shell/api/model"
-)
-
-type JoinOutput struct {
-	Member models.Member `json:"member"`
-}
+type JoinOutput struct {}

@@ -1,6 +1,8 @@
 package model
 
-import "kasper/src/abstract/models"
+import (
+	"kasper/src/abstract/models/trx"
+)
 
 type Vm struct {
 	MachineId string `json:"id" gorm:"primaryKey;column:id"`
@@ -12,7 +14,7 @@ func (m Vm) Type() string {
 	return "Vm"
 }
 
-func (d Vm) Push(trx models.ITrx) {
+func (d Vm) Push(trx trx.ITrx) {
 	trx.PutObj(d.Type(), d.MachineId, map[string][]byte{
 		"machineId": []byte(d.MachineId),
 		"ownerId":   []byte(d.MachineId),
@@ -20,7 +22,7 @@ func (d Vm) Push(trx models.ITrx) {
 	})
 }
 
-func (d Vm) Pull(trx models.ITrx) Vm {
+func (d Vm) Pull(trx trx.ITrx) Vm {
 	m := trx.GetObj(d.Type(), d.MachineId)
 	if len(m) > 0 {
 		d.MachineId = string(m["machineId"])

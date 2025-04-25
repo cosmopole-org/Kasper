@@ -1,34 +1,32 @@
 package utils
 
 import (
-	"kasper/src/abstract"
-	moduleactormodel "kasper/src/core/module/actor/model"
-	module_logger "kasper/src/core/module/logger"
-	"kasper/src/shell/layer1/module/actor"
-	net_federation "kasper/src/shell/layer3/tools/network/federation"
-	net_grpc "kasper/src/shell/layer3/tools/network/grpc"
-	net_http "kasper/src/shell/layer3/tools/network/http"
-	net_pusher "kasper/src/shell/layer3/tools/network/push"
+	"kasper/src/abstract/models/action"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/input"
+	"kasper/src/abstract/state"
+	mainaction "kasper/src/core/module/actor/model/base"
+	"kasper/src/core/module/actor/model/secured"
 	"kasper/src/shell/utils/vaidate"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-func ExtractAction[T abstract.IInput](actionFunc func(abstract.IState, T) (any, error)) abstract.IAction {
+func ExtractAction[T input.IInput](app core.ICore, actionFunc func(state.IState, T) (any, error)) action.IAction {
 	key, _ := ExtractActionMetadata(actionFunc)
-	action := moduleactormodel.NewAction(key, func(state abstract.IState, input abstract.IInput) (any, error) {
+	action := mainaction.NewAction(app.ModifyState, key, func(state state.IState, input input.IInput) (any, error) {
 		return actionFunc(state, input.(T))
 	})
 	return action
 }
 
-func ExtractSecureAction[T abstract.IInput](logger *module_logger.Logger, core abstract.ICore, actionFunc func(abstract.IState, T) (any, error)) abstract.IAction {
+func ExtractSecureAction[T input.IInput](app core.ICore, actionFunc func(state.IState, T) (any, error)) action.IAction {
 	key, guard := ExtractActionMetadata(actionFunc)
-	action := moduleactormodel.NewAction(key, func(state abstract.IState, input abstract.IInput) (any, error) {
+	action := mainaction.NewAction(app.ModifyState, key, func(state state.IState, input input.IInput) (any, error) {
 		return actionFunc(state, input.(T))
 	})
-	return actor.NewSecureAction(action, guard, core, logger, map[string]actor.Parse{
+	return secured.NewSecureAction(action, guard, app, map[string]actor.Parse{
 		"http": func(i interface{}) (abstract.IInput, error) {
 			input, err := net_http.ParseInput[T](i.(*fiber.Ctx))
 			if err == nil {

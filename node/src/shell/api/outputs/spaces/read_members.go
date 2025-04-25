@@ -1,14 +1,9 @@
-package outputs_spaces
+package outputs_points
 
 import (
 	models "kasper/src/shell/api/model"
 )
 
-type MemberUser struct {
-	Member models.Member     `json:"member"`
-	User   models.PublicUser `json:"user"`
-}
-
 type ReadMemberOutput struct {
-	Members []MemberUser `json:"members"`
+	Members []models.User `json:"members"`
 }

@@ -8,15 +8,7 @@ func (d HelloInput) GetData() any {
 	return "dummy"
 }
 
-func (d HelloInput) GetSpaceId() string {
-	return ""
-}
-
-func (d HelloInput) GetTopicId() string {
-	return ""
-}
-
-func (d HelloInput) GetMemberId() string {
+func (d HelloInput) GetPointId() string {
 	return ""
 }
 

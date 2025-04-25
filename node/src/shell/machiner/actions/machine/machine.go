@@ -3,112 +3,56 @@ package actions_plugin
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
-	"kasper/src/abstract"
-	"kasper/src/shell/layer1/adapters"
-	modulestate "kasper/src/shell/layer1/module/state"
-	modulemodel "kasper/src/shell/layer2/model"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/state"
 	inputs_machiner "kasper/src/shell/machiner/inputs/plugin"
 	"kasper/src/shell/machiner/model"
 	outputs_machiner "kasper/src/shell/machiner/outputs/plugin"
 	"log"
-	"strconv"
 
 	models "kasper/src/shell/api/model"
-	toolbox2 "kasper/src/shell/layer1/module/toolbox"
-
-	"gorm.io/datatypes"
-	"gorm.io/gorm"
 )
 
 const pluginsTemplateName = "/machines/"
 
 type Actions struct {
-	Layer abstract.ILayer
+	app core.ICore
 }
 
-func Install(s adapters.IStorage, a *Actions) error {
-	err := s.Db().AutoMigrate(&model.Vm{})
-	if err != nil {
-		log.Println(err)
-		return err
-	}
+func Install(a *Actions) error {
 	return nil
 }
 
-func convertRowIdToCode(rowId uint) string {
-	idStr := fmt.Sprintf("%d", rowId)
-	for len(idStr) < 6 {
-		idStr = "0" + idStr
-	}
-	var c = ""
-	for i := 0; i < len(idStr); i++ {
-		if i < 3 {
-			digit, err := strconv.ParseInt(idStr[i:i+1], 10, 32)
-			if err != nil {
-				fmt.Println(err)
-				return ""
-			}
-			c += string(rune('A' + digit))
-		} else {
-			c += idStr[i : i+1]
-		}
-	}
-	return c
-}
-
 // Create /machines/create check [ true false false ] access [ true false false false POST ]
-func (a *Actions) Create(s abstract.IState, input inputs_machiner.CreateInput) (any, error) {
-	toolbox := abstract.UseToolbox[*toolbox2.ToolboxL1](a.Layer.Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) Create(state state.IState, input inputs_machiner.CreateInput) (any, error) {
 	var (
 		user    models.User
 		session models.Session
 	)
 	trx := state.Trx()
-	user = models.User{Metadata: datatypes.JSON([]byte(`{}`)), Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy(), Name: "", Avatar: ""}
-	err := trx.Db().Create(&user).Error
-	if err != nil {
-		return nil, err
-	}
-	trx.Db().First(&user)
-	code := convertRowIdToCode(uint(user.Number))
-	err2 := adapters.UpdateJson(func() *gorm.DB { return trx.Db().Model(&models.User{}).Where("id = ?", user.Id) }, &user, "metadata", "code", code)
-	if err2 != nil {
-		return nil, err2
-	}
-	session = models.Session{Id: toolbox.Cache().GenId(trx.Db(), input.Origin()), Token: user.Id, UserId: user.Id}
-	err3 := trx.Db().Create(&session).Error
-	if err3 != nil {
-		return nil, err3
-	}
+	user = models.User{Id: a.app.Tools().Storage().GenId(input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy()}
+	session = models.Session{Id: a.app.Tools().Storage().GenId(input.Origin()), UserId: user.Id}
 	vm := model.Vm{MachineId: user.Id, OwnerId: state.Info().UserId()}
-	trx.Db().Create(&vm)
-	trx.Mem().Put("auth::"+session.Token, fmt.Sprintf("human/%s", user.Id))
-	trx.Mem().Put("code::"+code, user.Id)
+	user.Push(trx)
+	session.Push(trx)
+	vm.Push(trx)
 	return outputs_machiner.CreateOutput{User: user}, nil
 }
 
 // Deploy /machines/deploy check [ true false false ] access [ true false false false POST ]
-func (a *Actions) Deploy(s abstract.IState, input inputs_machiner.DeployInput) (any, error) {
-	toolbox := abstract.UseToolbox[*modulemodel.ToolboxL2](a.Layer.Core().Get(2).Tools())
-	state := abstract.UseState[modulestate.IStateL1](s)
+func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) (any, error) {
 	trx := state.Trx()
-
-	vm := model.Vm{MachineId: input.MachineId}
-	e := trx.Db().First(&vm).Error
-	if e != nil {
-		return nil, e
+	if !trx.HasObj("Vm", input.MachineId) {
+		return nil, errors.New("vm not found")
 	}
+	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
 	if vm.OwnerId != state.Info().UserId() {
 		return nil, errors.New("access to vm denied")
 	}
-
 	data, err := base64.StdEncoding.DecodeString(input.ByteCode)
 	if err != nil {
 		return nil, err
 	}
-
 	if input.Runtime == "docker" {
 		if input.Metadata == nil {
 			return nil, errors.New("image name not provided")
@@ -121,29 +65,28 @@ func (a *Actions) Deploy(s abstract.IState, input inputs_machiner.DeployInput) (
 		if !ok2 {
 			return nil, errors.New("image name is not string")
 		}
-		dockerfileFolderPath := toolbox.Storage().StorageRoot() + pluginsTemplateName + vm.MachineId + "/" + in
-		err2 := toolbox.File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
+		dockerfileFolderPath := a.app.Tools().Storage().StorageRoot() + pluginsTemplateName + vm.MachineId + "/" + in
+		err2 := a.app.Tools().File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
 		if err2 != nil {
 			return nil, err2
 		}
-		err3 := toolbox.Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", vm.MachineId, in)
+		err3 := a.app.Tools().Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", vm.MachineId, in)
 		if err3 != nil {
 			log.Println(err3)
 			return nil, err3
 		}
 	} else {
-		err2 := toolbox.File().SaveDataToGlobalStorage(toolbox.Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/", data, "module", true)
+		err2 := a.app.Tools().File().SaveDataToGlobalStorage(a.app.Tools().Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/", data, "module", true)
 		if err2 != nil {
 			return nil, err2
 		}
 		vm.Runtime = input.Runtime
-		trx.Db().Save(&vm)
+		vm.Push(trx)
 		if vm.Runtime == "wasm" {
-			toolbox.Wasm().Assign(vm.MachineId)
+			a.app.Tools().Wasm().Assign(vm.MachineId)
 		} else if vm.Runtime == "elpis" {
-			toolbox.Elpis().Assign(vm.MachineId)
+			a.app.Tools().Elpis().Assign(vm.MachineId)
 		}
 	}
-
 	return outputs_machiner.PlugInput{}, nil
 }

@@ -1,9 +1,9 @@
-package outputs_spaces
+package outputs_points
 
 import (
 	models "kasper/src/shell/api/model"
 )
 
 type GetOutput struct {
-	Space models.Space `json:"space"`
+	Point models.Point `json:"point"`
 }

@@ -1,4 +1,4 @@
-package outputs_spaces
+package outputs_points
 
 import (
 	"kasper/src/shell/api/model"

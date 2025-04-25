@@ -6,15 +6,7 @@ func (d GetServerKeyInput) GetData() any {
 	return "dummy"
 }
 
-func (d GetServerKeyInput) GetSpaceId() string {
-	return ""
-}
-
-func (d GetServerKeyInput) GetTopicId() string {
-	return ""
-}
-
-func (d GetServerKeyInput) GetMemberId() string {
+func (d GetServerKeyInput) GetPointId() string {
 	return ""
 }
 

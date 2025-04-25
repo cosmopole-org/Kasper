@@ -6,7 +6,7 @@ import (
 
 type UploadDataInput struct {
 	Data    string `json:"data" validate:"required"`
-	SpaceId string `json:"spaceId" validate:"required"`
+	PointId string `json:"pointId" validate:"required"`
 	TopicId string `json:"topicId" validate:"required"`
 	FileId  string `json:"fileId"`
 }
@@ -16,17 +16,9 @@ func (d UploadDataInput) GetData() any {
 }
 
 func (d UploadDataInput) GetSpaceId() string {
-	return d.SpaceId
-}
-
-func (d UploadDataInput) GetTopicId() string {
-	return d.TopicId
-}
-
-func (d UploadDataInput) GetMemberId() string {
-	return ""
+	return d.PointId
 }
 
 func (d UploadDataInput) Origin() string {
-	return origin.FindOrigin(d.SpaceId)
+	return origin.FindOrigin(d.PointId)
 }

@@ -6,11 +6,11 @@ import (
 )
 
 type IFile interface {
-	CheckFileFromStorage(storageRoot string, topicId string, key string) bool
-	SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, topicId string, key string) error
-	SaveDataToStorage(storageRoot string, data []byte, topicId string, key string) error
-	SaveTarFileItemToStorage(storageRoot string, fh *tar.Reader, topicId string, key string) error
-	ReadFileFromStorage(storageRoot string, topicId string, key string) ([]byte, error)
+	CheckFileFromStorage(storageRoot string, pointId string, key string) bool
+	SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, pointId string, key string) error
+	SaveDataToStorage(storageRoot string, data []byte, pointId string, key string) error
+	SaveTarFileItemToStorage(storageRoot string, fh *tar.Reader, pointId string, key string) error
+	ReadFileFromStorage(storageRoot string, pointId string, key string) ([]byte, error)
 	CheckFileFromGlobalStorage(storageRoot string, key string) bool
 	ReadFileFromGlobalStorage(storageRoot string, key string) (string, error)
 	SaveFileToGlobalStorage(storageRoot string, fh *multipart.FileHeader, key string, overwrite bool) error

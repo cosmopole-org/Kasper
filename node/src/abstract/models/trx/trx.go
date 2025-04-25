@@ -16,6 +16,8 @@ type ITrx interface {
 	GetIndex(typ string, objId string, fromColumn string, toColumn string) string
 	HasIndex(typ string, objId string, fromColumn string, toColumn string) bool
 	GetColumn(typ string, objId string, columnName string) []byte
+	GetLinksList(p string, offset int, count int) ([]string, error)
+	GetObjList(typ string, objIds []string) (map[string]map[string][]byte, error)
 	GetLink(key string) string
 	PutLink(key string, value string)
 	PutBytes(key string, value []byte)
@@ -24,9 +26,9 @@ type ITrx interface {
 	GetString(key string) string
 	GetObj(typ string, key string) map[string][]byte
 	PutObj(typ string, key string, keys map[string][]byte)
-	PutJson(key string, path string, jsonObj any)
-	DelJson(key string)
-	GetJson(key string, path string) any
+	PutJson(key string, path string, jsonObj any, merge bool) error
+	DelJson(key string, path string)
+	GetJson(key string, path string) (map[string]any, error)
 	GetPriKey(string) *rsa.PrivateKey
 	GetPubKey(string) *rsa.PublicKey
 	Updates() []update.Update

@@ -3,6 +3,7 @@ package module_trx
 import (
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
@@ -136,16 +137,59 @@ func (tw *TrxWrapper) PutObj(typ string, key string, keys map[string][]byte) {
 	}
 }
 
-func (tw *TrxWrapper) PutJson(key string, path string, jsonObj any) {
-
+func (tw *TrxWrapper) indexJson(key string, path string, obj map[string]any, merge bool) {
+	old := map[string]any{}
+	if merge {
+		var e error
+		old, e = tw.GetJson(key, path)
+		if e != nil {
+			old = map[string]any{}
+			log.Println(e)
+		}
+	}
+	for k, v := range obj {
+		old[k] = v
+	}
+	b, _ := json.Marshal(obj)
+	tw.PutBytes("json::"+key+"::"+path, b)
+	for k, v := range obj {
+		if v != nil {
+			if m, ok := v.(map[string]any); ok {
+				tw.indexJson(key, path+"."+k, m, merge)
+			} else {
+				b, _ := json.Marshal(obj)
+				tw.PutBytes("json::"+key+"::"+path+"."+k, b)
+			}
+		}
+	}
 }
 
-func (tw *TrxWrapper) DelJson(key string) {
-
+func (tw *TrxWrapper) PutJson(key string, path string, jsonObj any, merge bool) error {
+	b, e := json.Marshal(jsonObj)
+	if e != nil {
+		return e
+	}
+	m := map[string]any{}
+	e = json.Unmarshal(b, &m)
+	if e != nil {
+		return e
+	}
+	tw.indexJson(key, path, m, merge)
+	return nil
 }
 
-func (tw *TrxWrapper) GetJson(key string, path string) any {
-	return struct{}{}
+func (tw *TrxWrapper) DelJson(key string, path string) {
+	tw.DelKey("json::" + key + "::" + path)
+}
+
+func (tw *TrxWrapper) GetJson(key string, path string) (map[string]any, error) {
+	b := tw.GetBytes("json::" + key + "::" + path)
+	m := map[string]any{}
+	e := json.Unmarshal(b, &m)
+	if e != nil {
+		return m, e
+	}
+	return m, nil
 }
 
 func (tw *TrxWrapper) GetPriKey(key string) *rsa.PrivateKey {
@@ -166,6 +210,30 @@ func (tw *TrxWrapper) GetPriKey(key string) *rsa.PrivateKey {
 		}
 		return privateKey
 	}
+}
+
+func (tw *TrxWrapper) GetLinksList(p string, offset int, count int) ([]string, error) {
+	prefix := []byte("link::" + p)
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = true
+	opts.Prefix = prefix
+	it := tw.dbTrx.NewIterator(opts)
+	defer it.Close()
+	m := []string{}
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		item := it.Item()
+		itemKey := item.Key()
+		m = append(m, string(itemKey))
+	}
+	return m, nil
+}
+
+func (tw *TrxWrapper) GetObjList(typ string, objIds []string) (map[string]map[string][]byte, error) {
+	m := map[string]map[string][]byte{}
+	for _, id := range objIds {
+		m[id] = tw.GetObj(typ, id)
+	}
+	return m, nil
 }
 
 func (tw *TrxWrapper) GetPubKey(key string) *rsa.PublicKey {

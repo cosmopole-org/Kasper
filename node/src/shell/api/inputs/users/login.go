@@ -9,15 +9,7 @@ func (d LoginInput) GetData() any {
 	return "dummy"
 }
 
-func (d LoginInput) GetSpaceId() string {
-	return ""
-}
-
-func (d LoginInput) GetTopicId() string {
-	return ""
-}
-
-func (d LoginInput) GetMemberId() string {
+func (d LoginInput) GetPointId() string {
 	return ""
 }
 

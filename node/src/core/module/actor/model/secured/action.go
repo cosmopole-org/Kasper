@@ -8,9 +8,7 @@ import (
 	"kasper/src/abstract/models/input"
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/state"
-	modulelogger "kasper/src/core/module/logger"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
-	modulemodel "kasper/src/shell/layer1/model"
 )
 
 type Parse func(interface{}) (input.IInput, error)
@@ -19,12 +17,11 @@ type SecureAction struct {
 	action.IAction
 	core    core.ICore
 	Guard   *Guard
-	logger  *modulelogger.Logger
 	Parsers map[string]Parse
 }
 
-func NewSecureAction(action action.IAction, guard *Guard, core core.ICore, logger *modulelogger.Logger, parsers map[string]Parse) *SecureAction {
-	return &SecureAction{action, core, guard, logger, parsers}
+func NewSecureAction(action action.IAction, guard *Guard, core core.ICore, parsers map[string]Parse) *SecureAction {
+	return &SecureAction{action, core, guard, parsers}
 }
 
 func (a *SecureAction) HasGlobalParser() bool {
