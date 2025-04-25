@@ -30,20 +30,18 @@ func (wm *Elpis) Assign(machineId string) {
 			astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 			data := string(a.([]byte))
 			dataParts := strings.Split(data, " ")
-			if dataParts[1] == "topics/send" {
+			if dataParts[1] == "points/signal" {
 				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
-				var inp inputs_points.SendInput
+				var inp inputs_points.SignalInput
 				e := json.Unmarshal([]byte(data), &inp)
 				if e != nil {
 					log.Println(e)
 				}
-				spaceId := C.CString(inp.SpaceId)
-				topicId := C.CString(inp.TopicId)
-				memberId := C.CString(inp.MemberId)
-				recvId := C.CString(inp.RecvId)
+				pointId := C.CString(inp.PointId)
+				userId := C.CString(inp.UserId)
 				sendType := C.CString(inp.Type)
 				inputData := C.CString(inp.Data)
-				C.runVm(astPath, sendType, spaceId, topicId, memberId, recvId, inputData)
+				C.runVm(astPath, sendType, pointId, userId, inputData)
 			}
 		},
 	})

@@ -2277,15 +2277,12 @@ public:
     this->end = end;
   }
 
-  void executeOnUpdate(const char *sendType, const char *spaceId, const char *topicId,
-                       const char *memberId, const char *recvId, Ref input,
-                       bool isCritical = false)
+  void executeOnUpdate(const char *sendType, const char *pointId, const char *userId,
+                       Ref input, bool isCritical = false)
   {
     this->mem.add("sendType", new pair<uint32_t, any>(str_t, string(sendType)));
-    this->mem.add("spaceId", new pair<uint32_t, any>(str_t, string(spaceId)));
-    this->mem.add("topicId", new pair<uint32_t, any>(str_t, string(topicId)));
-    this->mem.add("memberId", new pair<uint32_t, any>(str_t, string(memberId)));
-    this->mem.add("recvId", new pair<uint32_t, any>(str_t, string(recvId)));
+    this->mem.add("pointId", new pair<uint32_t, any>(str_t, string(pointId)));
+    this->mem.add("userId", new pair<uint32_t, any>(str_t, string(userId)));
     this->mem.add("inputData", new pair<uint32_t, any>(obj_t, input));
     this->execute(isCritical);
   }

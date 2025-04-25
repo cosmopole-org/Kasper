@@ -7,7 +7,6 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/packet"
 	"log"
-	"os"
 	"sync"
 
 	"github.com/dgraph-io/badger"
@@ -105,9 +104,9 @@ func (sm *StorageManager) GenId(origin string) string {
 	}
 }
 
-func NewStorage(core core.ICore, storageRoot string) *StorageManager {
+func NewStorage(core core.ICore, storageRoot string, baseDbPath string) *StorageManager {
 	log.Println("connecting to database...")
-	kvdb, err := badger.Open(badger.DefaultOptions(os.Getenv("BASE_DB_PATH")).WithSyncWrites(true))
+	kvdb, err := badger.Open(badger.DefaultOptions(baseDbPath).WithSyncWrites(true))
 	if err != nil {
 		panic(err)
 	}

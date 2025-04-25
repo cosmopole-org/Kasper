@@ -98,6 +98,11 @@ func RunNet() error {
 		return err
 	}
 
+	federationPort, err := strconv.ParseInt(os.Getenv("FEDERATION_API_PORT"), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+
 	app.Load(
 		[]string{
 			"keyhan",
@@ -107,6 +112,8 @@ func RunNet() error {
 			"babbleEngine": engine,
 			"babbleProxy":  proxy,
 			"appletDbPath": os.Getenv("APPLET_DB_PATH"),
+			"baseDbPath": os.Getenv("BASE_DB_PATH"),
+			"federationPort": int(federationPort),
 		},
 	)
 	

@@ -7,10 +7,8 @@ extern "C"
     void runVm(
         const char *astPath,
         const char *sendType,
-        const char *spaceId,
-        const char *topicId,
-        const char *memberId,
-        const char *recvId,
+        const char *pointId,
+        const char *userId,
         const char *inputData
     );
 #ifdef __cplusplus

@@ -6,7 +6,6 @@ import (
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
-	modulelogger "kasper/src/core/module/logger"
 	models "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
@@ -270,7 +269,7 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 	return nil
 }
 
-func NewDocker(core core.ICore, logger *modulelogger.Logger, storageRoot string, storage storage.IStorage, file file.IFile) *Docker {
+func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, file file.IFile) *Docker {
 	client, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		log.Println("Unable to create docker client: ", err.Error())

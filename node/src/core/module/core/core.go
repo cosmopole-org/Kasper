@@ -32,6 +32,18 @@ import (
 	mach_model "kasper/src/shell/machiner/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
+
+	driver_docker "kasper/src/drivers/docker"
+	driver_elpis "kasper/src/drivers/elpis"
+	driver_wasm "kasper/src/drivers/wasm"
+    driver_storage "kasper/src/drivers/storage"
+	driver_file "kasper/src/drivers/file"
+	driver_network "kasper/src/drivers/network"
+	driver_security "kasper/src/drivers/security"
+	driver_signaler "kasper/src/drivers/signaler"
+
+	driver_network_fed "kasper/src/drivers/network/federation"
+
 	"log"
 	"net"
 	"sort"
@@ -49,14 +61,46 @@ import (
 )
 
 type Tools struct {
-	Security security.ISecurity
-	Signaler signaler.ISignaler
-	Storage  storage.IStorage
-	Network  network.INetwork
-	File     file.IFile
-	Wasm     wasm.IWasm
-	Elpis    elpis.IElpis
-	Docker   docker.IDocker
+	security security.ISecurity
+	signaler signaler.ISignaler
+	storage  storage.IStorage
+	network  network.INetwork
+	file     file.IFile
+	wasm     wasm.IWasm
+	elpis    elpis.IElpis
+	docker   docker.IDocker
+}
+
+func (t *Tools) Security() security.ISecurity {
+	return t.security
+}
+
+func (t *Tools) Signaler() signaler.ISignaler {
+	return t.signaler
+}
+
+func (t *Tools) Storage() storage.IStorage {
+	return t.storage
+}
+
+func (t *Tools) Network() network.INetwork {
+	return t.network
+}
+
+func (t *Tools) File() file.IFile {
+	return t.file
+}
+
+func (t *Tools) Wasm() wasm.IWasm {
+	return t.wasm
+}
+
+func (t *Tools) Elpis() elpis.IElpis {
+	return t.elpis
+}
+
+func (t *Tools) Docker() docker.IDocker {
+	return t.docker
 }
 
 type Core struct {
@@ -520,6 +564,32 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 
 	engine := args["babbleEngine"].(*babble.Babble)
 	proxy := args["babbleProxy"].(*inmem.InmemProxy)
+	sroot := args["storageRoot"].(string)
+	bdbPath := args["baseDbPath"].(string)
+	adbPath := args["appletDbPath"].(string)
+	fedPort := args["federationPort"].(int)
+
+	dnFederation := driver_network_fed.FirstStageBackFill(c)
+	dstorage := driver_storage.NewStorage(c, sroot, bdbPath)
+	dsignaler := driver_signaler.NewSignaler(c.id, dnFederation)
+	dsecurity := driver_security.New(sroot, dstorage, dsignaler)	
+	dNetwork := driver_network.NewNetwork(c, dstorage, dsecurity, dsignaler)
+	dFile := driver_file.NewFileTool(sroot)
+	dDocker := driver_docker.NewDocker(c, sroot, dstorage, dFile)
+	dWasm := driver_wasm.NewWasm(c, sroot, dstorage, adbPath, dDocker, dFile)
+	dElpis := driver_elpis.NewElpis(c, sroot, dstorage)
+	dnFederation.SecondStageForFill(fedPort, dstorage, dFile, dsignaler)
+
+	c.tools = &Tools{
+		signaler: dsignaler,
+		storage: dstorage,
+		security: dsecurity,
+		network: dNetwork,
+		file: dFile,
+		docker: dDocker,
+		wasm: dWasm,
+		elpis: dElpis,
+	}
 
 	c.chain = make(chan any, 1)
 	future.Async(func() {

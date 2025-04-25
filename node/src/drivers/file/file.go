@@ -6,14 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	modulelogger "kasper/src/core/module/logger"
 	"log"
 	"mime/multipart"
 	"os"
 )
 
 type File struct {
-	logger *modulelogger.Logger
+	
 }
 
 func (g *File) CheckFileFromStorage(storageRoot string, topicId string, key string) bool {
@@ -38,7 +37,7 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 	defer func(f multipart.File) {
 		err := f.Close()
 		if err != nil {
-			g.logger.Println(err)
+			log.Println(err)
 		}
 	}(f)
 	log.Println("opened received file.")
@@ -53,7 +52,7 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 	defer func(dest *os.File) {
 		err := dest.Close()
 		if err != nil {
-			g.logger.Println(err)
+			log.Println(err)
 		}
 	}(dest)
 	log.Println("opened created file.")
@@ -76,7 +75,7 @@ func (g *File) SaveDataToStorage(storageRoot string, data []byte, topicId string
 	defer func(dest *os.File) {
 		err := dest.Close()
 		if err != nil {
-			g.logger.Println(err)
+			log.Println(err)
 		}
 	}(dest)
 	log.Println("opened created file.")
@@ -100,7 +99,7 @@ func (g *File) SaveTarFileItemToStorage(storageRoot string, fh *tar.Reader, topi
 	defer func(dest *os.File) {
 		err := dest.Close()
 		if err != nil {
-			g.logger.Println(err)
+			log.Println(err)
 		}
 	}(dest)
 	if _, err := io.Copy(dest, fh); err != nil {
@@ -154,7 +153,7 @@ func (g *File) SaveFileToGlobalStorage(storageRoot string, fh *multipart.FileHea
 	defer func(f multipart.File) {
 		err := f.Close()
 		if err != nil {
-			g.logger.Println(err)
+			log.Println(err)
 		}
 	}(f)
 	buf := bytes.NewBuffer(nil)
@@ -164,7 +163,7 @@ func (g *File) SaveFileToGlobalStorage(storageRoot string, fh *multipart.FileHea
 	if g.CheckFileFromGlobalStorage(storageRoot, key) {
 		err := os.Remove(fmt.Sprintf("%s/%s", dirPath, key))
 		if err != nil {
-			g.logger.Println(err)
+			log.Println(err)
 		}
 	}
 	var flags = 0
@@ -180,7 +179,7 @@ func (g *File) SaveFileToGlobalStorage(storageRoot string, fh *multipart.FileHea
 	defer func(dest *os.File) {
 		err := dest.Close()
 		if err != nil {
-			g.logger.Println(err)
+			log.Println(err)
 		}
 	}(dest)
 	if _, err = dest.Write(buf.Bytes()); err != nil {
@@ -210,7 +209,7 @@ func (g *File) SaveDataToGlobalStorage(storageRoot string, data []byte, key stri
 	defer func(dest *os.File) {
 		err := dest.Close()
 		if err != nil {
-			g.logger.Println(err)
+			log.Println(err)
 		}
 	}(dest)
 	if _, err = dest.Write(data); err != nil {
@@ -219,9 +218,8 @@ func (g *File) SaveDataToGlobalStorage(storageRoot string, data []byte, key stri
 	return nil
 }
 
-func NewFileTool(logger *modulelogger.Logger, storageRoot string) *File {
+func NewFileTool(storageRoot string) *File {
 	ft := &File{}
-	ft.logger = logger
 	var dirPath = fmt.Sprintf("%s/files", storageRoot)
 	err := os.MkdirAll(dirPath, os.ModePerm)
 	if err != nil {

@@ -42,7 +42,7 @@ func (wm *Wasm) Assign(machineId string) {
 			astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 			data := string(a.([]byte))
 			dataParts := strings.Split(data, " ")
-			if dataParts[1] == "topics/send" {
+			if dataParts[1] == "points/signal" {
 				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
 				input := C.CString(data)
 				C.wasmRunVm(astPath, input, machId)

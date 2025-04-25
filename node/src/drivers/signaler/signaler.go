@@ -5,7 +5,7 @@ import (
 	"kasper/src/abstract/adapters/network"
 	"kasper/src/abstract/adapters/signaler"
 	packetmodel "kasper/src/abstract/models/packet"
-	module_logger "kasper/src/core/module/logger"
+	"log"
 	"strings"
 	"sync"
 
@@ -17,7 +17,7 @@ const updatePrefix = "update "
 const responsePrefix = "response "
 
 type Signaler struct {
-	Lock           sync.Mutex
+	lock           sync.Mutex
 	appId          string
 	listeners      *cmap.ConcurrentMap[string, *signaler.Listener]
 	groups         *cmap.ConcurrentMap[string, *signaler.Group]
@@ -25,7 +25,6 @@ type Signaler struct {
 	LGroupDisabled bool
 	JListener      *signaler.JoinListener
 	Federation     network.IFederation
-	logger         *module_logger.Logger
 }
 
 func (p *Signaler) Listeners() *cmap.ConcurrentMap[string, *signaler.Listener] {
@@ -36,9 +35,17 @@ func (p *Signaler) Groups() *cmap.ConcurrentMap[string, *signaler.Group] {
 	return p.groups
 }
 
+func (p *Signaler) Lock() {
+	p.lock.Lock()
+}
+
+func (p *Signaler) Unlock() {
+	p.lock.Unlock()
+}
+
 func (p *Signaler) ListenToSingle(listener *signaler.Listener) {
-	p.Lock.Lock()
-	defer p.Lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 	p.listeners.Set(listener.Id, listener)
 }
 
@@ -77,7 +84,7 @@ func (p *Signaler) SignalUser(key string, respondToId string, listenerId string,
 				default:
 					msg, err := json.Marshal(d)
 					if err != nil {
-						p.logger.Println(err)
+						log.Println(err)
 						return
 					}
 					message = string(msg)
@@ -99,7 +106,7 @@ func (p *Signaler) SignalUser(key string, respondToId string, listenerId string,
 		default:
 			msg, err := json.Marshal(d)
 			if err != nil {
-				p.logger.Println(err)
+				log.Println(err)
 				return
 			}
 			message = string(msg)
@@ -124,7 +131,7 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 			default:
 				msg, err := json.Marshal(d)
 				if err != nil {
-					p.logger.Println(err)
+					log.Println(err)
 					return
 				}
 				message = msg
@@ -177,7 +184,7 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 		default:
 			msg, err := json.Marshal(d)
 			if err != nil {
-				p.logger.Println(err)
+				log.Println(err)
 				return
 			}
 			message = string(msg)
@@ -218,13 +225,12 @@ func (p *Signaler) RetriveGroup(groupId string) (*signaler.Group, bool) {
 	return p.groups.Get(groupId)
 }
 
-func NewSignaler(appId string, logger *module_logger.Logger, federation network.IFederation) *Signaler {
-	logger.Println("creating signaler...")
+func NewSignaler(appId string, federation network.IFederation) signaler.ISignaler {
+	log.Println("creating signaler...")
 	newMap := cmap.New[*signaler.Group]()
 	lisMap := cmap.New[*signaler.Listener]()
 	return &Signaler{
 		appId:          appId,
-		logger:         logger,
 		listeners:      &lisMap,
 		groups:         &newMap,
 		LGroupDisabled: false,

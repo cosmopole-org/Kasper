@@ -131,8 +131,7 @@ public:
     function<char *(char *)> callback;
     std::string id;
     std::string machineId;
-    std::string spaceId;
-    std::string topicId;
+    std::string pointId;
     int index;
     Trx *trx;
     uint64_t instCounter{1};
@@ -156,7 +155,7 @@ public:
     atomic<int> step = 0;
 
     void prepareLooper();
-    WasmMac(std::string machineId, std::string spaceId, std::string topicId, std::string modPath, function<char *(char *)> cb);
+    WasmMac(std::string machineId, std::string pointId, std::string modPath, function<char *(char *)> cb);
     WasmMac(std::string machineId, std::string vmId, int index, std::string modPath, function<char *(char *)> cb);
     void registerHost(std::string modPath);
     void registerFunction(WasmEdge_ModuleInstanceContext *HostMod, char *name, WasmEdge_HostFunc_t fn, WasmEdge_ValType *ParamList, int paramsLength, WasmEdge_ValType *ReturnList);
@@ -466,13 +465,12 @@ void WasmMac::prepareLooper()
       printf("ended!\n"); });
 }
 
-WasmMac::WasmMac(std::string machineId, std::string spaceId, std::string topicId, std::string modPath, function<char *(char *)> cb)
+WasmMac::WasmMac(std::string machineId, std::string pointId, std::string modPath, function<char *(char *)> cb)
 {
     this->onchain = false;
     this->callback = cb;
     this->machineId = machineId;
-    this->spaceId = spaceId;
-    this->topicId = topicId;
+    this->pointId = pointId;
     this->id = "";
     this->index = 0;
     this->trx = new Trx();
@@ -878,8 +876,7 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     json j;
     j["key"] = "submitOnchainTrx";
     json j2;
-    j2["spaceId"] = rt->spaceId;
-    j2["topicId"] = rt->topicId;
+    j2["pointId"] = rt->pointId;
     j2["machineId"] = rt->machineId;
     j2["targetMachineId"] = targetMachineId;
     j2["key"] = key;
@@ -951,8 +948,7 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     j["key"] = "runDocker";
     json j2;
     j2["machineId"] = rt->machineId;
-    j2["spaceId"] = rt->spaceId;
-    j2["topicId"] = rt->topicId;
+    j2["pointId"] = rt->pointId;
     j2["inputFiles"] = text;
     j2["imageName"] = imageName;
     j["input"] = j2;

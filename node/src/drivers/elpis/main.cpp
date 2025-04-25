@@ -616,13 +616,11 @@ pair<uint32_t, any>* parseJsonObject(json jsonObj)
 }
 
 void runVm(
-    const char *astPath,
-    const char *sendType,
-    const char *spaceId,
-    const char *topicId,
-    const char *memberId,
-    const char *recvId,
-    const char *inputData)
+  const char *astPath,
+  const char *sendType,
+  const char *pointId,
+  const char *userId,
+  const char *inputData)
 {
   FILE *file = fopen(astPath, "r+");
   if (file == NULL)
@@ -641,5 +639,5 @@ void runVm(
   int *res;
   rt->prepare(1 + 1, bytes_read + 1 + 1 + 1, res);
   json inp = json::parse(inputData);
-  rt->executeOnUpdate(sendType, spaceId, topicId, memberId, recvId, any_cast<Ref>(parseJsonObject(inp)->second), true);
+  rt->executeOnUpdate(sendType, pointId, userId, any_cast<Ref>(parseJsonObject(inp)->second), true);
 }

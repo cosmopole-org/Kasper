@@ -34,10 +34,9 @@ void wasmRunVm(
     char *machineId)
 {
   json j = json::parse(input);
-  json topic = j["topic"];
-  std::string spaceId = topic["spaceId"].template get<std::string>();
-  std::string topicId = topic["id"].template get<std::string>();
-  auto rt = new WasmMac(machineId, spaceId, topicId, astPath, wasmCallback);
+  json point = j["point"];
+  std::string pointId = point["id"].template get<std::string>();
+  auto rt = new WasmMac(machineId, pointId, astPath, wasmCallback);
   rt->executeOnUpdate(input);
   rt->finalize();
 }
