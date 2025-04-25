@@ -6,15 +6,14 @@ import (
 	"kasper/src/abstract/state"
 	inputs_points "kasper/src/shell/api/inputs/points"
 	"kasper/src/shell/api/model"
-	outputs_points "kasper/src/shell/api/outputs/spaces"
-	outputsspaces "kasper/src/shell/api/outputs/spaces"
+	outputs_points "kasper/src/shell/api/outputs/points"
 	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/future"
 	"log"
 )
 
 type Actions struct {
-	app core.ICore
+	App core.ICore
 }
 
 func Install(a *Actions) error {
@@ -29,12 +28,12 @@ func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInp
 	}
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.UserId, "true")
 	trx.PutLink("memberof::"+input.UserId+"::"+state.Info().PointId(), "true")
-	a.app.Tools().Signaler().JoinGroup(state.Info().PointId(), input.UserId)
+	a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), input.UserId)
 	user := model.User{Id: input.UserId}.Pull(trx)
 	future.Async(func() {
-		a.app.Tools().Signaler().SignalGroup("spaces/addMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("spaces/addMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
 	}, false)
-	return outputsspaces.AddMemberOutput{}, nil
+	return outputs_points.AddMemberOutput{}, nil
 }
 
 // UpdateMember /spaces/updateMember check [ true true true ] access [ true false false false POST ]
@@ -48,10 +47,10 @@ func (a *Actions) UpdateMember(state state.IState, input inputs_points.UpdateMem
 	obj, e := trx.GetJson("member_"+state.Info().PointId()+"_"+input.UserId, "meta")
 	if e == nil {
 		future.Async(func() {
-			a.app.Tools().Signaler().SignalGroup("spaces/updateMember", state.Info().PointId(), updates_points.UpdateMember{PointId: state.Info().PointId(), User: user, Metadata: obj}, true, []string{state.Info().UserId()})
+			a.App.Tools().Signaler().SignalGroup("spaces/updateMember", state.Info().PointId(), updates_points.UpdateMember{PointId: state.Info().PointId(), User: user, Metadata: obj}, true, []string{state.Info().UserId()})
 		}, false)
 	}
-	return outputsspaces.UpdateMemberOutput{Metadata: obj}, nil
+	return outputs_points.UpdateMemberOutput{Metadata: obj}, nil
 }
 
 // ReadMembers /spaces/readMembers check [ true true false ] access [ true false false false POST ]
@@ -61,7 +60,7 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 	if err != nil {
 		return nil, err
 	}
-	return outputsspaces.ReadMemberOutput{Members: members}, nil
+	return outputs_points.ReadMemberOutput{Members: members}, nil
 }
 
 // RemoveMember /spaces/removeMember check [ true true false ] access [ true false false false POST ]
@@ -75,24 +74,24 @@ func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMem
 	}
 	trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.UserId)
 	trx.DelKey("link::memberof::" + input.UserId + "::" + state.Info().PointId())
-	a.app.Tools().Signaler().LeaveGroup(state.Info().PointId(), input.UserId)
+	a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), input.UserId)
 	user := model.User{Id: input.UserId}.Pull(trx)
 	future.Async(func() {
-		a.app.Tools().Signaler().SignalGroup("spaces/removeMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("spaces/removeMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
 	}, false)
-	return outputsspaces.AddMemberOutput{}, nil
+	return outputs_points.AddMemberOutput{}, nil
 }
 
 // Create /spaces/create check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (any, error) {
 	trx := state.Trx()
-	point := model.Point{Id: a.app.Tools().Storage().GenId(input.Origin()), IsPublic: input.IsPublic}
+	point := model.Point{Id: a.App.Tools().Storage().GenId(input.Origin()), IsPublic: input.IsPublic}
 	point.Push(trx)
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
 	trx.PutLink("admin::"+point.Id+"::"+state.Info().UserId(), "true")
-	a.app.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
-	return outputsspaces.CreateOutput{Point: point}, nil
+	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
+	return outputs_points.CreateOutput{Point: point}, nil
 }
 
 // Update /spaces/update check [ true false false ] access [ true false false false PUT ]
@@ -105,9 +104,9 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 	point.IsPublic = input.IsPublic
 	point.Push(trx)
 	future.Async(func() {
-		a.app.Tools().Signaler().SignalGroup("spaces/update", point.Id, updates_points.Update{Point: point}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("spaces/update", point.Id, updates_points.Update{Point: point}, true, []string{state.Info().UserId()})
 	}, false)
-	return outputsspaces.UpdateOutput{Point: point}, nil
+	return outputs_points.UpdateOutput{Point: point}, nil
 }
 
 // Delete /spaces/delete check [ true false false ] access [ true false false false DELETE ]
@@ -118,11 +117,11 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
 	trx.DelKey("obj::Point::" + point.Id)
-	a.app.Tools().Signaler().LeaveGroup(point.Id, state.Info().UserId())
+	a.App.Tools().Signaler().LeaveGroup(point.Id, state.Info().UserId())
 	future.Async(func() {
-		a.app.Tools().Signaler().SignalGroup("spaces/delete", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("spaces/delete", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
 	}, false)
-	return outputsspaces.DeleteOutput{Point: point}, nil
+	return outputs_points.DeleteOutput{Point: point}, nil
 }
 
 // Get /spaces/get check [ true false false ] access [ true false false false GET ]
@@ -133,12 +132,12 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 	}
 	point := model.Point{Id: input.PointId}.Pull(trx)
 	if point.IsPublic {
-		return outputsspaces.GetOutput{Point: point}, nil
+		return outputs_points.GetOutput{Point: point}, nil
 	}
 	if trx.GetLink("member::"+input.PointId+"::"+state.Info().UserId()) != "true" {
 		return nil, errors.New("access to private point denied")
 	}
-	return outputsspaces.GetOutput{Point: point}, nil
+	return outputs_points.GetOutput{Point: point}, nil
 }
 
 // Read /spaces/read check [ true false false ] access [ true false false false GET ]
@@ -149,7 +148,7 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 		log.Println(err)
 		return nil, err
 	}
-	return outputsspaces.ReadOutput{Points: points}, nil
+	return outputs_points.ReadOutput{Points: points}, nil
 }
 
 // Join /spaces/join check [ true false false ] access [ true false false false POST ]
@@ -164,12 +163,12 @@ func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, 
 	}
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
-	a.app.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
+	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
 	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	future.Async(func() {
-		a.app.Tools().Signaler().SignalGroup("spaces/join", point.Id, updates_points.Join{PointId: point.Id, User: user}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("spaces/join", point.Id, updates_points.Join{PointId: point.Id, User: user}, true, []string{state.Info().UserId()})
 	}, false)
-	return outputsspaces.JoinOutput{}, nil
+	return outputs_points.JoinOutput{}, nil
 }
 
 // Send /points/signal check [ true true true ] access [ true false false false POST ]
@@ -179,12 +178,12 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SendInput) (any
 	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	if input.Type == "broadcast" {
 		var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data}
-		a.app.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
 		return outputs_points.SendOutput{Passed: true}, nil
 	} else if input.Type == "single" {
 		if trx.GetLink("member::" + point.Id + "::" + input.UserId) == "true" {
 			var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data}
-			a.app.Tools().Signaler().SignalUser("points/signal", "", input.UserId, p, true)
+			a.App.Tools().Signaler().SignalUser("points/signal", "", input.UserId, p, true)
 			return outputs_points.SendOutput{Passed: true}, nil
 		}
 	}

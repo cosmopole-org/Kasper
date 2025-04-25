@@ -13,7 +13,7 @@ import (
 )
 
 type Actions struct {
-	app core.ICore
+	App core.ICore
 }
 
 func Install(a *Actions) error {
@@ -31,14 +31,14 @@ func (a *Actions) Upload(state state.IState, input inputs_storage.UploadInput) (
 		if file.OwnerId != state.Info().UserId() {
 			return nil, errors.New("access to file control denied")
 		}
-		if err := a.app.Tools().File().SaveFileToStorage(a.app.Tools().Storage().StorageRoot(), input.Data, state.Info().PointId(), input.FileId); err != nil {
+		if err := a.App.Tools().File().SaveFileToStorage(a.App.Tools().Storage().StorageRoot(), input.Data, state.Info().PointId(), input.FileId); err != nil {
 			log.Println(err)
 			return nil, err
 		}
 		return map[string]any{}, nil
 	} else {
-		var file = models.File{Id: a.app.Tools().Storage().GenId(input.Origin()), OwnerId: state.Info().UserId(), PointId: state.Info().PointId()}
-		if err := a.app.Tools().File().SaveFileToStorage(a.app.Tools().Storage().StorageRoot(), input.Data, state.Info().PointId(), file.Id); err != nil {
+		var file = models.File{Id: a.App.Tools().Storage().GenId(input.Origin()), OwnerId: state.Info().UserId(), PointId: state.Info().PointId()}
+		if err := a.App.Tools().File().SaveFileToStorage(a.App.Tools().Storage().StorageRoot(), input.Data, state.Info().PointId(), file.Id); err != nil {
 			log.Println(err)
 			return nil, err
 		}
@@ -63,19 +63,19 @@ func (a *Actions) UploadData(state state.IState, input inputs_storage.UploadData
 			log.Println(err)
 			return nil, err
 		}
-		if err := a.app.Tools().File().SaveDataToStorage(a.app.Tools().Storage().StorageRoot(), data, state.Info().PointId(), input.FileId); err != nil {
+		if err := a.App.Tools().File().SaveDataToStorage(a.App.Tools().Storage().StorageRoot(), data, state.Info().PointId(), input.FileId); err != nil {
 			log.Println(err)
 			return nil, err
 		}
 		return map[string]any{}, nil
 	} else {
-		var file = models.File{Id: a.app.Tools().Storage().GenId(input.Origin()), OwnerId: state.Info().UserId(), PointId: state.Info().PointId()}
+		var file = models.File{Id: a.App.Tools().Storage().GenId(input.Origin()), OwnerId: state.Info().UserId(), PointId: state.Info().PointId()}
 		data, err := base64.StdEncoding.DecodeString(input.Data)
 		if err != nil {
 			log.Println(err)
 			return nil, err
 		}
-		if err := a.app.Tools().File().SaveDataToStorage(a.app.Tools().Storage().StorageRoot(), data, state.Info().PointId(), file.Id); err != nil {
+		if err := a.App.Tools().File().SaveDataToStorage(a.App.Tools().Storage().StorageRoot(), data, state.Info().PointId(), file.Id); err != nil {
 			log.Println(err)
 			return nil, err
 		}
@@ -94,5 +94,5 @@ func (a *Actions) Download(state state.IState, input inputs_storage.DownloadInpu
 	if file.PointId != state.Info().PointId() {
 		return nil, errors.New("access to file denied")
 	}
-	return packet.Command{Value: "sendFile", Data: fmt.Sprintf("%s/files/%s/%s", a.app.Tools().Storage().StorageRoot(), state.Info().PointId(), input.FileId)}, nil
+	return packet.Command{Value: "sendFile", Data: fmt.Sprintf("%s/files/%s/%s", a.App.Tools().Storage().StorageRoot(), state.Info().PointId(), input.FileId)}, nil
 }

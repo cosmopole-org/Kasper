@@ -15,29 +15,29 @@
 			
 		)
 
-		func PlugThePlugger(layer abstract.ILayer, plugger interface{}) {
+		func PlugThePlugger(core core.ICore, plugger interface{}) {
 			s := reflect.TypeOf(plugger)
 			for i := 0; i < s.NumMethod(); i++ {
 				f := s.Method(i)
 				if f.Name != "Install" {
 					result := f.Func.Call([]reflect.Value{reflect.ValueOf(plugger)})
 					action := result[0].Interface().(abstract.IAction)
-					layer.Actor().InjectAction(action)
+					core.Actor().InjectAction(action)
 				}
 			}
 		}
 	
-		func PlugAll(layer abstract.ILayer, logger *module_logger.Logger, core abstract.ICore) {
+		func PlugAll(core core.ICore) {
 		
-				a_message := &action_message.Actions{Layer: layer}
-				p_message := plugger_message.New(a_message, logger, core)
-				PlugThePlugger(layer, p_message)
-				p_message.Install(layer, a_message)
+				a_message := &action_message.Actions{App: core}
+				p_message := plugger_message.New(a_message, core)
+				PlugThePlugger(p_message)
+				p_message.Install(a_message)
 			
-				a_report := &action_report.Actions{Layer: layer}
-				p_report := plugger_report.New(a_report, logger, core)
-				PlugThePlugger(layer, p_report)
-				p_report.Install(layer, a_report)
+				a_report := &action_report.Actions{App: core}
+				p_report := plugger_report.New(a_report, core)
+				PlugThePlugger(p_report)
+				p_report.Install(a_report)
 			
 		}
 		

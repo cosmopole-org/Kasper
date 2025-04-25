@@ -14,7 +14,7 @@ import (
 )
 
 type Actions struct {
-	app core.ICore
+	App core.ICore
 }
 
 func Install(a *Actions) error {
@@ -33,7 +33,7 @@ func (a *Actions) Create(state state.IState, input inputsinvites.CreateInput) (a
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
 	trx.PutLink("invite::"+point.Id+"::"+input.UserId, "true")
 	future.Async(func() {
-		a.app.Tools().Signaler().SignalUser("invites/create", "", input.UserId, updatesinvites.Create{PointId: point.Id}, true)
+		a.App.Tools().Signaler().SignalUser("invites/create", "", input.UserId, updatesinvites.Create{PointId: point.Id}, true)
 	}, false)
 	return outputsinvites.CreateOutput{}, nil
 }
@@ -49,7 +49,7 @@ func (a *Actions) Cancel(state state.IState, input inputsinvites.CancelInput) (a
 	}
 	trx.DelKey("link::invite::" + state.Info().PointId() + "::" + input.UserId)
 	future.Async(func() {
-		a.app.Tools().Signaler().SignalUser("invites/cancel", "", input.UserId, updatesinvites.Cancel{PointId: state.Info().PointId()}, true)
+		a.App.Tools().Signaler().SignalUser("invites/cancel", "", input.UserId, updatesinvites.Cancel{PointId: state.Info().PointId()}, true)
 	}, false)
 	return outputsinvites.CancelOutput{}, nil
 }
@@ -62,7 +62,7 @@ func (a *Actions) Accept(state state.IState, input inputsinvites.AcceptInput) (a
 	}
 	trx.DelKey("link::invite::" + input.PointId + "::" + state.Info().UserId())
 	trx.PutLink("member::"+input.PointId+"::"+state.Info().UserId(), "true")
-	a.app.Tools().Signaler().JoinGroup(input.PointId, state.Info().UserId())
+	a.App.Tools().Signaler().JoinGroup(input.PointId, state.Info().UserId())
 	admins, err := trx.GetLinksList("admin::"+input.PointId+"::", -1, -1)
 	if err != nil {
 		log.Println(err)
@@ -70,12 +70,12 @@ func (a *Actions) Accept(state state.IState, input inputsinvites.AcceptInput) (a
 	}
 	for _, admin := range admins {
 		future.Async(func() {
-			a.app.Tools().Signaler().SignalUser("invites/accept", "", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
+			a.App.Tools().Signaler().SignalUser("invites/accept", "", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
 		}, false)
 	}
 	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	future.Async(func() {
-		a.app.Tools().Signaler().SignalGroup("spaces/userJoined", input.PointId, updates_points.Join{PointId: input.PointId, User: user}, true, []string{})
+		a.App.Tools().Signaler().SignalGroup("spaces/userJoined", input.PointId, updates_points.Join{PointId: input.PointId, User: user}, true, []string{})
 	}, false)
 	return outputsinvites.AcceptOutput{}, nil
 }
@@ -94,7 +94,7 @@ func (a *Actions) Decline(state state.IState, input inputsinvites.DeclineInput) 
 	}
 	for _, admin := range admins {
 		future.Async(func() {
-			a.app.Tools().Signaler().SignalUser("invites/decline", "", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
+			a.App.Tools().Signaler().SignalUser("invites/decline", "", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
 		}, false)
 	}
 	return outputsinvites.DeclineOutput{}, nil

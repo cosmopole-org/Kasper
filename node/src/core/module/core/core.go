@@ -17,7 +17,6 @@ import (
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/adapters/tools"
 	"kasper/src/abstract/adapters/wasm"
-	"kasper/src/abstract/models/action"
 	iaction "kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/chain"
 	"kasper/src/abstract/models/core"
@@ -75,7 +74,7 @@ type Core struct {
 	elecStartTime  int64
 	executors      map[string]bool
 	appPendingTrxs []*worker.Trx
-	actionStore    action.IActor
+	actionStore    iaction.IActor
 	privKey        *rsa.PrivateKey
 }
 
@@ -105,7 +104,7 @@ func NewCore(_ string) *Core {
 	}
 }
 
-func (c *Core) Actor() action.IActor {
+func (c *Core) Actor() iaction.IActor {
 	return c.actionStore
 }
 
@@ -411,14 +410,16 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 				return
 			}
 			var input input.IInput
-			i, bodyData, signature, err2 := action.(iaction.ISecureAction).ParseInput("fed", string(packet.Payload))
+			i, err2 := action.(iaction.ISecureAction).ParseInput("fed", string(packet.Payload))
 			if err2 != nil {
 				log.Println(err2)
-				c.ExecBaseResponseOnChain(packet.RequestId, packet.Payload, packet.Signatures[1], 400, "input parsing error", []update.Update{})
+				errText := "input parsing error"
+			    signature := c.SignPacket([]byte(errText))
+				c.ExecBaseResponseOnChain(packet.RequestId, []byte{}, signature, 400, errText, []update.Update{})
 				return
 			}
 			input = i
-			action.(iaction.ISecureAction).SecurlyActChain(userId, packet.RequestId, bodyData, signature, input, packet.Submitter)
+			action.(iaction.ISecureAction).SecurlyActChain(userId, packet.RequestId, packet.Payload, packet.Signatures[1], input, packet.Submitter)
 			break
 		}
 	case "appRequest":

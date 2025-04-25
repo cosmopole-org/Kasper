@@ -9,7 +9,7 @@ import (
 )
 
 type Actions struct {
-	app core.ICore
+	App core.ICore
 }
 
 func Install(a *Actions) error {

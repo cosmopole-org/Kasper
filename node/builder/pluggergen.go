@@ -20,7 +20,7 @@ func main() {
 
 		import (
 			"reflect"
-			"kasper/src/abstract"
+			iaction "kasper/src/abstract/models/action"
 			module_logger "kasper/src/core/module/logger"
 
 		`
@@ -41,26 +41,26 @@ func main() {
 		code += `
 		)
 
-		func PlugThePlugger(layer abstract.ILayer, plugger interface{}) {
+		func PlugThePlugger(core core.ICore, plugger interface{}) {
 			s := reflect.TypeOf(plugger)
 			for i := 0; i < s.NumMethod(); i++ {
 				f := s.Method(i)
 				if f.Name != "Install" {
 					result := f.Func.Call([]reflect.Value{reflect.ValueOf(plugger)})
-					action := result[0].Interface().(abstract.IAction)
-					layer.Actor().InjectAction(action)
+					action := result[0].Interface().(iaction.IAction)
+					core.Actor().InjectAction(action)
 				}
 			}
 		}
 	
-		func PlugAll(layer abstract.ILayer, logger *module_logger.Logger, core abstract.ICore) {
+		func PlugAll(core core.ICore) {
 		`
 		for _, serviceName := range serviceNames {
 			code += `
-				a_` + serviceName + ` := &action_` + serviceName + `.Actions{Layer: layer}
-				p_` + serviceName + ` := plugger_` + serviceName + `.New(a_` + serviceName + `, logger, core)
-				PlugThePlugger(layer, p_` + serviceName + `)
-				p_` + serviceName + `.Install(layer, a_` + serviceName + `)
+				a_` + serviceName + ` := &action_` + serviceName + `.Actions{App: core}
+				p_` + serviceName + ` := plugger_` + serviceName + `.New(a_` + serviceName + `, core)
+				PlugThePlugger(p_` + serviceName + `)
+				p_` + serviceName + `.Install(a_` + serviceName + `)
 			`
 		}
 		code += `
@@ -108,40 +108,38 @@ func build(pluggerName string, serviceName string, serviceRoot string) {
 	package plugger_` + serviceName + `
 
 	import (
-		"kasper/src/abstract"
+		"kasper/src/abstract/models/core"
 		"kasper/src/shell/utils"
-		module_logger "kasper/src/core/module/logger"
+	    iaction "kasper/src/abstract/models/action"
 		actions "kasper/src/` + pluggerName + `/actions/` + serviceName + `"
-		"kasper/src/shell/layer2/model"
 	)
 	
 	type Plugger struct {
 		Id      *string
 		Actions *actions.Actions
-		Logger *module_logger.Logger
-		Core abstract.ICore
+		Core core.ICore
 	}
 	`
 	for _, funcName := range funcNames {
 		code += `
-		func (c *Plugger) ` + funcName + `() abstract.IAction {
-			return utils.ExtractSecureAction(c.Logger, c.Core, c.Actions.` + funcName + `)
+		func (c *Plugger) ` + funcName + `() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.` + funcName + `)
 		}
 		`
 	}
 	code +=
 		`
-	func (c *Plugger) Install(layer abstract.ILayer, a *actions.Actions) *Plugger {
-		err := actions.Install(abstract.UseToolbox[*module_model.ToolboxL2](layer.Core().Get(2).Tools()).Storage(), a)
+	func (c *Plugger) Install(a *actions.Actions) *Plugger {
+		err := actions.Install(a)
 		if err != nil {
 			panic(err)
 		}
 		return c
 	}
 
-	func New(actions *actions.Actions, logger *module_logger.Logger, core abstract.ICore) *Plugger {
+	func New(actions *actions.Actions, core core.ICore) *Plugger {
 		id := "` + serviceName + `"
-		return &Plugger{Id: &id, Actions: actions, Core: core, Logger: logger}
+		return &Plugger{Id: &id, Actions: actions, Core: core}
 	}
 	`
 	writeToFile(resultFolder+"/"+serviceName+".go", code)

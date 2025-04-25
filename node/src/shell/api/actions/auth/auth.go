@@ -9,7 +9,7 @@ import (
 )
 
 type Actions struct {
-	app core.ICore
+	App core.ICore
 }
 
 func Install(a *Actions) error {
@@ -18,13 +18,13 @@ func Install(a *Actions) error {
 
 // GetServerPublicKey /auths/getServerPublicKey check [ false false false ] access [ true false false false GET ]
 func (a *Actions) GetServerPublicKey(_ state.IState, _ inputsauth.GetServerKeyInput) (any, error) {
-	return &outputsauth.GetServerKeyOutput{PublicKey: string(a.app.Tools().Security().FetchKeyPair("server_key")[1])}, nil
+	return &outputsauth.GetServerKeyOutput{PublicKey: string(a.App.Tools().Security().FetchKeyPair("server_key")[1])}, nil
 }
 
 // GetServersMap /auths/getServersMap check [ false false false ] access [ true false false false GET ]
 func (a *Actions) GetServersMap(_ state.IState, _ inputsauth.GetServersMapInput) (any, error) {
 	m := []string{}
-	for _, peer := range a.app.Chain().Peers.Peers {
+	for _, peer := range a.App.Chain().Peers.Peers {
 		arr := strings.Split(peer.NetAddr, ":")
 		m = append(m, strings.Join(arr[0:len(arr)-1], ":"))
 	}
