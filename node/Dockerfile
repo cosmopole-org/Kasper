@@ -40,7 +40,7 @@ RUN apt install -y golang
 ENV GOPROXY=https://goproxy.io,direct
 ENV DOCKER_API_VERSION=1.39
 
-RUN apt install -y redis-server
+RUN mkdir /app/storage
 
 COPY . .
 # COPY .babble /.babble

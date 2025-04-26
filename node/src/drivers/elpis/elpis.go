@@ -1,6 +1,8 @@
 package elpis
 
 /*
+ #cgo CXXFLAGS: -std=c++17
+
  #include "main.h"
 */
 import "C"

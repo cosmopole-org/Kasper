@@ -46,6 +46,7 @@ func (tw *TrxWrapper) Commit() {
 
 func (tw *TrxWrapper) DelKey(key string) {
 	tw.dbTrx.Delete([]byte(key))
+	tw.Changes = append(tw.Changes, update.Update{Typ: "del", Key: key})
 }
 
 func (tw *TrxWrapper) HasObj(typ string, key string) bool {
@@ -53,8 +54,8 @@ func (tw *TrxWrapper) HasObj(typ string, key string) bool {
 	return e == nil
 }
 
-func (tw *TrxWrapper) GetIndex(typ string, objId string, fromColumn string, toColumn string) string {
-	item, e := tw.dbTrx.Get([]byte("index::" + typ + "::" + objId + "::" + fromColumn + "::" + toColumn))
+func (tw *TrxWrapper) GetIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) string {
+	item, e := tw.dbTrx.Get([]byte("index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal))
 	if e != nil {
 		return ""
 	} else {
@@ -62,8 +63,13 @@ func (tw *TrxWrapper) GetIndex(typ string, objId string, fromColumn string, toCo
 	}
 }
 
-func (tw *TrxWrapper) HasIndex(typ string, objId string, fromColumn string, toColumn string) bool {
-	_, e := tw.dbTrx.Get([]byte("index::" + typ + "::" + objId + "::" + fromColumn + "::" + toColumn))
+func (tw *TrxWrapper) PutIndex(typ string, fromColumn string, toColumn string, fromColumnVal string, toColumnVal []byte) {
+	tw.dbTrx.Set([]byte("index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal), toColumnVal)
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal, Val: toColumnVal})
+}
+
+func (tw *TrxWrapper) HasIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) bool {
+	_, e := tw.dbTrx.Get([]byte("index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal))
 	return e == nil
 }
 
@@ -78,10 +84,12 @@ func (tw *TrxWrapper) GetLink(key string) string {
 
 func (tw *TrxWrapper) PutLink(key string, value string) {
 	tw.dbTrx.Set([]byte("link::"+key), []byte(value))
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "link::"+key, Val: []byte(value)})
 }
 
 func (tw *TrxWrapper) PutBytes(key string, value []byte) {
 	tw.dbTrx.Set([]byte(key), value)
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: key, Val: value})
 }
 
 func (tw *TrxWrapper) GetBytes(key string) []byte {
@@ -95,6 +103,7 @@ func (tw *TrxWrapper) GetBytes(key string) []byte {
 
 func (tw *TrxWrapper) PutString(key string, value string) {
 	tw.dbTrx.Set([]byte(key), []byte(value))
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: key, Val: []byte(value)})
 }
 
 func (tw *TrxWrapper) GetString(key string) string {
@@ -134,6 +143,7 @@ func (tw *TrxWrapper) PutObj(typ string, key string, keys map[string][]byte) {
 	prefix := "obj::" + typ + "::" + key + "::"
 	for k, v := range keys {
 		tw.dbTrx.Set([]byte(prefix+k), v)
+		tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: prefix+k, Val: v})
 	}
 }
 
@@ -192,24 +202,12 @@ func (tw *TrxWrapper) GetJson(key string, path string) (map[string]any, error) {
 	return m, nil
 }
 
-func (tw *TrxWrapper) GetPriKey(key string) *rsa.PrivateKey {
-	res := tw.GetString("obj::User::" + key + "::privateKey")
-	if res == "" {
-		return nil
-	} else {
-		pemData := "-----BEGIN RSA PRIVATE KEY-----\n" + res + "\n-----END RSA PRIVATE KEY-----\n"
-		block, _ := pem.Decode([]byte(pemData))
-		if block == nil || block.Type != "RSA PRIVATE KEY" {
-			log.Println("failed to decode PEM block containing private key")
-			return nil
-		}
-		privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-		if err != nil {
-			log.Println(err)
-			return nil
-		}
-		return privateKey
+func (tw *TrxWrapper) GetObjList(typ string, objIds []string) (map[string]map[string][]byte, error) {
+	m := map[string]map[string][]byte{}
+	for _, id := range objIds {
+		m[id] = tw.GetObj(typ, id)
 	}
+	return m, nil
 }
 
 func (tw *TrxWrapper) GetLinksList(p string, offset int, count int) ([]string, error) {
@@ -228,12 +226,24 @@ func (tw *TrxWrapper) GetLinksList(p string, offset int, count int) ([]string, e
 	return m, nil
 }
 
-func (tw *TrxWrapper) GetObjList(typ string, objIds []string) (map[string]map[string][]byte, error) {
-	m := map[string]map[string][]byte{}
-	for _, id := range objIds {
-		m[id] = tw.GetObj(typ, id)
+func (tw *TrxWrapper) GetPriKey(key string) *rsa.PrivateKey {
+	res := tw.GetString("obj::User::" + key + "::privateKey")
+	if res == "" {
+		return nil
+	} else {
+		pemData := "-----BEGIN RSA PRIVATE KEY-----\n" + res + "\n-----END RSA PRIVATE KEY-----\n"
+		block, _ := pem.Decode([]byte(pemData))
+		if block == nil || block.Type != "RSA PRIVATE KEY" {
+			log.Println("failed to decode PEM block containing private key")
+			return nil
+		}
+		privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			log.Println(err)
+			return nil
+		}
+		return privateKey
 	}
-	return m, nil
 }
 
 func (tw *TrxWrapper) GetPubKey(key string) *rsa.PublicKey {

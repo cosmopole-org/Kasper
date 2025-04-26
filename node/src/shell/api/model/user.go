@@ -22,6 +22,7 @@ func (d User) Push(trx trx.ITrx) {
 		"username":  []byte(d.Username),
 		"publicKey": []byte(d.PublicKey),
 	})
+	trx.PutIndex("User", "username", "id", d.Username, []byte(d.Id))
 }
 
 func (d User) Pull(trx trx.ITrx) User {

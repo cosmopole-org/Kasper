@@ -7,12 +7,11 @@ FASTSYNC=${2:-false}
 WEBRTC=${3:-false}
 MPWD=$(pwd)
 
-docker network create \
-  --driver=bridge \
-  --subnet=172.77.0.0/16 \
-  --ip-range=172.77.0.0/16 \
-  --gateway=172.77.5.254 \
-  babblenet
+echo "Creating keyspace"
+
+docker exec -it logsdb cqlsh 172.77.5.9 9042 -e "create keyspace kasper with replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };"
+docker exec -it logsdb cqlsh 172.77.5.9 9042 -e "create table kasper.storage(id UUID, point_id text, user_id text, data text, PRIMARY KEY(id));"
+docker exec -it logsdb cqlsh 172.77.5.9 9042 -e "create index on kasper.storage(data);"
 
 if "$WEBRTC"; then
     # Start the signaling server (necessary with webrtc transport). The volume

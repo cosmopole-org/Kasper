@@ -30,17 +30,18 @@ import (
 	mainstate "kasper/src/core/module/actor/model/state"
 	module_trx "kasper/src/core/module/actor/model/trx"
 	mach_model "kasper/src/shell/machiner/model"
+	actor "kasper/src/core/module/actor"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
 
 	driver_docker "kasper/src/drivers/docker"
 	driver_elpis "kasper/src/drivers/elpis"
-	driver_wasm "kasper/src/drivers/wasm"
-    driver_storage "kasper/src/drivers/storage"
 	driver_file "kasper/src/drivers/file"
 	driver_network "kasper/src/drivers/network"
 	driver_security "kasper/src/drivers/security"
 	driver_signaler "kasper/src/drivers/signaler"
+	driver_storage "kasper/src/drivers/storage"
+	driver_wasm "kasper/src/drivers/wasm"
 
 	driver_network_fed "kasper/src/drivers/network/federation"
 
@@ -145,6 +146,7 @@ func NewCore(_ string) *Core {
 		elections:      nil,
 		elecReg:        false,
 		executors:      execs,
+		actionStore:    actor.NewActor(),
 	}
 }
 
@@ -458,7 +460,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 			if err2 != nil {
 				log.Println(err2)
 				errText := "input parsing error"
-			    signature := c.SignPacket([]byte(errText))
+				signature := c.SignPacket([]byte(errText))
 				c.ExecBaseResponseOnChain(packet.RequestId, []byte{}, signature, 400, errText, []update.Update{})
 				return
 			}
@@ -567,12 +569,13 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	sroot := args["storageRoot"].(string)
 	bdbPath := args["baseDbPath"].(string)
 	adbPath := args["appletDbPath"].(string)
+	ldbPath := args["pointLogsDb"].(string)
 	fedPort := args["federationPort"].(int)
 
 	dnFederation := driver_network_fed.FirstStageBackFill(c)
-	dstorage := driver_storage.NewStorage(c, sroot, bdbPath)
+	dstorage := driver_storage.NewStorage(c, sroot, bdbPath, ldbPath)
 	dsignaler := driver_signaler.NewSignaler(c.id, dnFederation)
-	dsecurity := driver_security.New(sroot, dstorage, dsignaler)	
+	dsecurity := driver_security.New(sroot, dstorage, dsignaler)
 	dNetwork := driver_network.NewNetwork(c, dstorage, dsecurity, dsignaler)
 	dFile := driver_file.NewFileTool(sroot)
 	dDocker := driver_docker.NewDocker(c, sroot, dstorage, dFile)
@@ -582,13 +585,13 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 
 	c.tools = &Tools{
 		signaler: dsignaler,
-		storage: dstorage,
+		storage:  dstorage,
 		security: dsecurity,
-		network: dNetwork,
-		file: dFile,
-		docker: dDocker,
-		wasm: dWasm,
-		elpis: dElpis,
+		network:  dNetwork,
+		file:     dFile,
+		docker:   dDocker,
+		wasm:     dWasm,
+		elpis:    dElpis,
 	}
 
 	c.chain = make(chan any, 1)

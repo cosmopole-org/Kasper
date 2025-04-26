@@ -13,8 +13,9 @@ type IModel[T any] interface {
 type ITrx interface {
 	DelKey(key string)
 	HasObj(typ string, key string) bool
-	GetIndex(typ string, objId string, fromColumn string, toColumn string) string
-	HasIndex(typ string, objId string, fromColumn string, toColumn string) bool
+	GetIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) string
+	PutIndex(typ string, fromColumn string, toColumn string, fromColumnVal string, toColumnVal []byte)
+	HasIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) bool
 	GetColumn(typ string, objId string, columnName string) []byte
 	GetLinksList(p string, offset int, count int) ([]string, error)
 	GetObjList(typ string, objIds []string) (map[string]map[string][]byte, error)

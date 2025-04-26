@@ -3,7 +3,6 @@ package commands
 import (
 	"encoding/json"
 	"log"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,7 +20,6 @@ import (
 	plugger_api "kasper/src/shell/api/main"
 	outputs_users "kasper/src/shell/api/outputs/users"
 	plugger_machiner "kasper/src/shell/machiner/main"
-	"kasper/src/shell/utils/future"
 
 	"kasper/src/babble"
 	"kasper/src/proxy/inmem"
@@ -57,18 +55,6 @@ func NewRunCmd() *cobra.Command {
 var exit = make(chan int, 1)
 
 func RunNet() error {
-
-	future.Async(func() {
-		cmnd := exec.Command("tidb-server")
-		cmnd.Start()
-	}, false)
-
-	future.Async(func() {
-		cmnd := exec.Command("redis-server")
-		cmnd.Start()
-	}, false)
-
-	time.Sleep(5 * time.Second)
 
 	logger := new(module_logger.Logger)
 
@@ -114,6 +100,7 @@ func RunNet() error {
 			"appletDbPath": os.Getenv("APPLET_DB_PATH"),
 			"baseDbPath": os.Getenv("BASE_DB_PATH"),
 			"federationPort": int(federationPort),
+			"pointLogsDb": os.Getenv("POINT_LOGS_DB"),
 		},
 	)
 	
@@ -132,7 +119,7 @@ func RunNet() error {
 
 	var sampleBotUserId string
 	app.ModifyState(false, func(trx trx.ITrx) {
-		_, res, err := app.Actor().FetchAction("/users/login").Act(actor_state.NewState(actor_info.NewInfo("", ""), trx), inputs_users.LoginInput{
+		_, res, err := app.Actor().FetchAction("/users/register").Act(actor_state.NewState(actor_info.NewInfo("", ""), trx), inputs_users.LoginInput{
 			Username: "sampleBot",
 		})
 		if err != nil {

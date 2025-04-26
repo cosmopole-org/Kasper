@@ -50,7 +50,7 @@ func (sm *StorageManager) ReadPointLogs(pointId string) []packet.LogPacket {
 		var id gocql.UUID
 		var userId string
 		var data string
-			err = scanner.Scan(&id, &userId, &data)
+		err = scanner.Scan(&id, &userId, &data)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -72,13 +72,14 @@ func (sm *StorageManager) GenId(origin string) string {
 		var counter int64 = 0
 		if err != nil {
 			counter = 0
+		} else {
+			var b []byte
+			item.Value(func(val []byte) error {
+				b = val
+				return nil
+			})
+			counter = int64(binary.BigEndian.Uint64(b))
 		}
-		var b []byte
-		item.Value(func(val []byte) error {
-			b = val
-			return nil
-		})
-		counter = int64(binary.BigEndian.Uint64(b))
 		counter++
 		nextB := [8]byte{}
 		binary.BigEndian.PutUint64(nextB[:], uint64(counter))
@@ -89,13 +90,14 @@ func (sm *StorageManager) GenId(origin string) string {
 		var counter int64 = 0
 		if err != nil {
 			counter = 0
+		} else {
+			var b []byte
+			item.Value(func(val []byte) error {
+				b = val
+				return nil
+			})
+			counter = int64(binary.BigEndian.Uint64(b))
 		}
-		var b []byte
-		item.Value(func(val []byte) error {
-			b = val
-			return nil
-		})
-		counter = int64(binary.BigEndian.Uint64(b))
 		counter++
 		nextB := [8]byte{}
 		binary.BigEndian.PutUint64(nextB[:], uint64(counter))
@@ -104,14 +106,14 @@ func (sm *StorageManager) GenId(origin string) string {
 	}
 }
 
-func NewStorage(core core.ICore, storageRoot string, baseDbPath string) *StorageManager {
+func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPath string) *StorageManager {
 	log.Println("connecting to database...")
 	kvdb, err := badger.Open(badger.DefaultOptions(baseDbPath).WithSyncWrites(true))
 	if err != nil {
 		panic(err)
 	}
-	cluster := gocql.NewCluster("localhost:9042")
-	cluster.Keyspace = "example"
+	cluster := gocql.NewCluster(logsDbPath)
+	cluster.Keyspace = "kasper"
 	cluster.Consistency = gocql.Quorum
 	session, err := cluster.CreateSession()
 	if err != nil {

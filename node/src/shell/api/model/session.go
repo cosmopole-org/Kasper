@@ -15,6 +15,7 @@ func (d Session) Push(trx trx.ITrx) {
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
 		"userId": []byte(d.UserId),
 	})
+	trx.PutIndex(d.Type(), "userId", "id", d.UserId, []byte(d.Id))
 }
 
 func (d Session) Pull(trx trx.ITrx) Session {
