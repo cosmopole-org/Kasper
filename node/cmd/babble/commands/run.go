@@ -104,14 +104,14 @@ func RunNet() error {
 		},
 	)
 	
-	portStr := os.Getenv("MAINPORT")
+	portStr := os.Getenv("CLIENT_API_PORT")
 	port, _ := strconv.ParseInt(portStr, 10, 64)
 	plugger_api.PlugAll(app)
 	plugger_machiner.PlugAll(app)
 
 	app.Tools().Network().Run(
 		map[string]int{
-			"http": int(port),
+			"tcp": int(port),
 		},
 	)
 

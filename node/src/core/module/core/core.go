@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"kasper/src/abstract/adapters/docker"
@@ -27,10 +29,10 @@ import (
 	"kasper/src/abstract/models/worker"
 	"kasper/src/abstract/state"
 	"kasper/src/babble"
+	actor "kasper/src/core/module/actor"
 	mainstate "kasper/src/core/module/actor/model/state"
 	module_trx "kasper/src/core/module/actor/model/trx"
 	mach_model "kasper/src/shell/machiner/model"
-	actor "kasper/src/core/module/actor"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
 
@@ -245,6 +247,13 @@ func (c *Core) ExecBaseRequestOnChain(key string, payload []byte, signature stri
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
 	c.chainCallbacks[callbackId] = &chain.ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
+	for i := 0; i < 10; i++ {
+		log.Println()
+	}
+	log.Println("test")
+	for i := 0; i < 10; i++ {
+		log.Println()
+	}
 	future.Async(func() {
 		c.chain <- chain.ChainBaseRequest{Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload}
 	}, false)
@@ -259,6 +268,7 @@ func (c *Core) ExecBaseResponseOnChain(callbackId string, packet []byte, signatu
 func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	log.Println(string(trxPayload))
 	switch typ {
 	case "election":
 		{
@@ -582,6 +592,17 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	dWasm := driver_wasm.NewWasm(c, sroot, dstorage, adbPath, dDocker, dFile)
 	dElpis := driver_elpis.NewElpis(c, sroot, dstorage)
 	dnFederation.SecondStageForFill(fedPort, dstorage, dFile, dsignaler)
+
+	pemData := dsecurity.FetchKeyPair("server_key")[0]
+	block, _ := pem.Decode([]byte(pemData))
+	if block == nil || block.Type != "RSA PRIVATE KEY" {
+		panic("failed to decode PEM block containing private key")
+	}
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		panic(err)
+	}
+	c.privKey = privateKey
 
 	c.tools = &Tools{
 		signaler: dsignaler,

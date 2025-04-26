@@ -17,6 +17,7 @@ import (
 	"kasper/src/shell/api/model"
 	models "kasper/src/shell/api/model"
 	outputsusers "kasper/src/shell/api/outputs/users"
+	"log"
 
 	"github.com/mitchellh/mapstructure"
 )
@@ -59,7 +60,8 @@ func (a *Actions) Authenticate(state state.IState, _ inputsusers.AuthenticateInp
 // Register /users/register check [ false false false ] access [ true false false false POST ]
 func (a *Actions) Register(state state.IState, input inputsusers.LoginInput) (any, error) {
 	trx := state.Trx()
-	if trx.HasIndex("User", "username", "id", input.Username+"@"+a.App.Id()) {
+	log.Println("hi")
+	if !trx.HasIndex("User", "username", "id", input.Username+"@"+a.App.Id()) {
 		key, err := rsa.GenerateKey(rand.Reader, 4096)
 		if err != nil {
 			return nil, err

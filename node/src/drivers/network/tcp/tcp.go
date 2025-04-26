@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"kasper/src/abstract/adapters/signaler"
 	"kasper/src/abstract/models/core"
-	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
@@ -35,19 +34,22 @@ type Tcp struct {
 }
 
 func (t *Tcp) Listen(port int) {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	for {
-		conn, err := ln.Accept()
+	future.Async(func() {
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err != nil {
 			fmt.Println(err)
-			continue
+			return
 		}
-		future.Async(func() { t.handleConnection(conn) }, false)
-	}
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			log.Println("new client connected")
+			future.Async(func() { t.handleConnection(conn) }, false)
+		}
+	}, true)
 }
 
 func (t *Tcp) handleConnection(conn net.Conn) {
@@ -82,6 +84,8 @@ func (t *Tcp) handleConnection(conn net.Conn) {
 				copy(readData[oldReadCount:], buf[:readLength-(readCount-length)])
 				copy(buf[0:readCount-length], buf[readLength-(readCount-length):readLength])
 				readCount = readLength - (readCount - length)
+				log.Println("packet received")
+				log.Println(string(readData))
 				socket.processPacket(readData)
 				break
 			} else {
@@ -171,7 +175,7 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 
 func (t *Socket) handleResultOfFunc(requestId string, result any) {
 	switch result := result.(type) {
-	case packet.Command:
+	case packetmodel.Command:
 		if result.Value == "sendFile" {
 			content, _ := t.app.Tools().File().ReadFileByPath(result.Data)
 			t.writeResponse(requestId, 0, content, true)
@@ -183,35 +187,33 @@ func (t *Socket) handleResultOfFunc(requestId string, result any) {
 	}
 }
 
-func (t *Socket) connectListener(uid string) (*signaler.Listener) {
+func (t *Socket) connectListener(uid string) *signaler.Listener {
 	t.app.Tools().Signaler().Lock()
 	defer t.app.Tools().Signaler().Unlock()
-	var lis *signaler.Listener
-	lisTemp, found := t.app.Tools().Signaler().Listeners().Get(uid)
-	if found {
-		lis = lisTemp
-	}
-	lis = &signaler.Listener{
-		Id:      uid,
-		Paused:  false,
-		DisTime: 0,
-		Signal: func(b any) {
-			if b != nil {
-				t.writeUpdate(b, false)
-			}
-			t.Lock.Lock()
-			defer t.Lock.Unlock()
-			if len(t.Buffer) > 0 {
-				if t.Ack {
-					t.Ack = false
-					_, err := t.Conn.Write(t.Buffer[0])
-					if err != nil {
-						t.Ack = true
-						log.Println(err)
+	lis, found := t.app.Tools().Signaler().Listeners().Get(uid)
+	if !found {
+		lis = &signaler.Listener{
+			Id:      uid,
+			Paused:  false,
+			DisTime: 0,
+			Signal: func(b any) {
+				if b != nil {
+					t.writeUpdate(b, false)
+				}
+				t.Lock.Lock()
+				defer t.Lock.Unlock()
+				if len(t.Buffer) > 0 {
+					if t.Ack {
+						t.Ack = false
+						_, err := t.Conn.Write(t.Buffer[0])
+						if err != nil {
+							t.Ack = true
+							log.Println(err)
+						}
 					}
 				}
-			}
-		},
+			},
+		}
 	}
 	t.Ack = true
 	return lis
@@ -220,22 +222,31 @@ func (t *Socket) connectListener(uid string) (*signaler.Listener) {
 func (t *Socket) processPacket(packet []byte) {
 	pointer := 0
 	signatureLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+	log.Println("signature length:", signatureLength)
 	pointer += 4
 	signature := string(packet[pointer : pointer+signatureLength])
 	pointer += signatureLength
+	log.Println("signature:", signature)
 	userIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
+	log.Println("userId length:", userIdLength)
 	userId := string(packet[pointer : pointer+userIdLength])
 	pointer += userIdLength
+	log.Println("userId:", userId)
 	pathLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
+	log.Println("path length:", pathLength)
 	path := string(packet[pointer : pointer+pathLength])
 	pointer += pathLength
+	log.Println("path:", path)
 	packetIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
+	log.Println("packetId length:", packetIdLength)
 	packetId := string(packet[pointer : pointer+packetIdLength])
 	pointer += packetIdLength
+	log.Println("packetId:", packetId)
 	payload := packet[pointer:]
+	log.Println(string(payload))
 
 	var lis *signaler.Listener
 	if path == "packet_received" {
@@ -264,7 +275,7 @@ func (t *Socket) processPacket(packet []byte) {
 			lis = t.connectListener(userId)
 			var pointIds []string
 			t.app.ModifyState(true, func(trx trx.ITrx) {
-				pIds, err := trx.GetLinksList("memberof::" + userId + "::", -1, -1)
+				pIds, err := trx.GetLinksList("memberof::"+userId+"::", -1, -1)
 				if err != nil {
 					log.Println(err)
 					pointIds = []string{}
@@ -299,6 +310,8 @@ func (t *Socket) processPacket(packet []byte) {
 		return
 	}
 
+	log.Println("hi")
+
 	statusCode, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, packetId, payload, signature, input, t.Conn.RemoteAddr().String())
 	if statusCode == 1 {
 		t.handleResultOfFunc(packetId, result)
@@ -314,5 +327,6 @@ func (t *Socket) processPacket(packet []byte) {
 }
 
 func NewTcp(app core.ICore) *Tcp {
-	return &Tcp{app: app}
+	m := cmap.New[*Socket]()
+	return &Tcp{app: app, sockets: &m}
 }
