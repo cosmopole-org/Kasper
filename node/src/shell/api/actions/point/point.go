@@ -85,7 +85,7 @@ func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMem
 // Create /spaces/create check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (any, error) {
 	trx := state.Trx()
-	point := model.Point{Id: a.App.Tools().Storage().GenId(input.Origin()), IsPublic: input.IsPublic}
+	point := model.Point{Id: a.App.Tools().Storage().GenId(state.Source()), IsPublic: *input.IsPublic}
 	point.Push(trx)
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")

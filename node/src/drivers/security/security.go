@@ -41,7 +41,7 @@ type LastPos struct {
 }
 
 type Location struct {
-	PointId  string
+	PointId string
 }
 
 const keysFolderName = "keys"
@@ -146,16 +146,17 @@ func (sm *Security) HasAccessToPoint(userId string, pointId string) bool {
 	}
 	found := false
 	sm.app.ModifyState(true, func(trx trx.ITrx) {
-		if trx.GetLink("member::" + userId + "::" + pointId) == "true" {
+		if trx.GetLink("member::"+userId+"::"+pointId) == "true" {
 			found = true
 		}
 	})
 	return found
 }
 
-func New(storageRoot string, storage storage.IStorage, signaler signaler.ISignaler) security.ISecurity {
+func New(core core.ICore, storageRoot string, storage storage.IStorage, signaler signaler.ISignaler) security.ISecurity {
 	vaidate.LoadValidationSystem()
 	s := &Security{
+		app:         core,
 		storage:     storage,
 		signaler:    signaler,
 		storageRoot: storageRoot,

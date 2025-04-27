@@ -58,7 +58,7 @@ func (t *Tcp) handleConnection(conn net.Conn) {
 		t.sockets.Remove(connId)
 		conn.Close()
 	}()
-	socket := &Socket{Buffer: [][]byte{}, Conn: conn, app: t.app}
+	socket := &Socket{Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true}
 	t.sockets.Set(connId, socket)
 	lenBuf := make([]byte, 4)
 	buf := make([]byte, 1024)
@@ -87,6 +87,7 @@ func (t *Tcp) handleConnection(conn net.Conn) {
 				log.Println("packet received")
 				log.Println(string(readData))
 				socket.processPacket(readData)
+				readCount -= length
 				break
 			} else {
 				copy(readData[oldReadCount:readCount], buf[:readLength])
@@ -124,16 +125,17 @@ func (t *Socket) writeUpdate(updatePack any, writeRaw bool) {
 	defer t.Lock.Unlock()
 
 	t.Buffer = append(t.Buffer, packet)
+	t.pushBuffer()
 }
 
 func (t *Socket) writeResponse(requestId string, resCode int, response any, writeRaw bool) {
 
 	b1 := []byte(requestId)
 	b1Len := make([]byte, 4)
-	binary.BigEndian.PutUint64(b1Len, uint64(len(b1)))
+	binary.BigEndian.PutUint32(b1Len, uint32(len(b1)))
 
 	b2 := make([]byte, 4)
-	binary.BigEndian.PutUint64(b2, uint64(resCode))
+	binary.BigEndian.PutUint32(b2, uint32(resCode))
 
 	var b3 []byte
 	if writeRaw {
@@ -147,7 +149,7 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 		}
 	}
 	b3Len := make([]byte, 4)
-	binary.BigEndian.PutUint64(b3Len, uint64(len(b3)))
+	binary.BigEndian.PutUint32(b3Len, uint32(len(b3)))
 
 	packet := make([]byte, 1+len(b1Len)+len(b1)+len(b2)+len(b3Len)+len(b3))
 	pointer := 1
@@ -171,6 +173,20 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 	defer t.Lock.Unlock()
 
 	t.Buffer = append(t.Buffer, packet)
+	t.pushBuffer()
+}
+
+func (t *Socket) pushBuffer() {
+	if t.Ack {
+		if len(t.Buffer) > 0 {
+			t.Ack = false
+			_, err := t.Conn.Write(t.Buffer[0])
+			if err != nil {
+				t.Ack = true
+				log.Println(err)
+			}
+		}
+	}
 }
 
 func (t *Socket) handleResultOfFunc(requestId string, result any) {
@@ -220,6 +236,26 @@ func (t *Socket) connectListener(uid string) *signaler.Listener {
 }
 
 func (t *Socket) processPacket(packet []byte) {
+	if len(packet) == len([]byte("packet_received")) && string(packet) == "packet_received" {
+		send := func() {
+			t.Lock.Lock()
+			defer t.Lock.Unlock()
+			t.Ack = true
+			if len(t.Buffer) > 0 {
+				t.Buffer = t.Buffer[1:]
+				if len(t.Buffer) > 0 {
+					t.Ack = false
+					_, err := t.Conn.Write(t.Buffer[0])
+					if err != nil {
+						t.Ack = true
+						log.Println(err)
+					}
+				}
+			}
+		}
+		send()
+		return
+	}
 	pointer := 0
 	signatureLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	log.Println("signature length:", signatureLength)
@@ -249,26 +285,6 @@ func (t *Socket) processPacket(packet []byte) {
 	log.Println(string(payload))
 
 	var lis *signaler.Listener
-	if path == "packet_received" {
-		send := func() {
-			t.Lock.Lock()
-			defer t.Lock.Unlock()
-			t.Ack = true
-			if len(t.Buffer) > 0 {
-				t.Buffer = t.Buffer[1:]
-				if len(t.Buffer) > 0 {
-					t.Ack = false
-					_, err := t.Conn.Write(t.Buffer[0])
-					if err != nil {
-						t.Ack = true
-						log.Println(err)
-					}
-				}
-			}
-		}
-		send()
-		return
-	}
 	if path == "authenticate" {
 		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
 		if success {
@@ -310,11 +326,14 @@ func (t *Socket) processPacket(packet []byte) {
 		return
 	}
 
-	log.Println("hi")
+	log.Println("hello 1.........")
 
 	statusCode, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, packetId, payload, signature, input, t.Conn.RemoteAddr().String())
+	log.Println("hello 2.........")
 	if statusCode == 1 {
+		log.Println("hello 3.........")
 		t.handleResultOfFunc(packetId, result)
+		log.Println("hello 4.........")
 		return
 	} else if err != nil {
 		httpStatusCode := 3

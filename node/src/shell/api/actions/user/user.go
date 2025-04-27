@@ -14,12 +14,9 @@ import (
 	"kasper/src/core/module/actor/model/base"
 	mainstate "kasper/src/core/module/actor/model/state"
 	inputsusers "kasper/src/shell/api/inputs/users"
-	"kasper/src/shell/api/model"
 	models "kasper/src/shell/api/model"
 	outputsusers "kasper/src/shell/api/outputs/users"
 	"log"
-
-	"github.com/mitchellh/mapstructure"
 )
 
 type Actions struct {
@@ -94,11 +91,20 @@ func (a *Actions) Register(state state.IState, input inputsusers.LoginInput) (an
 			return nil, err2
 		}
 		var response outputsusers.CreateOutput
-		mapstructure.Decode(res, &response)
+		b, e := json.Marshal(res)
+		if e != nil {
+			log.Println(e)
+			return nil, e
+		}
+		e = json.Unmarshal(b, &response)
+		if e != nil {
+			log.Println(e)
+			return nil, e
+		}
 		return outputsusers.LoginOutput{User: response.User, Session: response.Session, PrivateKey: privKey}, nil
 	} else {
-		user := model.User{Id: trx.GetIndex("User", "username", "id", input.Username+"@"+a.App.Id())}.Pull(trx)
-		session := model.Session{Id: trx.GetIndex("Session", "userId", "id", user.Id)}.Pull(trx)
+		user := models.User{Id: trx.GetIndex("User", "username", "id", input.Username+"@"+a.App.Id())}.Pull(trx)
+		session := models.Session{Id: trx.GetIndex("Session", "userId", "id", user.Id)}.Pull(trx)
 		return outputsusers.LoginOutput{User: user, Session: session, PrivateKey: ""}, nil
 	}
 }
@@ -110,10 +116,10 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 		session models.Session
 	)
 	trx := state.Trx()
-	if trx.HasIndex("User", "username", "id", input.Username+"@"+state.Dummy()) {
+	if trx.HasIndex("User", "username", "id", input.Username+"@"+state.Source()) {
 		return nil, errors.New("username already exists")
 	}
-	user = models.User{Id: a.App.Tools().Storage().GenId(input.Origin()), Typ: "human", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Dummy()}
+	user = models.User{Id: a.App.Tools().Storage().GenId(input.Origin()), Typ: "human", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
 	session = models.Session{Id: a.App.Tools().Storage().GenId(input.Origin()), UserId: user.Id}
 	user.Push(trx)
 	session.Push(trx)

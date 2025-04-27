@@ -40,6 +40,7 @@ type ICore interface {
 	NewHgHandler() *HgHandler
 	IpAddr() string
 	ModifyState(bool, func(trx.ITrx))
+	ModifyStateSecurlyWithSource(readonly bool, info info.IInfo, src string, fn func(state.IState))
 	ModifyStateSecurly(readonly bool, info info.IInfo, fn func(state.IState))
 	SignPacket(data []byte) string
 }

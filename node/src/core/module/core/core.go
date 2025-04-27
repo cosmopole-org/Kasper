@@ -156,6 +156,13 @@ func (c *Core) Actor() iaction.IActor {
 	return c.actionStore
 }
 
+func (c *Core) ModifyStateSecurlyWithSource(readonly bool, info info.IInfo, src string, fn func(state.IState)) {
+	trx := module_trx.NewTrx(c, c.Tools().Storage(), readonly)
+	defer trx.Commit()
+	s := mainstate.NewState(info, trx, src)
+	fn(s)
+}
+
 func (c *Core) ModifyStateSecurly(readonly bool, info info.IInfo, fn func(state.IState)) {
 	trx := module_trx.NewTrx(c, c.Tools().Storage(), readonly)
 	defer trx.Commit()
@@ -268,7 +275,6 @@ func (c *Core) ExecBaseResponseOnChain(callbackId string, packet []byte, signatu
 func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	log.Println(string(trxPayload))
 	switch typ {
 	case "election":
 		{
@@ -466,7 +472,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 				return
 			}
 			var input input.IInput
-			i, err2 := action.(iaction.ISecureAction).ParseInput("fed", string(packet.Payload))
+			i, err2 := action.(iaction.ISecureAction).ParseInput("chain", packet.Payload)
 			if err2 != nil {
 				log.Println(err2)
 				errText := "input parsing error"
@@ -585,7 +591,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	dnFederation := driver_network_fed.FirstStageBackFill(c)
 	dstorage := driver_storage.NewStorage(c, sroot, bdbPath, ldbPath)
 	dsignaler := driver_signaler.NewSignaler(c.id, dnFederation)
-	dsecurity := driver_security.New(sroot, dstorage, dsignaler)
+	dsecurity := driver_security.New(c, sroot, dstorage, dsignaler)
 	dNetwork := driver_network.NewNetwork(c, dstorage, dsecurity, dsignaler)
 	dFile := driver_file.NewFileTool(sroot)
 	dDocker := driver_docker.NewDocker(c, sroot, dstorage, dFile)

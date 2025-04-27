@@ -59,7 +59,12 @@ func (tw *TrxWrapper) GetIndex(typ string, fromColumn string, toColumn string, f
 	if e != nil {
 		return ""
 	} else {
-		return item.String()
+		var value []byte
+		item.Value(func(val []byte) error {
+			value = val
+			return nil
+		})
+		return string(value)
 	}
 }
 
@@ -78,7 +83,12 @@ func (tw *TrxWrapper) GetLink(key string) string {
 	if e != nil {
 		return ""
 	} else {
-		return item.String()
+		var value []byte
+		item.Value(func(val []byte) error {
+			value = val
+			return nil
+		})
+		return string(value)
 	}
 }
 
@@ -94,11 +104,15 @@ func (tw *TrxWrapper) PutBytes(key string, value []byte) {
 
 func (tw *TrxWrapper) GetBytes(key string) []byte {
 	item, e := tw.dbTrx.Get([]byte(key))
-	val := make([]byte, item.ValueSize())
 	if e == nil {
-		item.ValueCopy(val)
+		var value []byte
+		item.Value(func(val []byte) error {
+			value = val
+			return nil
+		})
+		return value
 	}
-	return val
+	return []byte{}
 }
 
 func (tw *TrxWrapper) PutString(key string, value string) {
@@ -111,12 +125,17 @@ func (tw *TrxWrapper) GetString(key string) string {
 	if e != nil {
 		return ""
 	} else {
-		return item.String()
+		var value []byte
+		item.Value(func(val []byte) error {
+			value = val
+			return nil
+		})
+		return string(value)
 	}
 }
 
 func (tw *TrxWrapper) GetObj(typ string, key string) map[string][]byte {
-	prefix := []byte("obj::" + typ + "::" + key)
+	prefix := []byte("obj::" + typ + "::" + key + "::")
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = true
 	opts.Prefix = prefix
@@ -131,7 +150,7 @@ func (tw *TrxWrapper) GetObj(typ string, key string) map[string][]byte {
 			itemVal = v
 			return nil
 		})
-		m[string(itemKey)] = itemVal
+		m[string(itemKey[len(prefix):])] = itemVal
 		if err != nil {
 			return map[string][]byte{}
 		}
@@ -221,7 +240,7 @@ func (tw *TrxWrapper) GetLinksList(p string, offset int, count int) ([]string, e
 	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 		item := it.Item()
 		itemKey := item.Key()
-		m = append(m, string(itemKey))
+		m = append(m, string(itemKey)[len("link::"):])
 	}
 	return m, nil
 }
@@ -253,18 +272,13 @@ func (tw *TrxWrapper) GetPubKey(key string) *rsa.PublicKey {
 	} else {
 		pemData := "-----BEGIN RSA PUBLIC KEY-----\n" + res + "\n-----END RSA PUBLIC KEY-----\n"
 		block, _ := pem.Decode([]byte(pemData))
-		if block == nil || block.Type != "PUBLIC KEY" {
+		if block == nil || block.Type != "RSA PUBLIC KEY" {
 			log.Println("failed to decode PEM block containing public key")
 			return nil
 		}
-		pubKeyInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
+		publicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
 		if err != nil {
 			log.Println(err)
-			return nil
-		}
-		publicKey, ok := pubKeyInterface.(*rsa.PublicKey)
-		if !ok {
-			log.Println("not RSA public key")
 			return nil
 		}
 		return publicKey

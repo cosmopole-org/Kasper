@@ -1,7 +1,7 @@
 package inputs_points
 
 type CreateInput struct {
-	IsPublic bool   `json:"isPublic" validate:"required"`
+	IsPublic *bool  `json:"isPublic" validate:"required"`
 	Orig     string `json:"orig"`
 }
 

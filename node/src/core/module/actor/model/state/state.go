@@ -9,7 +9,7 @@ import (
 type State struct {
 	info  info.IInfo
 	trx   trx.ITrx
-	dummy string
+	src string
 }
 
 func (s State) Info() info.IInfo {
@@ -28,8 +28,12 @@ func (s State) SetTrx(newTrx trx.ITrx) {
 	s.trx = newTrx
 }
 
-func (s State) Dummy() string {
-	return s.dummy
+func (s State) Source() string {
+	return s.src
+}
+
+func (s State) SetSource(src string) {
+	s.src = src
 }
 
 func NewState(args ...interface{}) state.IState {
@@ -42,11 +46,11 @@ func NewState(args ...interface{}) state.IState {
 
 	if len(args) > 0 {
 		if len(args) > 2 {
-			return State{info: args[0].(info.IInfo), trx: t, dummy: args[2].(string)}
+			return State{info: args[0].(info.IInfo), trx: t, src: args[2].(string)}
 		} else {
-			return State{info: args[0].(info.IInfo), trx: t, dummy: ""}
+			return State{info: args[0].(info.IInfo), trx: t, src: ""}
 		}
 	} else {
-		return State{info: nil, trx: t, dummy: ""}
+		return State{info: nil, trx: t, src: ""}
 	}
 }

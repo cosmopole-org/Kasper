@@ -9,5 +9,6 @@ type IState interface {
 	Info() info.IInfo
 	Trx() trx.ITrx
 	SetTrx(trx.ITrx)
-	Dummy() string
+	Source() string
+	SetSource(string)
 }
