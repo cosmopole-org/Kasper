@@ -221,6 +221,9 @@ func (fed *FedNet) SecondStageForFill(port int, storage storage.IStorage, file f
 			return c.Status(fiber.StatusInternalServerError).JSON(packet.ResponseSimpleMessage{Message: "hostname not known"})
 		}
 	})
+	future.Async(func() {
+		fed.HttpServer.Listen(fmt.Sprintf(":%d", port))
+	}, false)
 	return fed
 }
 

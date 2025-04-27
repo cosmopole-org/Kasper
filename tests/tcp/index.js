@@ -97,7 +97,7 @@ async function sendRequest(userId, path, obj) {
 }
 
 async function doTest() {
-    let res = await sendRequest("", "/users/register", { "username": "kasparaus4" });
+    let res = await sendRequest("", "/users/register", { "username": "kasparaus1" });
     console.log(res.resCode, res.obj);
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" +

@@ -130,6 +130,8 @@ func (t *Socket) writeUpdate(updatePack any, writeRaw bool) {
 
 func (t *Socket) writeResponse(requestId string, resCode int, response any, writeRaw bool) {
 
+	log.Println("preparing response...")
+
 	b1 := []byte(requestId)
 	b1Len := make([]byte, 4)
 	binary.BigEndian.PutUint32(b1Len, uint32(len(b1)))
@@ -169,6 +171,8 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 	copy(packet[pointer:pointer+len(b3)], b3[:])
 	pointer += len(b3)
 
+	log.Println("appending to buffer...")
+
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
 
@@ -177,6 +181,7 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 }
 
 func (t *Socket) pushBuffer() {
+	log.Println("pushing buffer to client...", t.Ack, len(t.Buffer))
 	if t.Ack {
 		if len(t.Buffer) > 0 {
 			t.Ack = false

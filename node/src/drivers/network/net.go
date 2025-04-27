@@ -27,10 +27,12 @@ func NewNetwork(
 	core core.ICore,
 	storage storage.IStorage,
 	security security.ISecurity,
-	signaler signaler.ISignaler) *Network {
+	signaler signaler.ISignaler,
+	fed network.IFederation) *Network {
 	net := &Network{
 		core: core,
-		tcp: tcp.NewTcp(core),
+		tcp:  tcp.NewTcp(core),
+		fed:  fed,
 	}
 	return net
 }

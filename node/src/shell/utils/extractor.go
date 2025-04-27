@@ -50,6 +50,18 @@ func ExtractSecureAction[T input.IInput](app core.ICore, actionFunc func(state.I
 			}
 			return nil, err
 		},
+		"fed": func(i interface{}) (input.IInput, error) {
+			input := new(T)
+			err := json.Unmarshal(i.([]byte), input)
+			if err == nil {
+				err2 := vaidate.Validate.Struct(input)
+				if err2 == nil {
+					return *input, nil
+				}
+				return nil, err2
+			}
+			return nil, err
+		},
 	})
 }
 

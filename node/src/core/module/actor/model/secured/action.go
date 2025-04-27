@@ -10,7 +10,6 @@ import (
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/state"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
-	"log"
 )
 
 type Parse func(interface{}) (input.IInput, error)
@@ -58,7 +57,6 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 	if origin == "" {
 		origin = a.core.Id()
 	}
-	log.Println("hello 5.........")
 	if origin == "global" {
 		c := make(chan int, 1)
 		var res any
@@ -75,23 +73,17 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 		<-c
 		return sc, res, e
 	}
-	log.Println("hello 6.........")
 	if a.core.Id() == origin {
-		log.Println("hello 7.........")
 		success, info := a.Guard.CheckValidity(a.core, packetBinary, packetSignature, userId, input.GetPointId())
-		log.Println("hello 8.........")
 		if !success {
 			return -1, nil, errors.New("authorization failed")
 		} else {
 			var sc int
 			var res any
 			var err error
-			log.Println("hello 9.........")
 			a.core.ModifyStateSecurly(false, info, func(s state.IState) {
-				log.Println("hello 10.........")
 				s.SetSource(origin)
 				sc, res, err = a.Act(s, input)
-				log.Println("hello 11.........")
 			})
 			return sc, res, err
 		}
@@ -145,6 +137,7 @@ func (a *SecureAction) SecurelyActFed(userId string, packetBinary []byte, packet
 	var res any
 	var err error
 	a.core.ModifyStateSecurly(false, info, func(s state.IState) {
+		s.SetSource(input.Origin())
 		sc, res, err = a.Act(s, input)
 		if res != nil {
 			executable, ok := res.(func() (any, error))

@@ -10,6 +10,7 @@ import (
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/models/update"
 	"log"
+	"sort"
 
 	"github.com/dgraph-io/badger"
 )
@@ -176,12 +177,16 @@ func (tw *TrxWrapper) indexJson(key string, path string, obj map[string]any, mer
 			log.Println(e)
 		}
 	}
-	for k, v := range obj {
+	keys := make([]string, 0, len(obj))
+    for k, v := range obj {
+		keys = append(keys, k)
 		old[k] = v
 	}
+	sort.Strings(keys)
 	b, _ := json.Marshal(obj)
 	tw.PutBytes("json::"+key+"::"+path, b)
-	for k, v := range obj {
+	for _, k := range keys {
+		v := obj[k]
 		if v != nil {
 			if m, ok := v.(map[string]any); ok {
 				tw.indexJson(key, path+"."+k, m, merge)

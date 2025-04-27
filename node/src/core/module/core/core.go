@@ -254,13 +254,6 @@ func (c *Core) ExecBaseRequestOnChain(key string, payload []byte, signature stri
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
 	c.chainCallbacks[callbackId] = &chain.ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
-	for i := 0; i < 10; i++ {
-		log.Println()
-	}
-	log.Println("test")
-	for i := 0; i < 10; i++ {
-		log.Println()
-	}
 	future.Async(func() {
 		c.chain <- chain.ChainBaseRequest{Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload}
 	}, false)
@@ -268,6 +261,9 @@ func (c *Core) ExecBaseRequestOnChain(key string, payload []byte, signature stri
 
 func (c *Core) ExecBaseResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update) {
 	future.Async(func() {
+		sort.Slice(updates, func(i, j int) bool {
+			return (updates[i].Typ + ":" + updates[i].Key) < (updates[j].Typ + ":" + updates[j].Key)
+		})
 		c.chain <- chain.ChainResponse{Signature: signature, Executor: c.id, RequestId: callbackId, ResCode: resCode, Err: e, Payload: packet, Effects: chain.Effects{DbUpdates: updates}}
 	}, false)
 }
@@ -592,7 +588,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	dstorage := driver_storage.NewStorage(c, sroot, bdbPath, ldbPath)
 	dsignaler := driver_signaler.NewSignaler(c.id, dnFederation)
 	dsecurity := driver_security.New(c, sroot, dstorage, dsignaler)
-	dNetwork := driver_network.NewNetwork(c, dstorage, dsecurity, dsignaler)
+	dNetwork := driver_network.NewNetwork(c, dstorage, dsecurity, dsignaler, dnFederation)
 	dFile := driver_file.NewFileTool(sroot)
 	dDocker := driver_docker.NewDocker(c, sroot, dstorage, dFile)
 	dWasm := driver_wasm.NewWasm(c, sroot, dstorage, adbPath, dDocker, dFile)
