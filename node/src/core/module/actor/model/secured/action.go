@@ -40,7 +40,8 @@ func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBin
 		a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 403, "authorization failed", []update.Update{})
 	} else {
 		a.core.ModifyStateSecurlyWithSource(false, info, origin, func(s state.IState) {
-			sc, res, err := a.Act(s, input)
+			s.SetSource("global")
+		    sc, res, err := a.Act(s, input)
 			if err != nil {
 				data := []byte("{}")
 				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 500, err.Error(), []update.Update{})

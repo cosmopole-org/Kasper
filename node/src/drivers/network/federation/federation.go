@@ -15,13 +15,11 @@ import (
 	"kasper/src/abstract/models/trx"
 	inputs_invites "kasper/src/shell/api/inputs/invites"
 	inputs_points "kasper/src/shell/api/inputs/points"
-	inputs_storage "kasper/src/shell/api/inputs/storage"
 	"kasper/src/shell/api/model"
 	outputs_points "kasper/src/shell/api/outputs/points"
 	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
-	realip "kasper/src/shell/utils/ip"
 	"log"
 	"net"
 	"strconv"
@@ -30,7 +28,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/mitchellh/mapstructure"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
@@ -51,7 +48,7 @@ type FedNet struct {
 	storage         storage.IStorage
 	file            file.IFile
 	signaler        signaler.ISignaler
-	HttpServer      *fiber.App
+	Gateway         *Tcp
 	packetCallbacks *cmap.ConcurrentMap[string, *FedPacketCallback]
 	fileCallbacks   *cmap.ConcurrentMap[string, *FedFileCallback]
 	fileMapLock     sync.Mutex
@@ -66,12 +63,11 @@ func FirstStageBackFill(core core.ICore) *FedNet {
 
 func (fed *FedNet) SecondStageForFill(port int, storage storage.IStorage, file file.IFile, signaler signaler.ISignaler) network.IFederation {
 	fed.Port = port
-	fed.HttpServer = fiber.New()
+	fed.Gateway = NewTcp(fed.app)
 	fed.storage = storage
 	fed.file = file
 	fed.signaler = signaler
-	fed.HttpServer.Post("/api/federation/packet", func(c *fiber.Ctx) error {
-		ip := realip.FromRequest(c.Context())
+	fed.Gateway.InjectBridge(func(socket *Socket, ip string, pack packet.OriginPacket) {
 		hostName := ""
 		for _, peer := range fed.app.Chain().Peers.Peers {
 			arr := strings.Split(peer.NetAddr, ":")
@@ -80,149 +76,26 @@ func (fed *FedNet) SecondStageForFill(port int, storage storage.IStorage, file f
 				a, err := net.LookupAddr(ip)
 				if err != nil {
 					log.Println(err)
-					return errors.New("ip not friendly")
-				}
-				hostName = a[0]
-				break
-			}
-		}
-		log.Println("packet from ip: [", ip, "] and hostname: [", hostName, "]")
-		if hostName != "" {
-			var pack packet.OriginPacket
-			err := c.BodyParser(&pack)
-			if err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(packet.BuildErrorJson(err.Error()))
-			}
-			fed.HandlePacket(hostName, pack)
-			return c.Status(fiber.StatusOK).JSON(packet.ResponseSimpleMessage{Message: "federation packet received"})
-		} else {
-			log.Println("hostname not known")
-			return c.Status(fiber.StatusInternalServerError).JSON(packet.ResponseSimpleMessage{Message: "hostname not known"})
-		}
-	})
-	fed.HttpServer.Post("/api/federation/putFile", func(c *fiber.Ctx) error {
-		ip := realip.FromRequest(c.Context())
-		hostName := ""
-		for _, peer := range fed.app.Chain().Peers.Peers {
-			arr := strings.Split(peer.NetAddr, ":")
-			addr := strings.Join(arr[0:len(arr)-1], ":")
-			if addr == ip {
-				a, err := net.LookupAddr(ip)
-				if err != nil {
-					log.Println(err)
-					return errors.New("ip not friendly")
-				}
-				hostName = a[0]
-				break
-			}
-		}
-		log.Println("packet from ip: [", ip, "] and hostname: [", hostName, "]")
-		if hostName != "" {
-			data := new(packet.OriginFile)
-			form, err := c.MultipartForm()
-			if err == nil {
-				var formData = map[string]any{}
-				for k, v := range form.Value {
-					formData[k] = v[0]
-				}
-				for k, v := range form.File {
-					formData[k] = v[0]
-				}
-				err := mapstructure.Decode(formData, data)
-				if err != nil {
-					return err
-				}
-				file := model.File{}
-				e := json.Unmarshal([]byte(data.FileInfo), &file)
-				if e != nil {
-					log.Println(e)
-					return e
-				}
-				if fed.fileCallbacks.Has(file.Id) {
-					path := fmt.Sprintf("%s/files/%s/%s", fed.storage.StorageRoot(), data.TopicId, file.Id)
-					fed.file.SaveFileToStorage(fed.storage.StorageRoot(), data.Data, data.TopicId, file.Id)
-					fed.app.ModifyState(false, func(trx trx.ITrx) {
-						file.Push(trx)
-					})
-					var cb *FedFileCallback
-					var ok bool
-					func() {
-						fed.fileMapLock.Lock()
-						defer fed.fileMapLock.Unlock()
-						cb, ok = fed.fileCallbacks.Get(file.Id)
-						if ok {
-							fed.fileCallbacks.Remove(file.Id)
-						}
-					}()
-					if ok {
-						for _, callback := range cb.Callback.Items() {
-							callback(path, nil)
-						}
+					if pack.Type == "response" {
+						socket.writeResponse(pack.RequestId, 1, packet.BuildErrorJson("ip not friendly"), false)
 					}
 				}
-				return c.Status(fiber.StatusOK).JSON(map[string]any{})
-			} else {
-				return err
-			}
-		} else {
-			log.Println("hostname not known")
-			return c.Status(fiber.StatusInternalServerError).JSON(packet.ResponseSimpleMessage{Message: "hostname not known"})
-		}
-	})
-	fed.HttpServer.Post("/api/federation/getFile", func(c *fiber.Ctx) error {
-		ip := realip.FromRequest(c.Context())
-		hostName := ""
-		for _, peer := range fed.app.Chain().Peers.Peers {
-			arr := strings.Split(peer.NetAddr, ":")
-			addr := strings.Join(arr[0:len(arr)-1], ":")
-			if addr == ip {
-				a, err := net.LookupAddr(ip)
-				if err != nil {
-					log.Println(err)
-					return errors.New("ip not friendly")
-				}
 				hostName = a[0]
 				break
 			}
 		}
 		log.Println("packet from ip: [", ip, "] and hostname: [", hostName, "]")
 		if hostName != "" {
-			data := new(packet.OriginPacket)
-			err := c.BodyParser(data)
-			if err != nil {
-				return err
-			}
-			inp := inputs_storage.DownloadInput{}
-			var trxErr error = nil
-			fed.app.ModifyState(true, func(trx trx.ITrx) {
-				json.Unmarshal(data.Binary, &inp)
-				if !trx.HasObj("File", inp.FileId) {
-					trxErr = errors.New("file not found")
-					return
-				}
-				var file = model.File{Id: inp.FileId}.Pull(trx)
-				if file.PointId != data.PointId {
-					trxErr = errors.New("access to file denied")
-				}
-			})
-			if trxErr != nil {
-				log.Println(trxErr)
-				return c.Status(fiber.StatusInternalServerError).JSON(packet.ResponseSimpleMessage{Message: trxErr.Error()})
-			}
-			fed.SendInFederationFileResByCallback(ip, packet.OriginFileRes{
-				UserId:    data.UserId,
-				PointId:   data.PointId,
-				RequestId: data.RequestId,
-				FileId:    inp.FileId,
-			})
-			return c.Status(fiber.StatusOK).JSON(packet.ResponseSimpleMessage{Message: "federation packet received"})
+			fed.HandlePacket(socket, hostName, pack)
 		} else {
 			log.Println("hostname not known")
-			return c.Status(fiber.StatusInternalServerError).JSON(packet.ResponseSimpleMessage{Message: "hostname not known"})
+			if pack.Type == "response" {
+				socket.writeResponse(pack.RequestId, 1, packet.BuildErrorJson("hostname not known"), false)
+			}
 		}
 	})
 	future.Async(func() {
-		fed.HttpServer.Listen(fmt.Sprintf(":%d", port))
+		fed.Gateway.Listen(port)
 	}, false)
 	return fed
 }
@@ -236,8 +109,8 @@ func ParseInput[T input.IInput](i string) (input.IInput, error) {
 	return *body, nil
 }
 
-func (fed *FedNet) HandlePacket(channelId string, payload packet.OriginPacket) {
-	if payload.IsResponse {
+func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet.OriginPacket) {
+	if payload.Type == "response" {
 		dataArr := strings.Split(payload.Key, " ")
 		cb, ok := fed.packetCallbacks.Get(payload.RequestId)
 		if ok {
@@ -295,7 +168,7 @@ func (fed *FedNet) HandlePacket(channelId string, payload packet.OriginPacket) {
 				cb.Callback(payload.Binary, 1, nil)
 			}
 		}
-	} else {
+	} else if payload.Type == "update" {
 		reactToUpdate := func(key string, data string) {
 			if key == "points/update" {
 				tc := updates_points.Update{}
@@ -369,38 +242,23 @@ func (fed *FedNet) HandlePacket(channelId string, payload packet.OriginPacket) {
 		} else if len(dataArr) > 0 && (dataArr[0] == "groupUpdate") {
 			reactToUpdate(payload.Key[len("groupUpdate "):], string(payload.Binary))
 			fed.signaler.SignalGroup(payload.Key[len("groupUpdate "):], payload.PointId, payload.Binary, true, payload.Exceptions)
-		} else {
-			action := fed.app.Actor().FetchAction(payload.Key)
-			if action == nil {
-				errPack, _ := json.Marshal(packet.BuildErrorJson("action not found"))
-				fed.SendInFederation(channelId, packet.OriginPacket{IsResponse: true, Key: payload.Key, RequestId: payload.RequestId, Binary: errPack, Signature: fed.app.SignPacket(errPack), UserId: payload.UserId})
-			}
-			input, err := action.(iaction.ISecureAction).ParseInput("fed", payload.Binary)
-			if err != nil {
-				errPack, _ := json.Marshal(packet.BuildErrorJson("input could not be parsed"))
-				fed.SendInFederation(channelId, packet.OriginPacket{IsResponse: true, Key: payload.Key, RequestId: payload.RequestId, Binary: errPack, Signature: fed.app.SignPacket(errPack), UserId: payload.UserId})
-			}
-			_, res, err := action.(iaction.ISecureAction).SecurelyActFed(payload.UserId, payload.Binary, payload.Signature, input)
-			if err != nil {
-				log.Println(err)
-				errPack, err2 := json.Marshal(packet.BuildErrorJson(err.Error()))
-				if err2 == nil {
-					errPack = []byte("error: " + string(errPack))
-					fed.SendInFederation(channelId, packet.OriginPacket{IsResponse: true, Key: payload.Key, RequestId: payload.RequestId, Binary: errPack, Signature: fed.app.SignPacket(errPack), UserId: payload.UserId})
-				}
-				return
-			}
-			pack, err3 := json.Marshal(res)
-			if err3 != nil {
-				log.Println(err3)
-				errPack, err2 := json.Marshal(packet.BuildErrorJson(err3.Error()))
-				if err2 == nil {
-					fed.SendInFederation(channelId, packet.OriginPacket{IsResponse: true, Key: payload.Key, RequestId: payload.RequestId, Binary: errPack, Signature: fed.app.SignPacket(errPack), UserId: payload.UserId})
-				}
-				return
-			}
-			fed.SendInFederation(channelId, packet.OriginPacket{IsResponse: true, Key: payload.Key, RequestId: payload.RequestId, Binary: pack, Signature: fed.app.SignPacket(pack), UserId: payload.UserId})
 		}
+	} else if payload.Type == "request" {
+		action := fed.app.Actor().FetchAction(payload.Key)
+		if action == nil {
+			socket.writeResponse(payload.RequestId, 1, packet.BuildErrorJson("action not found"), false)
+		}
+		input, err := action.(iaction.ISecureAction).ParseInput("fed", payload.Binary)
+		if err != nil {
+			socket.writeResponse(payload.RequestId, 1, packet.BuildErrorJson("input could not be parsed"), false)
+		}
+		_, res, err := action.(iaction.ISecureAction).SecurelyActFed(payload.UserId, payload.Binary, payload.Signature, input)
+		if err != nil {
+			log.Println(err)
+			socket.writeResponse(payload.RequestId, 1, packet.BuildErrorJson(err.Error()), false)
+			return
+		}
+		socket.writeResponse(payload.RequestId, 0, res, false)
 	}
 }
 

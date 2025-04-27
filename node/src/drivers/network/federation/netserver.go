@@ -1,4 +1,4 @@
-package tcp
+package net_federation
 
 import (
 	"encoding/binary"
@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"kasper/src/abstract/adapters/signaler"
 	"kasper/src/abstract/models/core"
-	"kasper/src/abstract/models/trx"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
 	"log"
 	"net"
 	"strings"
 	"sync"
-
-	iaction "kasper/src/abstract/models/action"
 
 	packetmodel "kasper/src/abstract/models/packet"
 
@@ -27,11 +24,19 @@ type Socket struct {
 	Buffer [][]byte
 	Ack    bool
 	app    core.ICore
+	server *Tcp
 }
+
+type FedApi func(socket *Socket, srcIp string, packet packetmodel.OriginPacket)
 
 type Tcp struct {
 	app     core.ICore
+	bridge  FedApi
 	sockets *cmap.ConcurrentMap[string, *Socket]
+}
+
+func (t *Tcp) InjectBridge(bridge FedApi) {
+	t.bridge = bridge
 }
 
 func (t *Tcp) Listen(port int) {
@@ -59,7 +64,7 @@ func (t *Tcp) handleConnection(conn net.Conn) {
 		t.sockets.Remove(connId)
 		conn.Close()
 	}()
-	socket := &Socket{Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true}
+	socket := &Socket{Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true, server: t}
 	t.sockets.Set(connId, socket)
 	lenBuf := make([]byte, 4)
 	buf := make([]byte, 1024)
@@ -141,6 +146,7 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 	binary.BigEndian.PutUint32(b2, uint32(resCode))
 
 	var b3 []byte
+	var b4 []byte
 	if writeRaw {
 		b3 = response.([]byte)
 	} else {
@@ -150,11 +156,14 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 			log.Println(err)
 			return
 		}
+		b4 = []byte(t.app.SignPacket(b3))
 	}
 	b3Len := make([]byte, 4)
 	binary.BigEndian.PutUint32(b3Len, uint32(len(b3)))
+	b4Len := make([]byte, 4)
+	binary.BigEndian.PutUint32(b4Len, uint32(len(b4)))
 
-	packet := make([]byte, 1+len(b1Len)+len(b1)+len(b2)+len(b3Len)+len(b3))
+	packet := make([]byte, 1+len(b1Len)+len(b1)+len(b2)+len(b3Len)+len(b3)+len(b4Len)+len(b4))
 	pointer := 1
 
 	packet[0] = 0x02
@@ -171,6 +180,11 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 	pointer += len(b3Len)
 	copy(packet[pointer:pointer+len(b3)], b3[:])
 	pointer += len(b3)
+
+	copy(packet[pointer:pointer+len(b4Len)], b4Len[:])
+	pointer += len(b4Len)
+	copy(packet[pointer:pointer+len(b4)], b4[:])
+	pointer += len(b4)
 
 	log.Println("appending to buffer...")
 
@@ -262,93 +276,99 @@ func (t *Socket) processPacket(packet []byte) {
 		send()
 		return
 	}
-	pointer := 0
-	signatureLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
-	log.Println("signature length:", signatureLength)
-	pointer += 4
-	signature := string(packet[pointer : pointer+signatureLength])
-	pointer += signatureLength
-	log.Println("signature:", signature)
-	userIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
-	pointer += 4
-	log.Println("userId length:", userIdLength)
-	userId := string(packet[pointer : pointer+userIdLength])
-	pointer += userIdLength
-	log.Println("userId:", userId)
-	pathLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
-	pointer += 4
-	log.Println("path length:", pathLength)
-	path := string(packet[pointer : pointer+pathLength])
-	pointer += pathLength
-	log.Println("path:", path)
-	packetIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
-	pointer += 4
-	log.Println("packetId length:", packetIdLength)
-	packetId := string(packet[pointer : pointer+packetIdLength])
-	pointer += packetIdLength
-	log.Println("packetId:", packetId)
-	payload := packet[pointer:]
-	log.Println(string(payload))
-
-	var lis *signaler.Listener
-	if path == "authenticate" {
-		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
-		if success {
-			lis = t.connectListener(userId)
-			var pointIds []string
-			t.app.ModifyState(true, func(trx trx.ITrx) {
-				pIds, err := trx.GetLinksList("memberof::"+userId+"::", -1, -1)
-				if err != nil {
-					log.Println(err)
-					pointIds = []string{}
-				} else {
-					pointIds = pIds
-				}
-			})
-			for _, pointId := range pointIds {
-				t.app.Tools().Signaler().JoinGroup(pointId, userId)
-			}
-			t.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
-			oldQueueEndPack, _ := json.Marshal(packetmodel.ResponseSimpleMessage{Message: "old_queue_end"})
-			t.app.Tools().Signaler().ListenToSingle(lis)
-			lis.Signal(oldQueueEndPack)
-		} else {
-			t.writeResponse(packetId, 4, packetmodel.BuildErrorJson("authentication failed"), false)
+	typ := ""
+	switch packet[0] {
+	case 0x01:
+		{
+			typ = "update"
+			break
 		}
-		return
-	}
-
-	action := t.app.Actor().FetchAction(path)
-	if action == nil {
-		t.writeResponse(packetId, 1, packetmodel.BuildErrorJson("action not found"), false)
-		return
-	}
-
-	var err error
-	input, err := action.(iaction.ISecureAction).ParseInput("tcp", payload)
-	if err != nil {
-		log.Println(err)
-		t.writeResponse(packetId, 2, packetmodel.BuildErrorJson(err.Error()), false)
-		return
-	}
-
-	log.Println("hello 1.........")
-
-	statusCode, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, packetId, payload, signature, input, strings.Split(t.Conn.RemoteAddr().String(), ":")[0])
-	log.Println("hello 2.........")
-	if statusCode == 1 {
-		log.Println("hello 3.........")
-		t.handleResultOfFunc(packetId, result)
-		log.Println("hello 4.........")
-		return
-	} else if err != nil {
-		httpStatusCode := 3
-		if statusCode == -1 {
-			httpStatusCode = 4
+	case 0x02:
+		{
+			typ = "response"
+			break
 		}
-		t.writeResponse(packetId, httpStatusCode, packetmodel.BuildErrorJson(err.Error()), false)
+	case 0x03:
+		{
+			typ = "request"
+			break
+		}
 	}
-	t.writeResponse(packetId, 0, result, false)
+	var pack packetmodel.OriginPacket
+	pointer := 1
+	if typ == "request" {
+		signatureLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		log.Println("signature length:", signatureLength)
+		pointer += 4
+		signature := string(packet[pointer : pointer+signatureLength])
+		pointer += signatureLength
+		log.Println("signature:", signature)
+		userIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		pointer += 4
+		log.Println("userId length:", userIdLength)
+		userId := string(packet[pointer : pointer+userIdLength])
+		pointer += userIdLength
+		log.Println("userId:", userId)
+		pathLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		pointer += 4
+		log.Println("path length:", pathLength)
+		path := string(packet[pointer : pointer+pathLength])
+		pointer += pathLength
+		log.Println("path:", path)
+		packetIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		pointer += 4
+		log.Println("packetId length:", packetIdLength)
+		packetId := string(packet[pointer : pointer+packetIdLength])
+		pointer += packetIdLength
+		log.Println("packetId:", packetId)
+		payload := packet[pointer:]
+		log.Println(string(payload))
+		pack = packetmodel.OriginPacket{Type: typ, Key: path, UserId: userId, PointId: "", Binary: payload, Signature: signature, RequestId: packetId, Exceptions: []string{}}
+	} else if typ == "response" {
+		signatureLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		log.Println("signature length:", signatureLength)
+		pointer += 4
+		signature := string(packet[pointer : pointer+signatureLength])
+		pointer += signatureLength
+		log.Println("signature:", signature)
+		packetIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		pointer += 4
+		log.Println("packetId length:", packetIdLength)
+		packetId := string(packet[pointer : pointer+packetIdLength])
+		pointer += packetIdLength
+		log.Println("packetId:", packetId)
+		payload := packet[pointer:]
+		log.Println(string(payload))
+		pack = packetmodel.OriginPacket{Type: typ, Key: "", UserId: "", PointId: "", Binary: payload, Signature: signature, RequestId: packetId, Exceptions: []string{}}
+	} else if typ == "update" {
+		signatureLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		log.Println("signature length:", signatureLength)
+		pointer += 4
+		signature := string(packet[pointer : pointer+signatureLength])
+		pointer += signatureLength
+		log.Println("signature:", signature)
+		pointIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		log.Println("pointId length:", pointIdLength)
+		pointer += 4
+		pointId := string(packet[pointer : pointer+pointIdLength])
+		pointer += pointIdLength
+		log.Println("pointId:", pointId)
+		exceptionsLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
+		log.Println("execptions length:", signatureLength)
+		pointer += 4
+		exceptions := []string{}
+		err := json.Unmarshal(packet[pointer:pointer+signatureLength], &exceptions)
+		pointer += exceptionsLength
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		payload := packet[pointer:]
+		log.Println(string(payload))
+		pack = packetmodel.OriginPacket{Type: typ, Key: "", UserId: "", PointId: pointId, Binary: payload, Signature: signature, RequestId: "", Exceptions: exceptions}
+	}
+
+	t.server.bridge(t, strings.Split(t.Conn.RemoteAddr().String(), ":")[0], pack)
 }
 
 func NewTcp(app core.ICore) *Tcp {
