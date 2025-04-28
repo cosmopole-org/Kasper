@@ -2,7 +2,7 @@ const net = require('net');
 var crypto = require('crypto');
 
 const port = 8080;
-const host = '172.77.5.1';
+let host = '172.77.5.2';
 var privateKey = undefined;
 
 let callbacks = {};
@@ -16,28 +16,37 @@ socket.on('connect', () => {
     doTest();
 });
 
+socket.on('error', e => {
+    console.log(e);
+});
+
 socket.on('data', (data) => {
-    let pointer = 0;
-    if (data.at(pointer) == 0x01) {
-        pointer++;
-    } else if (data.at(pointer) == 0x02) {
-        pointer++;
-        let pidLen = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
-        pointer += 4;
-        let packetId = data.subarray(pointer, pointer + pidLen).toString();
-        pointer += pidLen;
-        let resCode = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
-        pointer += 4;
+    try {
+        let pointer = 0;
+        if (data.at(pointer) == 0x01) {
+            let bufferObj = Buffer.from(data.toString(), "base64");
+            let decodedString = bufferObj.toString("utf8");
+            console.log(decodedString);
+            pointer++;
+        } else if (data.at(pointer) == 0x02) {
+            pointer++;
+            let pidLen = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
+            pointer += 4;
+            let packetId = data.subarray(pointer, pointer + pidLen).toString();
+            pointer += pidLen;
+            let resCode = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
+            pointer += 4;
 
-        let payloadLen = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
-        pointer += 4;
-        let payload = data.subarray(pointer, pointer + payloadLen).toString();
-        pointer += payloadLen;
+            let payloadLen = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
+            pointer += 4;
+            let payload = data.subarray(pointer, pointer + payloadLen).toString();
+            pointer += payloadLen;
 
-        let obj = JSON.parse(payload);
-        let cb = callbacks[packetId];
-        cb(resCode, obj);
-    }
+            let obj = JSON.parse(payload);
+            let cb = callbacks[packetId];
+            cb(resCode, obj);
+        }
+    } catch (ex) { console.log(ex); }
     let b = Buffer.from("packet_received");
     socket.write(Buffer.concat([intToBytes(b.length), b]));
 });
@@ -82,8 +91,6 @@ function createRequest(userId, path, obj) {
         payload
     ]);
 
-    console.log(b.toString());
-
     return { packetId: packetId, data: Buffer.concat([intToBytes(b.length), b]) };
 }
 
@@ -99,8 +106,16 @@ async function sendRequest(userId, path, obj) {
     });
 }
 
+async function sleep(ms) {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            resolve();
+        }, ms);
+    });
+}
+
 async function doTest() {
-    let res = await sendRequest("", "/users/register", { "username": "kasparaus4" });
+    let res = await sendRequest("", "/users/register", { "username": "kasper12" });
     console.log(res.resCode, res.obj);
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" +
@@ -108,8 +123,10 @@ async function doTest() {
         "\n-----END RSA PRIVATE KEY-----\n",
         'utf-8'
     )
-    res = await sendRequest(res.obj.user.id, "/spaces/create", { "isPublic": true, "orig": "172.77.5.2" });
+    await sendRequest(res.obj.user.id, "authenticate", {});
+    // res = await sendRequest(res.obj.user.id, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.2" });
+    res = await sendRequest(res.obj.user.id, "/points/join", { "pointId": "7@172.77.5.2" });
     console.log(res.resCode, res.obj);
-    socket.destroy();
-    console.log("end.");
+    // socket.destroy();
+    // console.log("end.");
 }

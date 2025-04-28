@@ -29,6 +29,7 @@ import (
 
 type FedPacketCallback struct {
 	UserId        string
+	Key           string
 	Request       []byte
 	Callback      func([]byte, int, error)
 	UserRequestId string
@@ -103,10 +104,10 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 		cb, ok := fed.packetCallbacks.Get(payload.RequestId)
 		if ok {
 			if payload.ResCode == 0 {
-				if payload.Key == "/invites/accept" || payload.Key == "/points/join" {
+				if cb.Key == "/invites/accept" || cb.Key == "/points/join" {
 					userId := ""
 					pointId := ""
-					if payload.Key == "/invites/accept" {
+					if cb.Key == "/invites/accept" {
 						var memberRes inputs_invites.AcceptInput
 						err2 := json.Unmarshal(cb.Request, &memberRes)
 						if err2 != nil {
@@ -115,7 +116,7 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 						}
 						userId = cb.UserId
 						pointId = memberRes.PointId
-					} else if payload.Key == "/points/join" {
+					} else if cb.Key == "/points/join" {
 						var memberRes inputs_points.JoinInput
 						err2 := json.Unmarshal(cb.Request, &memberRes)
 						if err2 != nil {
@@ -128,10 +129,11 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 					if pointId != "" {
 						fed.app.ModifyState(false, func(trx trx.ITrx) {
 							trx.PutLink("member::"+pointId+"::"+userId, "true")
+							trx.PutLink("memberof::"+pointId+"::"+userId, "true")
 						})
 						fed.signaler.JoinGroup(pointId, userId)
 					}
-				} else if payload.Key == "/points/create" {
+				} else if cb.Key == "/points/create" {
 					var spaceOut outputs_points.CreateOutput
 					err3 := json.Unmarshal(payload.Binary, &spaceOut)
 					if err3 != nil {
@@ -141,8 +143,9 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 					fed.app.ModifyState(false, func(trx trx.ITrx) {
 						spaceOut.Point.Pull(trx)
 						trx.PutLink("member::"+spaceOut.Point.Id+"::"+cb.UserId, "true")
+						trx.PutLink("memberof::"+cb.UserId+"::"+spaceOut.Point.Id, "true")
 					})
-					fed.signaler.JoinGroup(spaceOut.Point.Id, spaceOut.Point.Id)
+					fed.signaler.JoinGroup(spaceOut.Point.Id, cb.UserId)
 				}
 			}
 			fed.packetCallbacks.Remove(payload.RequestId)
@@ -157,6 +160,7 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 			}
 		}
 	} else if payload.Type == "update" {
+		log.Println("received update")
 		reactToUpdate := func(key string, data string) {
 			if key == "points/update" {
 				tc := updates_points.Update{}
@@ -189,7 +193,7 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 					trx.PutLink("member::"+tc.PointId+"::"+tc.User.Id, "true")
 					trx.PutLink("memberof::"+tc.User.Id+"::"+tc.PointId, "true")
 				})
-			} else if key == "spaces/removeMember" {
+			} else if key == "points/removeMember" {
 				tc := updates_points.AddMember{}
 				err := json.Unmarshal([]byte(data), &tc)
 				if err != nil {
@@ -200,7 +204,7 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 					trx.DelKey("link::member::" + tc.PointId + "::" + tc.User.Id)
 					trx.DelKey("link::memberof::" + tc.User.Id + "::" + tc.PointId)
 				})
-			} else if key == "spaces/updateMember" {
+			} else if key == "points/updateMember" {
 				tc := updates_points.UpdateMember{}
 				err := json.Unmarshal([]byte(data), &tc)
 				if err != nil {
@@ -223,6 +227,7 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 				})
 			}
 		}
+		log.Println(payload)
 		if payload.PointId == "" {
 			reactToUpdate(payload.Key, string(payload.Binary))
 			fed.signaler.SignalUser(payload.Key, "", payload.UserId, payload.Binary, true)
@@ -365,7 +370,7 @@ func (fed *FedNet) SendFedRequestByCallback(destOrg string, requestId string, us
 	}
 	if ok {
 		callbackId := crypto.SecureUniqueString()
-		cb := &FedPacketCallback{Callback: callback, UserRequestId: requestId, Request: payload, UserId: userId}
+		cb := &FedPacketCallback{Callback: callback, Key: path, UserRequestId: requestId, Request: payload, UserId: userId}
 		fed.packetCallbacks.Set(callbackId, cb)
 		future.Async(func() {
 			time.Sleep(time.Duration(120) * time.Second)

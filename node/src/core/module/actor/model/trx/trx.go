@@ -51,7 +51,7 @@ func (tw *TrxWrapper) DelKey(key string) {
 }
 
 func (tw *TrxWrapper) HasObj(typ string, key string) bool {
-	_, e := tw.dbTrx.Get([]byte("obj::" + typ + "::" + key))
+	_, e := tw.dbTrx.Get([]byte("obj::" + typ + "::" + key + "::|"))
 	return e == nil
 }
 
@@ -161,6 +161,7 @@ func (tw *TrxWrapper) GetObj(typ string, key string) map[string][]byte {
 
 func (tw *TrxWrapper) PutObj(typ string, key string, keys map[string][]byte) {
 	prefix := "obj::" + typ + "::" + key + "::"
+	keys["|"] = []byte{0x01}
 	for k, v := range keys {
 		tw.dbTrx.Set([]byte(prefix+k), v)
 		tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: prefix+k, Val: v})

@@ -20,7 +20,7 @@ func Install(a *Actions) error {
 	return nil
 }
 
-// AddMember /spaces/addMember check [ true true false ] access [ true false false false POST ]
+// AddMember /points/addMember check [ true true false ] access [ true false false false POST ]
 func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("User", input.UserId) {
@@ -31,12 +31,12 @@ func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInp
 	a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), input.UserId)
 	user := model.User{Id: input.UserId}.Pull(trx)
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalGroup("spaces/addMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("points/addMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
 	}, false)
 	return outputs_points.AddMemberOutput{}, nil
 }
 
-// UpdateMember /spaces/updateMember check [ true true true ] access [ true false false false POST ]
+// UpdateMember /points/updateMember check [ true true true ] access [ true false false false POST ]
 func (a *Actions) UpdateMember(state state.IState, input inputs_points.UpdateMemberInput) (any, error) {
 	trx := state.Trx()
 	if state.Info().PointId() == "" {
@@ -47,13 +47,13 @@ func (a *Actions) UpdateMember(state state.IState, input inputs_points.UpdateMem
 	obj, e := trx.GetJson("member_"+state.Info().PointId()+"_"+input.UserId, "meta")
 	if e == nil {
 		future.Async(func() {
-			a.App.Tools().Signaler().SignalGroup("spaces/updateMember", state.Info().PointId(), updates_points.UpdateMember{PointId: state.Info().PointId(), User: user, Metadata: obj}, true, []string{state.Info().UserId()})
+			a.App.Tools().Signaler().SignalGroup("points/updateMember", state.Info().PointId(), updates_points.UpdateMember{PointId: state.Info().PointId(), User: user, Metadata: obj}, true, []string{state.Info().UserId()})
 		}, false)
 	}
 	return outputs_points.UpdateMemberOutput{Metadata: obj}, nil
 }
 
-// ReadMembers /spaces/readMembers check [ true true false ] access [ true false false false POST ]
+// ReadMembers /points/readMembers check [ true true false ] access [ true false false false POST ]
 func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMemberInput) (any, error) {
 	trx := state.Trx()
 	members, err := model.User{}.List(trx, "member::"+state.Info().PointId()+"::")
@@ -63,7 +63,7 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 	return outputs_points.ReadMemberOutput{Members: members}, nil
 }
 
-// RemoveMember /spaces/removeMember check [ true true false ] access [ true false false false POST ]
+// RemoveMember /points/removeMember check [ true true false ] access [ true false false false POST ]
 func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMemberInput) (any, error) {
 	trx := state.Trx()
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
@@ -77,12 +77,12 @@ func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMem
 	a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), input.UserId)
 	user := model.User{Id: input.UserId}.Pull(trx)
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalGroup("spaces/removeMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("points/removeMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
 	}, false)
 	return outputs_points.AddMemberOutput{}, nil
 }
 
-// Create /spaces/create check [ true false false ] access [ true false false false POST ]
+// Create /points/create check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (any, error) {
 	trx := state.Trx()
 	point := model.Point{Id: a.App.Tools().Storage().GenId(state.Source()), IsPublic: *input.IsPublic, PersHist: *input.PersHist}
@@ -94,7 +94,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	return outputs_points.CreateOutput{Point: point}, nil
 }
 
-// Update /spaces/update check [ true false false ] access [ true false false false PUT ]
+// Update /points/update check [ true false false ] access [ true false false false PUT ]
 func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (any, error) {
 	trx := state.Trx()
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
@@ -109,27 +109,27 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 	}
 	point.Push(trx)
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalGroup("spaces/update", point.Id, updates_points.Update{Point: point}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("points/update", point.Id, updates_points.Update{Point: point}, true, []string{state.Info().UserId()})
 	}, false)
 	return outputs_points.UpdateOutput{Point: point}, nil
 }
 
-// Delete /spaces/delete check [ true false false ] access [ true false false false DELETE ]
+// Delete /points/delete check [ true false false ] access [ true false false false DELETE ]
 func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (any, error) {
 	trx := state.Trx()
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
 		return nil, errors.New("you are not admin")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
-	trx.DelKey("obj::Point::" + point.Id)
+	trx.DelKey("obj::Point::" + point.Id+"::|")
 	a.App.Tools().Signaler().LeaveGroup(point.Id, state.Info().UserId())
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalGroup("spaces/delete", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("points/delete", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
 	}, false)
 	return outputs_points.DeleteOutput{Point: point}, nil
 }
 
-// Get /spaces/get check [ true false false ] access [ true false false false GET ]
+// Get /points/get check [ true false false ] access [ true false false false GET ]
 func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("Point", input.PointId) {
@@ -145,7 +145,7 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 	return outputs_points.GetOutput{Point: point}, nil
 }
 
-// Read /spaces/read check [ true false false ] access [ true false false false GET ]
+// Read /points/read check [ true false false ] access [ true false false false GET ]
 func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, error) {
 	trx := state.Trx()
 	points, err := model.Point{}.List(trx, "memberof::"+state.Info().UserId()+"::", input.Offset, input.Count)
@@ -156,7 +156,7 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 	return outputs_points.ReadOutput{Points: points}, nil
 }
 
-// Join /spaces/join check [ true false false ] access [ true false false false POST ]
+// Join /points/join check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("Point", input.PointId) {
@@ -171,7 +171,7 @@ func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, 
 	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
 	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalGroup("spaces/join", point.Id, updates_points.Join{PointId: point.Id, User: user}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("points/join", point.Id, updates_points.Join{PointId: point.Id, User: user}, true, []string{state.Info().UserId()})
 	}, false)
 	return outputs_points.JoinOutput{}, nil
 }

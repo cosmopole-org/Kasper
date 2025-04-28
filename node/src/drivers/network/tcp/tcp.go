@@ -99,6 +99,8 @@ func (t *Tcp) handleConnection(conn net.Conn) {
 
 func (t *Socket) writeUpdate(updatePack any, writeRaw bool) {
 
+	log.Println("preparing update...")
+
 	var b3 []byte
 	if writeRaw {
 		b3 = updatePack.([]byte)
@@ -110,17 +112,15 @@ func (t *Socket) writeUpdate(updatePack any, writeRaw bool) {
 			return
 		}
 	}
-	b3Len := make([]byte, 4)
-	binary.BigEndian.PutUint64(b3Len, uint64(len(b3)))
 
-	packet := make([]byte, 1+len(b3Len)+len(b3))
+	packet := make([]byte, 1+len(b3))
 	pointer := 1
 
 	packet[0] = 0x01
-	copy(packet[pointer:pointer+len(b3Len)], b3Len[:])
-	pointer += len(b3Len)
 	copy(packet[pointer:pointer+len(b3)], b3[:])
 	pointer += len(b3)
+
+	log.Println("appending to buffer...")
 
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
@@ -206,19 +206,7 @@ func (t *Socket) connectListener(uid string) *signaler.Listener {
 			DisTime: 0,
 			Signal: func(b any) {
 				if b != nil {
-					t.writeUpdate(b, false)
-				}
-				t.Lock.Lock()
-				defer t.Lock.Unlock()
-				if len(t.Buffer) > 0 {
-					if t.Ack {
-						t.Ack = false
-						_, err := t.Conn.Write(t.Buffer[0])
-						if err != nil {
-							t.Ack = true
-							log.Println(err)
-						}
-					}
+					t.writeUpdate(b, true)
 				}
 			},
 		}
@@ -295,9 +283,9 @@ func (t *Socket) processPacket(packet []byte) {
 				t.app.Tools().Signaler().JoinGroup(pointId, userId)
 			}
 			t.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
-			oldQueueEndPack, _ := json.Marshal(packetmodel.ResponseSimpleMessage{Message: "old_queue_end"})
 			t.app.Tools().Signaler().ListenToSingle(lis)
-			lis.Signal(oldQueueEndPack)
+			b, _ := json.Marshal(packetmodel.ResponseSimpleMessage{Message: "old_queue_end"})
+			lis.Signal(b)
 		} else {
 			t.writeResponse(packetId, 4, packetmodel.BuildErrorJson("authentication failed"), false)
 		}

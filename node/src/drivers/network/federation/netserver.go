@@ -186,8 +186,6 @@ func (t *Socket) writeUpdate(key string, updatePack any, targetType string, targ
 		}
 		signBytes = []byte(t.app.SignPacket(b3))
 	}
-	b3Len := make([]byte, 4)
-	binary.BigEndian.PutUint64(b3Len, uint64(len(b3)))
 
 	signLenBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(signLenBytes[:], uint32(len(signBytes)))
@@ -204,7 +202,7 @@ func (t *Socket) writeUpdate(key string, updatePack any, targetType string, targ
 	excepLenBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(excepLenBytes[:], uint32(len(excepBytes)))
 
-	packet := make([]byte, 1+len(signLenBytes)+len(signBytes)+len(targetIdLenBytes)+len(targetIdBytes)+len(excepLenBytes)+len(excepBytes)+len(b3Len)+len(b3))
+	packet := make([]byte, 1+len(signLenBytes)+len(signBytes)+len(targetIdLenBytes)+len(targetIdBytes)+len(excepLenBytes)+len(excepBytes)+len(keyLenBytes)+len(keyBytes)+len(b3))
 
 	pointer := 1
 
@@ -419,10 +417,10 @@ func (t *Socket) processPacket(packet []byte) {
 		pointer += targetIdLength
 		log.Println("targetId:", targetId)
 		exceptionsLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
-		log.Println("execptions length:", signatureLength)
+		log.Println("execptions length:", exceptionsLength)
 		pointer += 4
 		exceptions := []string{}
-		err := json.Unmarshal(packet[pointer:pointer+signatureLength], &exceptions)
+		err := json.Unmarshal(packet[pointer:pointer+exceptionsLength], &exceptions)
 		pointer += exceptionsLength
 		if err != nil {
 			log.Println(err)

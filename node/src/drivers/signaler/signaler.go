@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"kasper/src/abstract/adapters/network"
 	"kasper/src/abstract/adapters/signaler"
+	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
 	"log"
 	"strings"
 	"sync"
@@ -16,7 +18,7 @@ const responsePrefix = "response "
 
 type Signaler struct {
 	lock           sync.Mutex
-	appId          string
+	app            core.ICore
 	listeners      *cmap.ConcurrentMap[string, *signaler.Listener]
 	groups         *cmap.ConcurrentMap[string, *signaler.Group]
 	GlobalBridge   *signaler.GlobalListener
@@ -66,12 +68,15 @@ func (p *Signaler) SignalUser(key string, respondToId string, listenerId string,
 	if !strings.Contains(listenerId, "@") {
 		return
 	}
-	var isVm = false
-	if listenerId[0:2] == "b_" {
-		isVm = true
+	username := ""
+	p.app.ModifyState(true, func(trx trx.ITrx) {
+		username = string(trx.GetColumn("User", listenerId, "username"))
+	})
+	if username == "" {
+		return
 	}
-	origin := strings.Split(listenerId, "@")[1]
-	if origin == p.appId || isVm || origin == "global" {
+	origin := strings.Split(username, "@")[1]
+	if origin == p.app.Id() {
 		listener, found := p.listeners.Get(listenerId)
 		if found && (listener != nil) {
 			if pack {
@@ -134,22 +139,30 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 			group.Listener.Signal(packet)
 			return
 		}
+		log.Println("step 1")
 		var foreignersMap = map[string][]string{}
 		for t := range group.Points.IterBuffered() {
+			log.Println("step 2")
 			userId := t.Val
-			if !strings.Contains(userId, "@") {
+			username := ""
+			p.app.ModifyState(true, func(trx trx.ITrx) {
+				username = string(trx.GetColumn("User", userId, "username"))
+			})
+			log.Println("step 3", username)
+			if username == "" {
 				continue
 			}
-			var isVm = false
-			if userId[0:2] == "b_" {
-				isVm = true
-			}
-			userOrigin := strings.Split(userId, "@")[1]
-			if (userOrigin == p.appId) || isVm || (userOrigin == "global") {
+			log.Println("step 4")
+			userOrigin := strings.Split(username, "@")[1]
+			if (userOrigin == p.app.Id()) || (userOrigin == "global") {
+				log.Println("step 5")
 				if !p.LGroupDisabled || !group.Override {
+					log.Println("step 6")
 					if !excepDict[t.Key] {
+						log.Println("step 7")
 						listener, found := p.listeners.Get(userId)
 						if found && (listener != nil) {
+							log.Println("step 8")
 							listener.Signal(packet)
 						}
 					}
@@ -199,12 +212,12 @@ func (p *Signaler) RetriveGroup(groupId string) (*signaler.Group, bool) {
 	return p.groups.Get(groupId)
 }
 
-func NewSignaler(appId string, federation network.IFederation) signaler.ISignaler {
+func NewSignaler(app core.ICore, federation network.IFederation) signaler.ISignaler {
 	log.Println("creating signaler...")
 	newMap := cmap.New[*signaler.Group]()
 	lisMap := cmap.New[*signaler.Listener]()
 	return &Signaler{
-		appId:          appId,
+		app:            app,
 		listeners:      &lisMap,
 		groups:         &newMap,
 		LGroupDisabled: false,

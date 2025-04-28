@@ -586,7 +586,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 
 	dnFederation := driver_network_fed.FirstStageBackFill(c)
 	dstorage := driver_storage.NewStorage(c, sroot, bdbPath, ldbPath)
-	dsignaler := driver_signaler.NewSignaler(c.id, dnFederation)
+	dsignaler := driver_signaler.NewSignaler(c, dnFederation)
 	dsecurity := driver_security.New(c, sroot, dstorage, dsignaler)
 	dNetwork := driver_network.NewNetwork(c, dstorage, dsecurity, dsignaler, dnFederation)
 	dFile := driver_file.NewFileTool(sroot)
