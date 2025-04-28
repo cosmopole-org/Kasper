@@ -195,20 +195,6 @@ func (t *Socket) pushBuffer() {
 	}
 }
 
-func (t *Socket) handleResultOfFunc(requestId string, result any) {
-	switch result := result.(type) {
-	case packetmodel.Command:
-		if result.Value == "sendFile" {
-			content, _ := t.app.Tools().File().ReadFileByPath(result.Data)
-			t.writeResponse(requestId, 0, content, true)
-		} else {
-			t.writeResponse(requestId, 0, result, false)
-		}
-	default:
-		t.writeResponse(requestId, 0, result, false)
-	}
-}
-
 func (t *Socket) connectListener(uid string) *signaler.Listener {
 	t.app.Tools().Signaler().Lock()
 	defer t.app.Tools().Signaler().Unlock()
@@ -290,8 +276,8 @@ func (t *Socket) processPacket(packet []byte) {
 	payload := packet[pointer:]
 	log.Println(string(payload))
 
-	var lis *signaler.Listener
 	if path == "authenticate" {
+		var lis *signaler.Listener
 		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
 		if success {
 			lis = t.connectListener(userId)
@@ -317,13 +303,11 @@ func (t *Socket) processPacket(packet []byte) {
 		}
 		return
 	}
-
 	action := t.app.Actor().FetchAction(path)
 	if action == nil {
 		t.writeResponse(packetId, 1, packetmodel.BuildErrorJson("action not found"), false)
 		return
 	}
-
 	var err error
 	input, err := action.(iaction.ISecureAction).ParseInput("tcp", payload)
 	if err != nil {
@@ -331,17 +315,10 @@ func (t *Socket) processPacket(packet []byte) {
 		t.writeResponse(packetId, 2, packetmodel.BuildErrorJson(err.Error()), false)
 		return
 	}
-
-	log.Println("hello 1.........")
-
 	statusCode, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, packetId, payload, signature, input, strings.Split(t.Conn.RemoteAddr().String(), ":")[0])
+	log.Println(result)
 	log.Println("hello 2.........")
-	if statusCode == 1 {
-		log.Println("hello 3.........")
-		t.handleResultOfFunc(packetId, result)
-		log.Println("hello 4.........")
-		return
-	} else if err != nil {
+	if err != nil {
 		httpStatusCode := 3
 		if statusCode == -1 {
 			httpStatusCode = 4

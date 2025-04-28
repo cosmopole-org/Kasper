@@ -21,8 +21,13 @@ func (d Point) Push(trx trx.ITrx) {
 	if d.IsPublic {
 		b = byte(0x01)
 	}
+	b2 := byte(0x00)
+	if d.PersHist {
+		b2 = byte(0x01)
+	}
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
-		"isPublic": []byte{b},
+		"isPublic": {b},
+		"persHist": {b2},
 	})
 }
 
@@ -30,6 +35,7 @@ func (d Point) Pull(trx trx.ITrx) Point {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {
 		d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
+		d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 	}
 	return d
 }
@@ -62,6 +68,7 @@ func (d Point) List(trx trx.ITrx, prefix string, positional ...int) ([]Point, er
 			d := Point{}
 			d.Id = id
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
+			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)
 		}
 	}

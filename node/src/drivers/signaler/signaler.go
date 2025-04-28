@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"kasper/src/abstract/adapters/network"
 	"kasper/src/abstract/adapters/signaler"
-	packetmodel "kasper/src/abstract/models/packet"
 	"log"
 	"strings"
 	"sync"
@@ -12,7 +11,6 @@ import (
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
-const groupUpdatePrefix = "groupUpdate "
 const updatePrefix = "update "
 const responsePrefix = "response "
 
@@ -99,19 +97,7 @@ func (p *Signaler) SignalUser(key string, respondToId string, listenerId string,
 			}
 		}
 	} else {
-		var message string
-		switch d := data.(type) {
-		case string:
-			message = d
-		default:
-			msg, err := json.Marshal(d)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			message = string(msg)
-		}
-		p.Federation.SendInFederation(origin, packetmodel.OriginPacket{IsResponse: false, Key: updatePrefix + key, UserId: listenerId, Binary: []byte(message), Signature: ""})
+		p.Federation.SendFedUpdate(origin, key, data, "user", listenerId, []string{})
 	}
 }
 
@@ -177,20 +163,8 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 				}
 			}
 		}
-		var message string
-		switch d := data.(type) {
-		case string:
-			message = d
-		default:
-			msg, err := json.Marshal(d)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			message = string(msg)
-		}
 		for k, v := range foreignersMap {
-			p.Federation.SendInFederation(k, packetmodel.OriginPacket{IsResponse: false, Key: groupUpdatePrefix + key, PointId: groupId, Exceptions: v, Binary: []byte(message), Signature: ""})
+			p.Federation.SendFedUpdate(k, key, data, "point", groupId, v)
 		}
 	}
 }

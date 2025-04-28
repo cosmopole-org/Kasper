@@ -85,7 +85,7 @@ func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMem
 // Create /spaces/create check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (any, error) {
 	trx := state.Trx()
-	point := model.Point{Id: a.App.Tools().Storage().GenId(state.Source()), IsPublic: *input.IsPublic}
+	point := model.Point{Id: a.App.Tools().Storage().GenId(state.Source()), IsPublic: *input.IsPublic, PersHist: *input.PersHist}
 	point.Push(trx)
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
@@ -101,7 +101,12 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 		return nil, errors.New("you are not admin")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
-	point.IsPublic = input.IsPublic
+	if input.IsPublic != nil {
+		point.IsPublic = *input.IsPublic
+	}
+	if input.PersHist != nil {
+		point.PersHist = *input.PersHist
+	}
 	point.Push(trx)
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("spaces/update", point.Id, updates_points.Update{Point: point}, true, []string{state.Info().UserId()})

@@ -6,10 +6,9 @@ import (
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/input"
-	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/state"
-	inputs_storage "kasper/src/shell/api/inputs/storage"
+	"log"
 )
 
 type Parse func(interface{}) (input.IInput, error)
@@ -40,8 +39,7 @@ func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBin
 		a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 403, "authorization failed", []update.Update{})
 	} else {
 		a.core.ModifyStateSecurlyWithSource(false, info, origin, func(s state.IState) {
-			s.SetSource("global")
-		    sc, res, err := a.Act(s, input)
+			sc, res, err := a.Act(s, input)
 			if err != nil {
 				data := []byte("{}")
 				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 500, err.Error(), []update.Update{})
@@ -97,34 +95,20 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 	var scFed int
 	var resFed any
 	var errFed error
-	if a.Key() == "/storage/download" {
-		inp := inputs_storage.DownloadInput{}
-		err := json.Unmarshal(packetBinary, &inp)
-		if err != nil {
-			return 0, nil, err			
-		}
-		a.core.Tools().Network().Federation().SendInFederationFileReqByCallback(origin, inp.FileId, packet.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(path string, err error) {
-			if err != nil {
-				scFed = 0
-				resFed = map[string]any{}
-				errFed = err
-			} else {
-				scFed = 1
-				resFed = packet.Command{Value: "sendFile", Data: path}
-				errFed = nil
-			}
-			cFed <- 1
-		})
-	} else {
-		a.core.Tools().Network().Federation().SendInFederationPacketByCallback(origin, packet.OriginPacket{IsResponse: false, Key: a.Key(), UserId: userId, PointId: input.GetPointId(), Binary: packetBinary, Signature: packetSignature, RequestId: packetId}, func(data []byte, resCode int, err error) {
-			result := map[string]any{}
-			json.Unmarshal(data, &result)
+	a.core.Tools().Network().Federation().SendFedRequestByCallback(origin, packetId, userId, a.Key(), packetBinary, packetSignature, func(data []byte, resCode int, err error) {
+		result := map[string]any{}
+		e := json.Unmarshal(data, &result)
+		if e != nil {
+			log.Println(e)
+			scFed = 3
+			errFed = e
+		} else {
 			scFed = resCode
 			resFed = result
 			errFed = err
-			cFed <- 1
-		})
-	}
+		}
+		cFed <- 1
+	})
 	<-cFed
 	return scFed, resFed, errFed
 }

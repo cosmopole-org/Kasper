@@ -17,7 +17,6 @@ socket.on('connect', () => {
 });
 
 socket.on('data', (data) => {
-    console.log(data.toString());
     let pointer = 0;
     if (data.at(pointer) == 0x01) {
         pointer++;
@@ -91,20 +90,24 @@ function createRequest(userId, path, obj) {
 async function sendRequest(userId, path, obj) {
     return new Promise((resolve, reject) => {
         let data = createRequest(userId, path, obj);
-        callbacks[data.packetId] = (resCode, obj) => resolve({ resCode, obj });
+        callbacks[data.packetId] = (resCode, obj) => {
+            console.log(performance.now().toString());
+            resolve({ resCode, obj });
+        };
+        console.log(performance.now().toString());
         socket.write(data.data);
     });
 }
 
 async function doTest() {
-    let res = await sendRequest("", "/users/register", { "username": "kasparaus1" });
+    let res = await sendRequest("", "/users/register", { "username": "kasparaus4" });
     console.log(res.resCode, res.obj);
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" +
         res.obj.privateKey +
         "\n-----END RSA PRIVATE KEY-----\n",
         'utf-8'
-    );
+    )
     res = await sendRequest(res.obj.user.id, "/spaces/create", { "isPublic": true, "orig": "172.77.5.2" });
     console.log(res.resCode, res.obj);
     socket.destroy();

@@ -4,7 +4,8 @@ import "kasper/src/shell/utils/origin"
 
 type UpdateInput struct {
     PointId  string `json:"pointId" validate:"required"`
-	IsPublic bool   `json:"isPublic"`
+	IsPublic *bool   `json:"isPublic"`
+	PersHist *bool   `json:"persHist"`
 }
 
 func (d UpdateInput) GetData() any {
