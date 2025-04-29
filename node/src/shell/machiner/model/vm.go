@@ -17,8 +17,8 @@ func (m Vm) Type() string {
 func (d Vm) Push(trx trx.ITrx) {
 	trx.PutObj(d.Type(), d.MachineId, map[string][]byte{
 		"machineId": []byte(d.MachineId),
-		"ownerId":   []byte(d.MachineId),
-		"runtime":   []byte(d.MachineId),
+		"ownerId":   []byte(d.OwnerId),
+		"runtime":   []byte(d.Runtime),
 	})
 }
 

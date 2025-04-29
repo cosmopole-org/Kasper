@@ -4,6 +4,6 @@ let machineCode = fs.readFileSync("./main.wasm");
 
 fs.writeFileSync("temp.txt", `{
     "runtime": "wasm",
-    "machineId": "79@global",
+    "machineId": "${process.argv[2]}",
     "byteCode": "` + machineCode.toString('base64') + `"
 }`);

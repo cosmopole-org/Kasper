@@ -1,8 +1,0 @@
-{
-    "runtime": "docker",
-    "machineId": "19@global",
-    "metadata": {
-        "imageName": "ai"
-    },
-    "byteCode": "RlJPTSBweXRob246My4xMC1zbGltLWJ1c3RlcgoKUlVOIGFwdC1nZXQgdXBkYXRlIFwKICAgICYmIGFwdC1nZXQgaW5zdGFsbCAteSAtLW5vLWluc3RhbGwtcmVjb21tZW5kcyBcCiAgICBidWlsZC1lc3NlbnRpYWwgXAogICAgbGliYmxhczMgXAogICAgbGlibGFwYWNrMyBcCiAgICBsaWJvcGVuYmxhcy1kZXYgXAogICAgbGlibGFwYWNrLWRldiBcCiAgICBsaWJhdGxhcy1iYXNlLWRldiBcCiAgICBnZm9ydHJhbiBcCiAgICAmJiBybSAtcmYgL3Zhci9saWIvYXB0L2xpc3RzLyoKCldPUktESVIgL2FwcAoKUlVOIG1rZGlyIC9hcHAvaW5wdXQKCkVOVFJZUE9JTlQgWyAiYmFzaCIsICIvYXBwL2lucHV0L3J1bi5zaCIgXQo="
-}

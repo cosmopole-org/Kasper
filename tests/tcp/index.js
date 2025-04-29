@@ -1,6 +1,7 @@
 const net = require('net');
 const crypto = require('crypto');
 const fs = require('fs');
+const { exec } = require('child_process');
 
 const port = 8080;
 let host = '172.77.5.1';
@@ -146,8 +147,22 @@ async function sleep(ms) {
     });
 }
 
+const executeBash = async (command) => {
+    return new Promise((resolve, reject) => {
+        dir = exec(command, function (err, stdout, stderr) {
+            if (err) {
+                reject(err);
+            }
+            console.log(stdout);
+        });
+        dir.on('exit', function (code) {
+            resolve();
+        });
+    });
+}
+
 async function doTest() {
-    let res = await sendRequest("", "/users/register", { "username": "kasper2" });
+    let res = await sendRequest("", "/users/register", { "username": "kasparusThe3rd" });
     console.log(res.resCode, res.obj);
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" +
@@ -160,22 +175,34 @@ async function doTest() {
     res = await sendRequest(res.obj.user.id, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.2" });
     // res = await sendRequest(userId, "/points/join", { "pointId": "4@172.77.5.2" });
     console.log(res.resCode, res.obj);
+    let pointId = res.obj.point.id;
 
-    let mainPyScript = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/src/main.py", { encoding: 'utf-8' });
-    // res = await sendRequest(userId, "/storage/uploadData", { "pointId": "4@172.77.5.2", "data": mainPyScript });
-    // console.log(res.resCode, res.obj);
-    // // let mainPyId = res.obj.file.id;
+    let mainPyScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/src/main.py", { encoding: 'utf-8' }));
+    res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": mainPyScript });
+    console.log(res.resCode, res.obj);
+    let mainPyId = res.obj.file.id;
 
-    // let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/src/run.sh", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/uploadData", { "pointId": "4@172.77.5.2", "data": runShScript });
-    // console.log(res.resCode, res.obj);
-    // // let runShId = res.obj.file.id;
+    let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/src/run.sh", { encoding: 'utf-8' }));
+    res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runShScript });
+    console.log(res.resCode, res.obj);
+    let runShId = res.obj.file.id;
 
-    for (let i = 0; i < 10; i++) {
-        await sleep(500);
-        res = await sendRequest(userId, "/points/signal", { "type": "broadcast", "pointId": "3@172.77.5.2", "data": mainPyScript + "\n" + mainPyScript });
-        console.log(i, res.resCode, res.obj);
-    }
+    res = await sendRequest(userId, "/machines/create", { "username": "machinix2" });
+    console.log(res.resCode, res.obj);
+    let machineId = res.obj.user.id;
+
+    await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/ai/builder && bash build.sh '' '${userId}'`);
+    let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/builder/Dockerfile");
+    res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "byteCode": btoa(mainWasmBC) });
+    console.log(res.resCode, res.obj);
+
+    await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' ${userId}`);
+    let dockerfileBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder/main.wasm");
+    res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "imageName": "ai", "byteCode": btoa(dockerfileBC) });
+    console.log(i, res.resCode, res.obj);
+
+    res = await sendRequest(userId, "/points/signal", { "type": "broadcast", "pointId": pointId, "data": "hello world !" });
+    console.log(res.resCode, res.obj);
     // socket.destroy();
     // console.log("end.");
 }
