@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"kasper/src/abstract/models/packet"
+	"kasper/src/abstract/models/trx"
 	"log"
 	"strings"
 
@@ -14,7 +15,7 @@ import (
 type IStorage interface {
 	StorageRoot() string
 	KvDb() *badger.DB
-	GenId(origin string) string
+	GenId(t trx.ITrx, origin string) string
 	LogTimeSieries(pointId string, userId string, data string)
 	ReadPointLogs(pointId string) []packet.LogPacket
 }

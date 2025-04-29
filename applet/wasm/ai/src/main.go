@@ -486,7 +486,7 @@ func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, input 
 
 func (c *Chain) SubmitAppletFileTrx(targetMachineId string, fileId string) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
-	keyO, keyL := bytesToPointer([]byte("/storage/uploadData"))
+	keyO, keyL := bytesToPointer([]byte("/storage/upload"))
 	inputO, inputL := bytesToPointer([]byte(fileId))
 	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, 1, 0)
 	result := pointerToBytes(resP)
@@ -507,7 +507,7 @@ func (c *Chain) SubmitBasePacketTrx(key string, input []byte) []byte {
 }
 
 func (c *Chain) SubmitBaseFileTrx(fileId string) []byte {
-	keyO, keyL := bytesToPointer([]byte("/storage/uploadData"))
+	keyO, keyL := bytesToPointer([]byte("/storage/upload"))
 	inputO, inputL := bytesToPointer([]byte(fileId))
 	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, 1, 1)
 	result := pointerToBytes(resP)

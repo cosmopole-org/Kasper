@@ -34,8 +34,8 @@ func Install(a *Actions) error {
 					user    models.User
 					session models.Session
 				)
-				user = models.User{Id: a.App.Tools().Storage().GenId(a.App.Id()), Typ: "human", PublicKey: "", Username: godUsername + "@" + a.App.Id()}
-				session = models.Session{Id: a.App.Tools().Storage().GenId(a.App.Id()), UserId: user.Id}
+				user = models.User{Id: a.App.Tools().Storage().GenId(trx, a.App.Id()), Typ: "human", PublicKey: "", Username: godUsername + "@" + a.App.Id()}
+				session = models.Session{Id: a.App.Tools().Storage().GenId(trx, a.App.Id()), UserId: user.Id}
 				user.Push(trx)
 				session.Push(trx)
 				userId = user.Id
@@ -119,8 +119,8 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	if trx.HasIndex("User", "username", "id", input.Username+"@"+state.Source()) {
 		return nil, errors.New("username already exists")
 	}
-	user = models.User{Id: a.App.Tools().Storage().GenId(input.Origin()), Typ: "human", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
-	session = models.Session{Id: a.App.Tools().Storage().GenId(input.Origin()), UserId: user.Id}
+	user = models.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Typ: "human", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
+	session = models.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
 	user.Push(trx)
 	session.Push(trx)
 	return outputsusers.CreateOutput{User: user, Session: session}, nil

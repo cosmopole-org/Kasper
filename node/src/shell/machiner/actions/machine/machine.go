@@ -30,8 +30,8 @@ func (a *Actions) Create(state state.IState, input inputs_machiner.CreateInput) 
 		session models.Session
 	)
 	trx := state.Trx()
-	user = models.User{Id: a.App.Tools().Storage().GenId(input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
-	session = models.Session{Id: a.App.Tools().Storage().GenId(input.Origin()), UserId: user.Id}
+	user = models.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
+	session = models.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
 	vm := model.Vm{MachineId: user.Id, OwnerId: state.Info().UserId()}
 	user.Push(trx)
 	session.Push(trx)

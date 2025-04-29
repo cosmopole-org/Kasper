@@ -99,7 +99,10 @@ func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, pointId string) 
 	}
 
 	if header.Typeflag == tar.TypeReg {
-		var file = &models.File{Id: wm.storage.GenId(wm.app.Id()), OwnerId: machineId, PointId: pointId}
+		var file *models.File
+		wm.app.ModifyState(false, func(trx trx.ITrx) {
+			file = &models.File{Id: wm.storage.GenId(trx, wm.app.Id()), OwnerId: machineId, PointId: pointId}
+		})
 		if err := wm.file.SaveTarFileItemToStorage(wm.storageRoot, tr, pointId, file.Id); err != nil {
 			log.Println(err)
 			return nil, err

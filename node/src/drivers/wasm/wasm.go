@@ -78,7 +78,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		log.Println(err)
 		return err.Error()
 	}
-	key, err := checkField[string](data, "key", "")
+	key, err := checkField(data, "key", "")
 	if err != nil {
 		log.Println(err)
 		return err.Error()
@@ -236,7 +236,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		result := []byte("{}")
 		outputCnan := make(chan int)
 		if isBase {
-			if k == "/storage/uploadData" {
+			if k == "/storage/upload" {
 				data, _ = json.Marshal(inputs_storage.UploadDataInput{
 					Data:    base64.StdEncoding.EncodeToString(data),
 					PointId: pointId,

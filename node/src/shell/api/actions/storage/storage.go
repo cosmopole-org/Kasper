@@ -40,7 +40,7 @@ func (a *Actions) Upload(state state.IState, input inputs_storage.UploadDataInpu
 		}
 		return map[string]any{}, nil
 	} else {
-		var file = models.File{Id: a.App.Tools().Storage().GenId(input.Origin()), OwnerId: state.Info().UserId(), PointId: state.Info().PointId()}
+		var file = models.File{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), OwnerId: state.Info().UserId(), PointId: state.Info().PointId()}
 		data, err := base64.StdEncoding.DecodeString(input.Data)
 		if err != nil {
 			log.Println(err)

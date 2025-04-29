@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/packet"
+	"kasper/src/abstract/models/trx"
 	"log"
 	"sync"
 
@@ -62,30 +63,25 @@ func (sm *StorageManager) ReadPointLogs(pointId string) []packet.LogPacket {
 	return logs
 }
 
-func (sm *StorageManager) GenId(origin string) string {
+func (sm *StorageManager) GenId(t trx.ITrx, origin string) string {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
-	trx := sm.kvdb.NewTransaction(true)
-	defer trx.Commit()
 	if origin == "global" {
-		item, err := trx.Get([]byte("globalIdCounter"))
+		item := t.GetBytes("globalIdCounter")
 		var counter int64 = 0
-		if err != nil {
+		if len(item) == 0 {
 			counter = 0
 		} else {
-			var b []byte
-			item.Value(func(val []byte) error {
-				b = val
-				return nil
-			})
-			counter = int64(binary.BigEndian.Uint64(b))
+			counter = int64(binary.BigEndian.Uint64(item))
 		}
 		counter++
 		nextB := [8]byte{}
 		binary.BigEndian.PutUint64(nextB[:], uint64(counter))
-		trx.Set([]byte("globalIdCounter"), nextB[:])
+		t.PutBytes("globalIdCounter", nextB[:])
 		return fmt.Sprintf("%d@%s", counter, origin)
 	} else {
+		trx := sm.kvdb.NewTransaction(true)
+		defer trx.Commit()	
 		item, err := trx.Get([]byte("localIdCounter"))
 		var counter int64 = 0
 		if err != nil {

@@ -162,7 +162,7 @@ const executeBash = async (command) => {
 }
 
 async function doTest() {
-    let res = await sendRequest("", "/users/register", { "username": "kasparusThe3rd" });
+    let res = await sendRequest("", "/users/register", { "username": "kasperio" });
     console.log(res.resCode, res.obj);
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" +
@@ -172,7 +172,7 @@ async function doTest() {
     )
     let userId = res.obj.user.id;
     await sendRequest(userId, "authenticate", {});
-    res = await sendRequest(res.obj.user.id, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.2" });
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
     // res = await sendRequest(userId, "/points/join", { "pointId": "4@172.77.5.2" });
     console.log(res.resCode, res.obj);
     let pointId = res.obj.point.id;
@@ -187,21 +187,34 @@ async function doTest() {
     console.log(res.resCode, res.obj);
     let runShId = res.obj.file.id;
 
-    res = await sendRequest(userId, "/machines/create", { "username": "machinix2" });
+    res = await sendRequest(userId, "/machines/create", { "username": "machinixio" });
     console.log(res.resCode, res.obj);
     let machineId = res.obj.user.id;
 
     await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/ai/builder && bash build.sh '' '${userId}'`);
     let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/builder/Dockerfile");
-    res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "byteCode": btoa(mainWasmBC) });
+    res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "ai" }, "byteCode": mainWasmBC.toString('base64') });
     console.log(res.resCode, res.obj);
 
-    await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' ${userId}`);
+    await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' '${userId}'`);
     let dockerfileBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder/main.wasm");
-    res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "imageName": "ai", "byteCode": btoa(dockerfileBC) });
-    console.log(i, res.resCode, res.obj);
+    res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": dockerfileBC.toString('base64') });
+    console.log(res.resCode, res.obj);
 
-    res = await sendRequest(userId, "/points/signal", { "type": "broadcast", "pointId": pointId, "data": "hello world !" });
+    res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointId, "userId": machineId });
+    console.log(res.resCode, res.obj);
+
+    res = await sendRequest(userId, "/points/signal", {
+        "type": "single",
+        "pointId": pointId,
+        "userId": machineId,
+        "data": JSON.stringify({
+            "srcFiles": {
+                [mainPyId]: "main.py",
+                [runShId]: "run.sh"
+            }
+        })
+    });
     console.log(res.resCode, res.obj);
     // socket.destroy();
     // console.log("end.");

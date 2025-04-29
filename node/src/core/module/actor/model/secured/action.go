@@ -33,7 +33,7 @@ func (a *SecureAction) ParseInput(protocol string, raw interface{}) (input.IInpu
 }
 
 func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, origin string) {
-	success, info := a.Guard.CheckValidity(a.core, packetBinary, packetSignature, userId, input.GetPointId())
+	success, info := a.Guard.CheckValidityForChain(a.core, packetBinary, packetSignature, userId, input.GetPointId())
 	if !success {
 		data := []byte("{}")
 		a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 403, "authorization failed", []update.Update{})
