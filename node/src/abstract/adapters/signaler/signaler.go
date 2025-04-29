@@ -11,7 +11,7 @@ type ISignaler interface {
 	ListenToGroup(listener *Listener, overrideFunctionaly bool)
 	BrdigeGlobally(listener *GlobalListener, overrideFunctionaly bool)
 	ListenToJoin(listener *JoinListener)
-	SignalUser(key string, respondToId string, listenerId string, data any, pack bool)
+	SignalUser(key string, listenerId string, data any, pack bool)
 	SignalGroup(key string, groupId string, data any, pack bool, exceptions []string)
 	JoinGroup(groupId string, userId string)
 	LeaveGroup(groupId string, userId string)
@@ -28,7 +28,7 @@ type Listener struct {
 	Id      string
 	Paused  bool
 	DisTime int64
-	Signal  func(any)
+	Signal  func(string, any)
 }
 
 type GlobalListener struct {

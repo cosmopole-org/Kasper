@@ -84,7 +84,6 @@ func (t *Tcp) handleConnection(conn net.Conn) {
 			if readCount >= length {
 				copy(readData[oldReadCount:], buf[:readLength-(readCount-length)])
 				copy(buf[0:readCount-length], buf[readLength-(readCount-length):readLength])
-				readCount = readLength - (readCount - length)
 				log.Println("packet received")
 				log.Println(string(readData))
 				socket.processPacket(readData)
@@ -97,9 +96,13 @@ func (t *Tcp) handleConnection(conn net.Conn) {
 	}
 }
 
-func (t *Socket) writeUpdate(updatePack any, writeRaw bool) {
+func (t *Socket) writeUpdate(key string, updatePack any, writeRaw bool) {
 
 	log.Println("preparing update...")
+
+	keyBytes := []byte(key)
+	keyBytesLen := make([]byte, 4)
+	binary.BigEndian.PutUint32(keyBytesLen, uint32(len(keyBytes)))
 
 	var b3 []byte
 	if writeRaw {
@@ -113,10 +116,16 @@ func (t *Socket) writeUpdate(updatePack any, writeRaw bool) {
 		}
 	}
 
-	packet := make([]byte, 1+len(b3))
+	packet := make([]byte, 1+len(keyBytesLen)+len(keyBytes)+len(b3))
 	pointer := 1
 
 	packet[0] = 0x01
+
+	copy(packet[pointer:pointer+len(keyBytesLen)], keyBytesLen[:])
+	pointer += len(keyBytesLen)
+	copy(packet[pointer:pointer+len(keyBytes)], keyBytes[:])
+	pointer += len(keyBytes)
+
 	copy(packet[pointer:pointer+len(b3)], b3[:])
 	pointer += len(b3)
 
@@ -151,10 +160,8 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 			return
 		}
 	}
-	b3Len := make([]byte, 4)
-	binary.BigEndian.PutUint32(b3Len, uint32(len(b3)))
 
-	packet := make([]byte, 1+len(b1Len)+len(b1)+len(b2)+len(b3Len)+len(b3))
+	packet := make([]byte, 1+len(b1Len)+len(b1)+len(b2)+len(b3))
 	pointer := 1
 
 	packet[0] = 0x02
@@ -167,8 +174,6 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 	copy(packet[pointer:pointer+len(b2)], b2[:])
 	pointer += len(b2)
 
-	copy(packet[pointer:pointer+len(b3Len)], b3Len[:])
-	pointer += len(b3Len)
 	copy(packet[pointer:pointer+len(b3)], b3[:])
 	pointer += len(b3)
 
@@ -186,10 +191,19 @@ func (t *Socket) pushBuffer() {
 	if t.Ack {
 		if len(t.Buffer) > 0 {
 			t.Ack = false
-			_, err := t.Conn.Write(t.Buffer[0])
+			packetLen := make([]byte, 4)
+			binary.BigEndian.PutUint32(packetLen, uint32(len(t.Buffer[0])))
+			_, err := t.Conn.Write(packetLen)
 			if err != nil {
 				t.Ack = true
 				log.Println(err)
+				return
+			}
+			_, err = t.Conn.Write(t.Buffer[0])
+			if err != nil {
+				t.Ack = true
+				log.Println(err)
+				return
 			}
 		}
 	}
@@ -204,9 +218,9 @@ func (t *Socket) connectListener(uid string) *signaler.Listener {
 			Id:      uid,
 			Paused:  false,
 			DisTime: 0,
-			Signal: func(b any) {
+			Signal: func(key string, b any) {
 				if b != nil {
-					t.writeUpdate(b, true)
+					t.writeUpdate(key, b, true)
 				}
 			},
 		}
@@ -223,14 +237,7 @@ func (t *Socket) processPacket(packet []byte) {
 			t.Ack = true
 			if len(t.Buffer) > 0 {
 				t.Buffer = t.Buffer[1:]
-				if len(t.Buffer) > 0 {
-					t.Ack = false
-					_, err := t.Conn.Write(t.Buffer[0])
-					if err != nil {
-						t.Ack = true
-						log.Println(err)
-					}
-				}
+				t.pushBuffer()
 			}
 		}
 		send()
@@ -285,7 +292,7 @@ func (t *Socket) processPacket(packet []byte) {
 			t.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
 			t.app.Tools().Signaler().ListenToSingle(lis)
 			b, _ := json.Marshal(packetmodel.ResponseSimpleMessage{Message: "old_queue_end"})
-			lis.Signal(b)
+			lis.Signal("old_queue_end", b)
 		} else {
 			t.writeResponse(packetId, 4, packetmodel.BuildErrorJson("authentication failed"), false)
 		}

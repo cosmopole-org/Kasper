@@ -5,7 +5,6 @@ import (
 	"log"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"kasper/src/abstract/adapters/signaler"
@@ -132,11 +131,9 @@ func RunNet() error {
 	ha.Install(app, sampleBotUserId)
 	app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: sampleBotUserId,
-		Signal: func(a any) {
+		Signal: func(key string, a any) {
 			data := string(a.([]byte))
-			dataParts := strings.Split(data, " ")
-			if dataParts[1] == "topics/send" {
-				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
+			if key == "points/signal" {
 				var inp inputs_points.SignalInput
 				e := json.Unmarshal([]byte(data), &inp)
 				if e != nil {

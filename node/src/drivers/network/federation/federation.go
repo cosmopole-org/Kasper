@@ -230,10 +230,10 @@ func (fed *FedNet) HandlePacket(socket *Socket, channelId string, payload packet
 		log.Println(payload)
 		if payload.PointId == "" {
 			reactToUpdate(payload.Key, string(payload.Binary))
-			fed.signaler.SignalUser(payload.Key, "", payload.UserId, payload.Binary, true)
+			fed.signaler.SignalUser(payload.Key, payload.UserId, payload.Binary, false)
 		} else {
 			reactToUpdate(payload.Key, string(payload.Binary))
-			fed.signaler.SignalGroup(payload.Key, payload.PointId, payload.Binary, true, payload.Exceptions)
+			fed.signaler.SignalGroup(payload.Key, payload.PointId, payload.Binary, false, payload.Exceptions)
 		}
 	} else if payload.Type == "request" {
 		action := fed.app.Actor().FetchAction(payload.Key)

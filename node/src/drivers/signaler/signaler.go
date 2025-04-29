@@ -64,7 +64,7 @@ func (p *Signaler) ListenToJoin(listener *signaler.JoinListener) {
 	p.JListener = listener
 }
 
-func (p *Signaler) SignalUser(key string, respondToId string, listenerId string, data any, pack bool) {
+func (p *Signaler) SignalUser(key string, listenerId string, data any, pack bool) {
 	if !strings.Contains(listenerId, "@") {
 		return
 	}
@@ -92,13 +92,9 @@ func (p *Signaler) SignalUser(key string, respondToId string, listenerId string,
 					}
 					message = string(msg)
 				}
-				if len(respondToId) > 0 {
-					listener.Signal([]byte(responsePrefix + respondToId + " " + message))
-				} else {
-					listener.Signal([]byte(updatePrefix + key + " " + message))
-				}
+				listener.Signal(key, []byte(message))
 			} else {
-				listener.Signal(data)
+				listener.Signal(key, data)
 			}
 		}
 	} else {
@@ -127,7 +123,7 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 				}
 				message = msg
 			}
-			packet = []byte(updatePrefix + key + " " + string(message))
+			packet = message
 		} else {
 			packet = data
 		}
@@ -136,34 +132,26 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 			return
 		}
 		if group.Override {
-			group.Listener.Signal(packet)
+			group.Listener.Signal(key, packet)
 			return
 		}
-		log.Println("step 1")
 		var foreignersMap = map[string][]string{}
 		for t := range group.Points.IterBuffered() {
-			log.Println("step 2")
 			userId := t.Val
 			username := ""
 			p.app.ModifyState(true, func(trx trx.ITrx) {
 				username = string(trx.GetColumn("User", userId, "username"))
 			})
-			log.Println("step 3", username)
 			if username == "" {
 				continue
 			}
-			log.Println("step 4")
 			userOrigin := strings.Split(username, "@")[1]
 			if (userOrigin == p.app.Id()) || (userOrigin == "global") {
-				log.Println("step 5")
 				if !p.LGroupDisabled || !group.Override {
-					log.Println("step 6")
 					if !excepDict[t.Key] {
-						log.Println("step 7")
 						listener, found := p.listeners.Get(userId)
 						if found && (listener != nil) {
-							log.Println("step 8")
-							listener.Signal(packet)
+							listener.Signal(key, packet)
 						}
 					}
 				}

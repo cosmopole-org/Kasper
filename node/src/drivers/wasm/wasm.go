@@ -23,7 +23,6 @@ import (
 	"kasper/src/abstract/models/worker"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
 	"log"
-	"strings"
 )
 
 type Wasm struct {
@@ -37,13 +36,11 @@ type Wasm struct {
 func (wm *Wasm) Assign(machineId string) {
 	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: machineId,
-		Signal: func(a any) {
+		Signal: func(key string, a any) {
 			machId := C.CString(machineId)
 			astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 			data := string(a.([]byte))
-			dataParts := strings.Split(data, " ")
-			if dataParts[1] == "points/signal" {
-				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
+			if key == "points/signal" {
 				input := C.CString(data)
 				C.wasmRunVm(astPath, input, machId)
 			}

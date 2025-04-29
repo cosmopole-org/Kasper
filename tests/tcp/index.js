@@ -1,8 +1,9 @@
 const net = require('net');
-var crypto = require('crypto');
+const crypto = require('crypto');
+const fs = require('fs');
 
 const port = 8080;
-let host = '172.77.5.2';
+let host = '172.77.5.1';
 var privateKey = undefined;
 
 let callbacks = {};
@@ -20,14 +21,49 @@ socket.on('error', e => {
     console.log(e);
 });
 
+let received = Buffer.from([]);
+let observePhase = true;
+let nextLength = 0;
+
+function readBytes() {
+    if (observePhase) {
+        if (received.length >= 4) {
+            nextLength = received.subarray(0, 4).readIntBE(0, 4);
+            received = received.subarray(4);
+            observePhase = false;
+            readBytes();
+        }
+    } else {
+        if (received.length >= nextLength) {
+            payload = received.subarray(0, nextLength);
+            received = received.subarray(nextLength);
+            observePhase = true;
+            processPacket(payload);
+            readBytes();
+        }
+    }
+}
+
 socket.on('data', (data) => {
+    console.log(data.toString());
+    setTimeout(() => {
+        received = Buffer.concat([received, data]);
+        readBytes();
+    });
+});
+
+function processPacket(data) {
     try {
         let pointer = 0;
         if (data.at(pointer) == 0x01) {
-            let bufferObj = Buffer.from(data.toString(), "base64");
-            let decodedString = bufferObj.toString("utf8");
-            console.log(decodedString);
             pointer++;
+            let keyLen = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
+            pointer += 4;
+            let key = data.subarray(pointer, pointer + keyLen).toString();
+            pointer += keyLen;
+            let payload = data.subarray(pointer);
+            let obj = JSON.parse(payload.toString());
+            console.log(key, obj);
         } else if (data.at(pointer) == 0x02) {
             pointer++;
             let pidLen = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
@@ -36,20 +72,16 @@ socket.on('data', (data) => {
             pointer += pidLen;
             let resCode = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
             pointer += 4;
-
-            let payloadLen = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
-            pointer += 4;
-            let payload = data.subarray(pointer, pointer + payloadLen).toString();
-            pointer += payloadLen;
-
+            let payload = data.subarray(pointer).toString();
             let obj = JSON.parse(payload);
             let cb = callbacks[packetId];
             cb(resCode, obj);
         }
     } catch (ex) { console.log(ex); }
+    console.log("sending packet_received signal...");
     let b = Buffer.from("packet_received");
     socket.write(Buffer.concat([intToBytes(b.length), b]));
-});
+}
 
 function sign(b) {
     if (privateKey) {
@@ -115,7 +147,7 @@ async function sleep(ms) {
 }
 
 async function doTest() {
-    let res = await sendRequest("", "/users/register", { "username": "kasper12" });
+    let res = await sendRequest("", "/users/register", { "username": "kasper2" });
     console.log(res.resCode, res.obj);
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" +
@@ -123,10 +155,27 @@ async function doTest() {
         "\n-----END RSA PRIVATE KEY-----\n",
         'utf-8'
     )
-    await sendRequest(res.obj.user.id, "authenticate", {});
-    // res = await sendRequest(res.obj.user.id, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.2" });
-    res = await sendRequest(res.obj.user.id, "/points/join", { "pointId": "7@172.77.5.2" });
+    let userId = res.obj.user.id;
+    await sendRequest(userId, "authenticate", {});
+    res = await sendRequest(res.obj.user.id, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.2" });
+    // res = await sendRequest(userId, "/points/join", { "pointId": "4@172.77.5.2" });
     console.log(res.resCode, res.obj);
+
+    let mainPyScript = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/src/main.py", { encoding: 'utf-8' });
+    // res = await sendRequest(userId, "/storage/uploadData", { "pointId": "4@172.77.5.2", "data": mainPyScript });
+    // console.log(res.resCode, res.obj);
+    // // let mainPyId = res.obj.file.id;
+
+    // let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/src/run.sh", { encoding: 'utf-8' }));
+    // res = await sendRequest(userId, "/storage/uploadData", { "pointId": "4@172.77.5.2", "data": runShScript });
+    // console.log(res.resCode, res.obj);
+    // // let runShId = res.obj.file.id;
+
+    for (let i = 0; i < 10; i++) {
+        await sleep(500);
+        res = await sendRequest(userId, "/points/signal", { "type": "broadcast", "pointId": "3@172.77.5.2", "data": mainPyScript + "\n" + mainPyScript });
+        console.log(i, res.resCode, res.obj);
+    }
     // socket.destroy();
     // console.log("end.");
 }

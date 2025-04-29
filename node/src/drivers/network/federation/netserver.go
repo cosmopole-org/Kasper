@@ -88,7 +88,6 @@ func (t *Tcp) handleConnection(socket *Socket) {
 			if readCount >= length {
 				copy(readData[oldReadCount:], buf[:readLength-(readCount-length)])
 				copy(buf[0:readCount-length], buf[readLength-(readCount-length):readLength])
-				readCount = readLength - (readCount - length)
 				log.Println("packet received")
 				log.Println(string(readData))
 				socket.processPacket(readData)

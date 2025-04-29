@@ -33,7 +33,7 @@ func (a *Actions) Create(state state.IState, input inputsinvites.CreateInput) (a
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
 	trx.PutLink("invite::"+point.Id+"::"+input.UserId, "true")
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalUser("invites/create", "", input.UserId, updatesinvites.Create{PointId: point.Id}, true)
+		a.App.Tools().Signaler().SignalUser("invites/create", input.UserId, updatesinvites.Create{PointId: point.Id}, true)
 	}, false)
 	return outputsinvites.CreateOutput{}, nil
 }
@@ -49,7 +49,7 @@ func (a *Actions) Cancel(state state.IState, input inputsinvites.CancelInput) (a
 	}
 	trx.DelKey("link::invite::" + state.Info().PointId() + "::" + input.UserId)
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalUser("invites/cancel", "", input.UserId, updatesinvites.Cancel{PointId: state.Info().PointId()}, true)
+		a.App.Tools().Signaler().SignalUser("invites/cancel", input.UserId, updatesinvites.Cancel{PointId: state.Info().PointId()}, true)
 	}, false)
 	return outputsinvites.CancelOutput{}, nil
 }
@@ -70,7 +70,7 @@ func (a *Actions) Accept(state state.IState, input inputsinvites.AcceptInput) (a
 	}
 	for _, admin := range admins {
 		future.Async(func() {
-			a.App.Tools().Signaler().SignalUser("invites/accept", "", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
+			a.App.Tools().Signaler().SignalUser("invites/accept", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
 		}, false)
 	}
 	user := model.User{Id: state.Info().UserId()}.Pull(trx)
@@ -94,7 +94,7 @@ func (a *Actions) Decline(state state.IState, input inputsinvites.DeclineInput) 
 	}
 	for _, admin := range admins {
 		future.Async(func() {
-			a.App.Tools().Signaler().SignalUser("invites/decline", "", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
+			a.App.Tools().Signaler().SignalUser("invites/decline", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
 		}, false)
 	}
 	return outputsinvites.DeclineOutput{}, nil

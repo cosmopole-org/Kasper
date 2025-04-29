@@ -18,10 +18,6 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Upload)
 		}
 		
-		func (c *Plugger) UploadData() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.UploadData)
-		}
-		
 		func (c *Plugger) Download() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Download)
 		}

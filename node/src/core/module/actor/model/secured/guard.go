@@ -29,7 +29,7 @@ func (g *Guard) CheckValidity(app core.ICore, packet []byte, signature string, u
 	log.Println("hello 15.........")
 	hasAccess := app.Tools().Security().HasAccessToPoint(userId, pointId)
 	log.Println("hello 16.........")
-	if hasAccess {
+	if !hasAccess {
 		return false, &model.Info{}
 	}
 	return true, model.NewGodInfo(userId, pointId, isGod)

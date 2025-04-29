@@ -194,7 +194,7 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 			if point.PersHist {
 				a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data)
 			}
-			a.App.Tools().Signaler().SignalUser("points/signal", "", input.UserId, p, true)
+			a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
 			return outputs_points.SignalOutput{Passed: true}, nil
 		}
 	}

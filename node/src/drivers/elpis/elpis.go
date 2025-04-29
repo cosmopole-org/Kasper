@@ -16,7 +16,6 @@ import (
 	"kasper/src/abstract/models/worker"
 	inputs_points "kasper/src/shell/api/inputs/points"
 	"log"
-	"strings"
 )
 
 type Elpis struct {
@@ -28,12 +27,10 @@ type Elpis struct {
 func (wm *Elpis) Assign(machineId string) {
 	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: machineId,
-		Signal: func(a any) {
+		Signal: func(key string, a any) {
 			astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 			data := string(a.([]byte))
-			dataParts := strings.Split(data, " ")
-			if dataParts[1] == "points/signal" {
-				data = data[len(dataParts[0])+1+len(dataParts[1])+1:]
+			if key == "points/signal" {
 				var inp inputs_points.SignalInput
 				e := json.Unmarshal([]byte(data), &inp)
 				if e != nil {
