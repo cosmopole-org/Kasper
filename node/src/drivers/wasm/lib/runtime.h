@@ -201,6 +201,7 @@ WasmEdge_Result trx_get(void *data, const WasmEdge_CallingFrameContext *, const 
 WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
+WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 
 // Utils: -------------------------------------------------
 
@@ -532,6 +533,9 @@ void WasmMac::registerHost(std::string modPath)
     WasmEdge_ValType Params8[2] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
     WasmEdge_ValType Returns8[1] = {WasmEdge_ValTypeGenI32()};
     this->registerFunction(HostMod, "newSyncTask", newSyncTask, Params8, 2, Returns8);
+    WasmEdge_ValType Params9[7] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
+    WasmEdge_ValType Returns9[1] = {WasmEdge_ValTypeGenI64()};
+    this->registerFunction(HostMod, "plantTrigger", plantTrigger, Params9, 7, Returns9);
     auto Res = WasmEdge_VMRegisterModuleFromImport(VMCxt, HostMod);
     if (!WasmEdge_ResultOK(Res))
     {
@@ -835,23 +839,10 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     int keyL = WasmEdge_ValueGetI32(In[3]);
     uint32_t inputOffset = WasmEdge_ValueGetI32(In[4]);
     int inputL = WasmEdge_ValueGetI32(In[5]);
-    bool isFile = WasmEdge_ValueGetI32(In[6]) == 1;
-    bool isBase = WasmEdge_ValueGetI32(In[7]) == 1;
+    uint32_t metaOffset = WasmEdge_ValueGetI32(In[6]);
+    int metaL = WasmEdge_ValueGetI32(In[7]);
 
     auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
-
-    std::string targetMachineId = "";
-    if (!isBase)
-    {
-        unsigned char *rawTm = new unsigned char[tmL];
-        vector<char> rawTmC{};
-        WasmEdge_MemoryInstanceGetData(mem, rawTm, tmOffset, tmL);
-        for (int i = 0; i < tmL; i++)
-        {
-            rawTmC.push_back((char)rawTm[i]);
-        }
-        targetMachineId = std::string(rawTmC.begin(), rawTmC.end());
-    }
 
     unsigned char *rawKey = new unsigned char[keyL];
     vector<char> rawKeyC{};
@@ -871,7 +862,36 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     }
     auto input = std::string(rawInputC.begin(), rawInputC.end());
 
-    log(targetMachineId + " || " + key + " || " + input);
+    unsigned char *rawMeta = new unsigned char[metaL];
+    vector<char> rawMetaC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawMeta, metaOffset, metaL);
+    for (int i = 0; i < metaL; i++)
+    {
+        rawMetaC.push_back((char)rawMeta[i]);
+    }
+    auto meta = std::string(rawMetaC.begin(), rawMetaC.end());
+
+    log("[" + meta + "]");
+
+    bool isBase = meta[0] == '1';
+    bool isFile = meta[1] == '1';
+
+    std::string tag = meta.substr(2, meta.length() - 2);
+
+    std::string targetMachineId = "";
+    if (!isBase)
+    {
+        unsigned char *rawTm = new unsigned char[tmL];
+        vector<char> rawTmC{};
+        WasmEdge_MemoryInstanceGetData(mem, rawTm, tmOffset, tmL);
+        for (int i = 0; i < tmL; i++)
+        {
+            rawTmC.push_back((char)rawTm[i]);
+        }
+        targetMachineId = std::string(rawTmC.begin(), rawTmC.end());
+    }
+
+    log(targetMachineId + " || " + key + " || " + input + " || " + tag);
 
     json j;
     j["key"] = "submitOnchainTrx";
@@ -880,6 +900,7 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     j2["machineId"] = rt->machineId;
     j2["targetMachineId"] = targetMachineId;
     j2["key"] = key;
+    j2["tag"] = tag;
     j2["packet"] = input;
     j2["isFile"] = isFile;
     j2["isBase"] = isBase;
@@ -907,6 +928,68 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
 
     Out[0] = WasmEdge_ValueGenI64(c);
 
+    // WasmEdge_StringDelete(memName);
+
+    return WasmEdge_Result_Success;
+}
+
+WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out)
+{
+    auto memName = WasmEdge_StringCreateByCString("memory");
+    auto mallocName = WasmEdge_StringCreateByCString("malloc");
+
+    WasmMac *rt = (WasmMac *)data;
+    auto mod = WasmEdge_VMGetActiveModule(rt->vm);
+    uint32_t inOffset = WasmEdge_ValueGetI32(In[0]);
+    int inL = WasmEdge_ValueGetI32(In[1]);
+    uint32_t keyOffset = WasmEdge_ValueGetI32(In[2]);
+    int keyL = WasmEdge_ValueGetI32(In[3]);
+    uint32_t piOffset = WasmEdge_ValueGetI32(In[4]);
+    int piL = WasmEdge_ValueGetI32(In[5]);
+    int count = WasmEdge_ValueGetI32(In[6]);
+
+    auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
+
+    unsigned char *rawKey = new unsigned char[keyL];
+    vector<char> rawKeyC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawKey, keyOffset, keyL);
+    for (int i = 0; i < keyL; i++)
+    {
+        rawKeyC.push_back((char)rawKey[i]);
+    }
+    auto text = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    unsigned char *rawIn = new unsigned char[inL];
+    vector<char> rawInC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawIn, inOffset, inL);
+    for (int i = 0; i < inL; i++)
+    {
+        rawInC.push_back((char)rawIn[i]);
+    }
+    auto tag = std::string(rawInC.begin(), rawInC.end());
+
+    unsigned char *rawPi = new unsigned char[piL];
+    vector<char> rawPiC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawPi, piOffset, piL);
+    for (int i = 0; i < piL; i++)
+    {
+        rawPiC.push_back((char)rawPi[i]);
+    }
+    auto pointId = std::string(rawPiC.begin(), rawPiC.end());
+
+    json j;
+    j["key"] = "plantTrigger";
+    json j2;
+    j2["machineId"] = rt->machineId;
+    j2["pointId"] = pointId;
+    j2["input"] = text;
+    j2["tag"] = tag;
+    j2["count"] = count;
+    j["input"] = j2;
+    std::string packet = j.dump();
+
+    rt->callback(&packet[0]);
+    
     // WasmEdge_StringDelete(memName);
 
     return WasmEdge_Result_Success;

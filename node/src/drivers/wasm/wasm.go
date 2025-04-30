@@ -73,12 +73,17 @@ type ChainDbOp struct {
 }
 
 func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
-	machId := C.CString(machineId)
-	astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 	point := model.Point{Id: pointId}
+	isMemberOfPoint := false
 	wm.app.ModifyState(true, func(trx trx.ITrx) {
 		point.Pull(trx)
+		isMemberOfPoint = (trx.GetLink("memberof::" + machineId + "::" + pointId) == "true")
 	})
+	if !isMemberOfPoint {
+		return
+	}
+	machId := C.CString(machineId)
+	astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 	b, _ := json.Marshal(updates_points.Send{User: model.User{}, Point: point, Action: "single", Data: data})
 	input := C.CString(string(b))
 	C.wasmRunVm(astPath, input, machId)

@@ -230,8 +230,8 @@ func (c *Core) SignPacket(data []byte) string {
 	return base64.StdEncoding.EncodeToString(signature)
 }
 
-func (c *Core) PlantChainTrigger(count int, userId string, tag string, machineId string, pointId string, input string) {
-	b, e := json.Marshal(input)
+func (c *Core) PlantChainTrigger(count int, userId string, tag string, machineId string, pointId string, attachment string) {
+	b, e := json.Marshal(attachment)
 	if e != nil {
 		log.Println(e)
 		return
@@ -245,7 +245,7 @@ func (c *Core) PlantChainTrigger(count int, userId string, tag string, machineId
 		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::|", []byte{0x01})
 		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::machineId", []byte(machineId))
 		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::pointId", []byte(pointId))
-		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::input", b)
+		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::attachment", b)
 		targetCountB := make([]byte, 4)
 		binary.BigEndian.PutUint32(targetCountB, uint32(count))
 		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::targetCount", targetCountB)
@@ -587,24 +587,48 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 						tempCount := int32(0)
 						targetCount := int32(-1)
 						c.ModifyState(false, func(trx trx.ITrx) {
-							countB := trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::tempCount")
-							tempCount = int32(binary.BigEndian.Uint32(countB[:]))
-							countB2 := trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::targetCount")
-							targetCount = int32(binary.BigEndian.Uint32(countB2[:]))
-							tempCount++
-							countBNext := make([]byte, 4)
-							binary.BigEndian.PutUint32(countBNext, uint32(tempCount))
-							trx.PutBytes("obj::ChainCallback::"+packet.ToUserId+"_"+packet.Tag+"::tempCount", countBNext)
+							if trx.HasObj("ChainCallback", packet.ToUserId+"_"+packet.Tag) {
+								countB := trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::tempCount")
+								tempCount = int32(binary.BigEndian.Uint32(countB[:]))
+								countB2 := trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::targetCount")
+								targetCount = int32(binary.BigEndian.Uint32(countB2[:]))
+								tempCount++
+								countBNext := make([]byte, 4)
+								binary.BigEndian.PutUint32(countBNext, uint32(tempCount))
+								trx.PutBytes("obj::ChainCallback::"+packet.ToUserId+"_"+packet.Tag+"::tempCount", countBNext)
+								trx.PutBytes(fmt.Sprintf("obj::ChainCallback::"+packet.ToUserId+"_"+packet.Tag+"::collected_%d", tempCount), packet.Payload)
+							}
 						})
 						if tempCount == targetCount {
 							pointId := ""
-							input := ""
+							attachment := ""
+							payloads := []string{}
 							c.ModifyState(false, func(trx trx.ITrx) {
 								pointId = string(trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::pointId"))
-								input = string(trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::input"))
+								attachment = string(trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::attachment"))
+
+								for i := 1; i <= int(targetCount); i++ {
+									payloads = append(payloads, string(trx.GetBytes(fmt.Sprintf("obj::ChainCallback::"+packet.ToUserId+"_"+packet.Tag+"::collected_%d", i))))
+								}
+
+								trx.DelKey("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::|")
+								trx.DelKey("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::machineId")
+								trx.DelKey("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::pointId")
+								trx.DelKey("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::attachment")
+								trx.DelKey("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::targetCount")
+								trx.DelKey("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::tempCount")
 							})
+							input := map[string]any{
+								"attachment": attachment,
+								"payloads": payloads,
+							}
+							b, e := json.Marshal(input)
+							if e != nil {
+								log.Println(e)
+								return
+							}
 							future.Async(func() {
-								c.tools.Wasm().RunVm(packet.ToUserId, pointId, input)
+								c.tools.Wasm().RunVm(packet.ToUserId, pointId, string(b))
 							}, false)
 						}
 					} else {

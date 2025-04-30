@@ -12,6 +12,10 @@ import (
 )
 
 //go:module env
+//export plantTrigger
+func plantTrigger(k int32, kl int32, v int32, lv int32, p int32, pv int32, count int32) int64
+
+//go:module env
 //export runDocker
 func runDocker(k int32, kl int32, v int32, lv int32) int64
 
@@ -37,7 +41,7 @@ func consoleLog(k int32, kl int32) int32
 
 //go:module env
 //export submitOnchainTrx
-func submitOnchainTrx(tmO int32, tmL int32, keyO int32, keyL int32, inputO int32, inputL int32, isFile int32, isBase int32) int64
+func submitOnchainTrx(tmO int32, tmL int32, keyO int32, keyL int32, inputO int32, inputL int32, metaO int32, metaL int32) int64
 
 //go:module env
 //export output
@@ -470,8 +474,9 @@ func (*Db) GetByPrefix(key string) [][]byte {
 type Chain struct {
 }
 
-func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, input any) []byte {
+func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, tag string, input any) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
+	tagO, tagL := bytesToPointer([]byte("0" + "0" + tag))
 	keyO, keyL := bytesToPointer([]byte(key))
 	b, e := json.Marshal(input)
 	if e != nil {
@@ -479,39 +484,50 @@ func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, input 
 		return []byte("{}")
 	}
 	inputO, inputL := bytesToPointer(b)
-	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, 0, 0)
+	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
 	return result
 }
 
-func (c *Chain) SubmitAppletFileTrx(targetMachineId string, fileId string) []byte {
+func (c *Chain) SubmitAppletFileTrx(targetMachineId string, fileId string, tag string) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
+	tagO, tagL := bytesToPointer([]byte("1" + "0" + tag))
 	keyO, keyL := bytesToPointer([]byte("/storage/upload"))
 	inputO, inputL := bytesToPointer([]byte(fileId))
-	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, 1, 0)
+	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
 	return result
 }
 
-func (c *Chain) SubmitBasePacketTrx(key string, input []byte) []byte {
+func (c *Chain) SubmitBasePacketTrx(key string, tag string, input []byte) []byte {
 	keyO, keyL := bytesToPointer([]byte(key))
+	tagO, tagL := bytesToPointer([]byte("0" + "1" + tag))
 	b, e := json.Marshal(input)
 	if e != nil {
 		logger.Log(e.Error())
 		return []byte("{}")
 	}
 	inputO, inputL := bytesToPointer(b)
-	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, 0, 1)
+	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
 	return result
 }
 
-func (c *Chain) SubmitBaseFileTrx(fileId string) []byte {
+func (c *Chain) SubmitBaseFileTrx(fileId string, tag string) []byte {
 	keyO, keyL := bytesToPointer([]byte("/storage/upload"))
+	tagO, tagL := bytesToPointer([]byte("11deepseek"))
 	inputO, inputL := bytesToPointer([]byte(fileId))
-	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, 1, 1)
+	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
 	return result
+}
+
+func (c *Chain) PlantTrigger(count int32, pointId string, tag string, input map[string]any) {
+	tagO, tagL := bytesToPointer([]byte(tag))
+	piO, piL := bytesToPointer([]byte(pointId))
+	b, _ := json.Marshal(input)
+	inputO, inputL := bytesToPointer(b)
+	plantTrigger(tagO, tagL, inputO, inputL, piO, piL, count)
 }
 
 type Trx[T any] struct {
@@ -521,7 +537,9 @@ type Trx[T any] struct {
 
 func ParseArgs(a int64) string {
 	input := model.Send{}
-	e := json.Unmarshal(pointerToBytes(a), &input)
+	str := pointerToBytes(a)
+	logger.Log(string(str))
+	e := json.Unmarshal(str, &input)
 	if e != nil {
 		logger.Log("unable to parse args as send.")
 		return ""
@@ -613,35 +631,94 @@ func runTask(a int64) int32 {
 	return 0
 }
 
+type TriggerCallbackPacket struct {
+	Attachment string   `json:"attachment"`
+	Payloads   []string `json:"payloads"`
+}
+
+type Attachment struct {
+	Action   string            `json:"action"`
+	SrcFiles map[string]string `json:"srcFiles"`
+}
+
+type File struct {
+	Id      string `json:"id" gorm:"primaryKey;column:id"`
+	PointId string `json:"pointId" gorm:"column:topic_id"`
+	OwnerId string `json:"senderId" gorm:"column:sender_id"`
+}
+
+type FileResponse struct {
+	File File `json:"file"`
+}
+
 //export run
 func run(a int64) int64 {
 
 	input := map[string]any{}
 	inputStr := ParseArgs(a)
-	logger.Log("hi : [" + inputStr + "]")
 	err := json.Unmarshal([]byte(inputStr), &input)
 	if err != nil {
 		logger.Log(err.Error())
+	}
+
+	action, ok := input["action"]
+
+	if ok && action.(string) == "train" {
+		vm := Vm{}
+		filesMap := map[string]string{}
+		srcFiles := input["srcFiles"].(map[string]any)
+		for k, v := range srcFiles {
+			filesMap[k] = v.(string)
+		}
+		modelFile := vm.RunDocker("ai", filesMap)
+		chain := Chain{}
+		attachment := map[string]any{
+			"srcFiles": input["srcFilesNext"].(map[string]any),
+			"action":   "aggregate",
+		}
+		chain.PlantTrigger(1, input["aggPointId"].(string), "deepseek", attachment)
+		chain.SubmitBaseFileTrx(modelFile.Id, "deepseek")
+		output(bytesToPointer([]byte("{ \"response\": \"trained the model\" }")))
+		return 0
+	} else {
+		input := TriggerCallbackPacket{}
+		err := json.Unmarshal([]byte(inputStr), &input)
+		if err != nil {
+			logger.Log(err.Error())
+			return 0
+		}
+		vm := Vm{}
+		filesMap := map[string]string{}
+		attachmentStr := ""
+		e := json.Unmarshal([]byte(input.Attachment), &attachmentStr)
+		if e != nil {
+			logger.Log(e.Error())
+			return 0
+		}
+		logger.Log(attachmentStr)
+		attachment := Attachment{}
+		e = json.Unmarshal([]byte(attachmentStr), &attachment)
+		if e != nil {
+			logger.Log(e.Error())
+			return 0
+		}
+		for k, v := range attachment.SrcFiles {
+			filesMap[k] = v
+		}
+		payload := FileResponse{}
+		e = json.Unmarshal([]byte(input.Payloads[0]), &payload)
+		if e != nil {
+			logger.Log(e.Error())
+			return 0
+		}
+		modelFileId := payload.File.Id
+		filesMap[modelFileId] = "model"
+		modelFile := vm.RunDocker("ai_2", filesMap)
+		chain := Chain{}
+		chain.SubmitBaseFileTrx(modelFile.Id, "")
+		output(bytesToPointer([]byte("{ \"response\": \"aggregated the model\" }")))
 		return 0
 	}
-
-	logger.Log("hello keyhan !")
-
-	vm := Vm{}
-
-	filesMap := map[string]string{}
-	srcFiles := input["srcFiles"].(map[string]any)
-	for k, v := range srcFiles {
-		filesMap[k] = v.(string)
-	}
-
-	modelFile := vm.RunDocker("ai", filesMap)
-
-	chain := Chain{}
-	chain.SubmitBaseFileTrx(modelFile.Id)
-
-	output(bytesToPointer([]byte("{ \"hello\": \"kasper\" }")))
-	return 0
 }
 
 func main() {
