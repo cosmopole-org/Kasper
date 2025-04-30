@@ -9,6 +9,7 @@ type ChainBaseRequest struct {
 	Payload    []byte
 	Signatures []string
 	RequestId  string
+	Tag        string
 }
 
 type ChainResponse struct {
@@ -19,6 +20,8 @@ type ChainResponse struct {
 	Effects   Effects
 	ResCode   int
 	Err       string
+	Tag       string
+	ToUserId  string
 }
 
 type ChainAppletRequest struct {
@@ -30,6 +33,7 @@ type ChainAppletRequest struct {
 	Signatures []string
 	RequestId  string
 	Runtime    string
+	Tag        string
 }
 
 type ChainElectionPacket struct {
@@ -50,6 +54,7 @@ type ChainCallback struct {
 	Fn        func([]byte, int, error)
 	Executors map[string]bool
 	Responses map[string]string
+	Tag       string
 }
 
 type Effects struct {

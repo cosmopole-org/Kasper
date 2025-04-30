@@ -21,6 +21,6 @@ type ISecureAction interface {
 	HasGlobalParser() bool
 	ParseInput(protocol string, raw interface{}) (input.IInput, error)
 	SecurelyAct(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, dummy string) (int, any, error)
-	SecurlyActChain(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, origin string)
+	SecurlyActChain(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, origin string, tag string)
 	SecurelyActFed(userId string, packetBinary []byte, packetSignature string, input input.IInput) (int, any, error)
 }

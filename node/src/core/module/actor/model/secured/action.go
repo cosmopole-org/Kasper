@@ -32,20 +32,20 @@ func (a *SecureAction) ParseInput(protocol string, raw interface{}) (input.IInpu
 	return a.Parsers[protocol](raw)
 }
 
-func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, origin string) {
+func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, origin string, tag string) {
 	success, info := a.Guard.CheckValidityForChain(a.core, packetBinary, packetSignature, userId, input.GetPointId())
 	if !success {
 		data := []byte("{}")
-		a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 403, "authorization failed", []update.Update{})
+		a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 403, "authorization failed", []update.Update{}, tag, userId)
 	} else {
 		a.core.ModifyStateSecurlyWithSource(false, info, origin, func(s state.IState) {
 			sc, res, err := a.Act(s, input)
 			if err != nil {
 				data := []byte("{}")
-				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 500, err.Error(), []update.Update{})
+				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 500, err.Error(), []update.Update{}, tag, userId)
 			} else {
 				data, _ := json.Marshal(res)
-				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), sc, "", s.Trx().Updates())
+				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), sc, "", s.Trx().Updates(), tag, userId)
 			}
 		})
 	}
@@ -61,7 +61,7 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 		var res any
 		var sc int
 		var e error
-		a.core.ExecBaseRequestOnChain(a.Key(), packetBinary, packetSignature, userId, func(data []byte, resCode int, err error) {
+		a.core.ExecBaseRequestOnChain(a.Key(), packetBinary, packetSignature, userId, "", func(data []byte, resCode int, err error) {
 			result := map[string]any{}
 			json.Unmarshal(data, &result)
 			res = result

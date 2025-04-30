@@ -22,6 +22,8 @@ import (
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/models/worker"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
+	"kasper/src/shell/api/model"
+	updates_points "kasper/src/shell/api/updates/points"
 	"log"
 )
 
@@ -68,6 +70,18 @@ type ChainDbOp struct {
 	OpType string `json:"opType"`
 	Key    string `json:"key"`
 	Val    string `json:"val"`
+}
+
+func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
+	machId := C.CString(machineId)
+	astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
+	point := model.Point{Id: pointId}
+	wm.app.ModifyState(true, func(trx trx.ITrx) {
+		point.Pull(trx)
+	})
+	b, _ := json.Marshal(updates_points.Send{User: model.User{}, Point: point, Action: "single", Data: data})
+	input := C.CString(string(b))
+	C.wasmRunVm(astPath, input, machId)
 }
 
 func (wm *Wasm) WasmCallback(dataRaw string) string {
@@ -214,6 +228,11 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
+		tag, err := checkField(input, "tag", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
 		pack, err := checkField(input, "packet", "{}")
 		if err != nil {
 			log.Println(err)
@@ -242,7 +261,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 					PointId: pointId,
 				})
 			}
-			wm.app.ExecBaseRequestOnChain(k, data, "#appletsign", machineId, func(b []byte, i int, err error) {
+			wm.app.ExecBaseRequestOnChain(k, data, "#appletsign", machineId, tag, func(b []byte, i int, err error) {
 				if err != nil {
 					log.Println(err)
 					return
@@ -251,7 +270,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 				outputCnan <- 1
 			})
 		} else {
-			wm.app.ExecAppletRequestOnChain(pointId, targetMachineId, k, data, "#appletsign", machineId, func(b []byte, i int, err error) {
+			wm.app.ExecAppletRequestOnChain(pointId, targetMachineId, k, data, "#appletsign", machineId, tag, func(b []byte, i int, err error) {
 				if err != nil {
 					log.Println(err)
 					return
@@ -262,7 +281,35 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		<-outputCnan
 		return string(result)
+	} else if key == "plantTrigger" {
+		count, err := checkField(input, "count", float64(0))
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tag, err := checkField(input, "tag", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		pointId, err := checkField(input, "pointId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		data, err := checkField(input, "input", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		wm.app.PlantChainTrigger(int(count), machineId, tag, machineId, pointId, data)
 	}
+
 	return "{}"
 }
 

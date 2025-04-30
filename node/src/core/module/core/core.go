@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -108,6 +109,7 @@ func (t *Tools) Docker() docker.IDocker {
 
 type Core struct {
 	lock           sync.Mutex
+	triggerLock    sync.Mutex
 	id             string
 	tools          tools.ITools
 	gods           []string
@@ -228,18 +230,43 @@ func (c *Core) SignPacket(data []byte) string {
 	return base64.StdEncoding.EncodeToString(signature)
 }
 
-func (c *Core) ExecAppletRequestOnChain(pointId string, machineId string, key string, payload []byte, signature string, userId string, callback func([]byte, int, error)) {
+func (c *Core) PlantChainTrigger(count int, userId string, tag string, machineId string, pointId string, input string) {
+	b, e := json.Marshal(input)
+	if e != nil {
+		log.Println(e)
+		return
+	}
+	c.triggerLock.Lock()
+	defer c.triggerLock.Unlock()
+	c.ModifyState(false, func(trx trx.ITrx) {
+		if trx.HasObj("ChainCallback", userId+"_"+tag) {
+			return
+		}
+		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::|", []byte{0x01})
+		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::machineId", []byte(machineId))
+		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::pointId", []byte(pointId))
+		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::input", b)
+		targetCountB := make([]byte, 4)
+		binary.BigEndian.PutUint32(targetCountB, uint32(count))
+		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::targetCount", targetCountB)
+		tempCountB := make([]byte, 4)
+		binary.BigEndian.PutUint32(tempCountB, uint32(0))
+		trx.PutBytes("obj::ChainCallback::"+userId+"_"+tag+"::tempCount", tempCountB)
+	})
+}
+
+func (c *Core) ExecAppletRequestOnChain(pointId string, machineId string, key string, payload []byte, signature string, userId string, tag string, callback func([]byte, int, error)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
-	c.chainCallbacks[callbackId] = &chain.ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
+	c.chainCallbacks[callbackId] = &chain.ChainCallback{Tag: tag, Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
 	var runtimeType string
 	c.ModifyState(true, func(trx trx.ITrx) {
 		vm := mach_model.Vm{MachineId: machineId}.Pull(trx)
 		runtimeType = vm.Runtime
 	})
 	future.Async(func() {
-		c.chain <- chain.ChainAppletRequest{Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload, Runtime: runtimeType}
+		c.chain <- chain.ChainAppletRequest{Tag: tag, Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload, Runtime: runtimeType}
 	}, false)
 }
 
@@ -249,22 +276,22 @@ func (c *Core) ExecAppletResponseOnChain(callbackId string, packet []byte, signa
 	}, false)
 }
 
-func (c *Core) ExecBaseRequestOnChain(key string, payload []byte, signature string, userId string, callback func([]byte, int, error)) {
+func (c *Core) ExecBaseRequestOnChain(key string, payload []byte, signature string, userId string, tag string, callback func([]byte, int, error)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
-	c.chainCallbacks[callbackId] = &chain.ChainCallback{Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
+	c.chainCallbacks[callbackId] = &chain.ChainCallback{Tag: tag, Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
 	future.Async(func() {
-		c.chain <- chain.ChainBaseRequest{Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload}
+		c.chain <- chain.ChainBaseRequest{Tag: tag, Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload}
 	}, false)
 }
 
-func (c *Core) ExecBaseResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update) {
+func (c *Core) ExecBaseResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update, tag string, toUserId string) {
 	future.Async(func() {
 		sort.Slice(updates, func(i, j int) bool {
 			return (updates[i].Typ + ":" + updates[i].Key) < (updates[j].Typ + ":" + updates[j].Key)
 		})
-		c.chain <- chain.ChainResponse{Signature: signature, Executor: c.id, RequestId: callbackId, ResCode: resCode, Err: e, Payload: packet, Effects: chain.Effects{DbUpdates: updates}}
+		c.chain <- chain.ChainResponse{ToUserId: toUserId, Tag: tag, Signature: signature, Executor: c.id, RequestId: callbackId, ResCode: resCode, Err: e, Payload: packet, Effects: chain.Effects{DbUpdates: updates}}
 	}, false)
 }
 
@@ -473,11 +500,11 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 				log.Println(err2)
 				errText := "input parsing error"
 				signature := c.SignPacket([]byte(errText))
-				c.ExecBaseResponseOnChain(packet.RequestId, []byte{}, signature, 400, errText, []update.Update{})
+				c.ExecBaseResponseOnChain(packet.RequestId, []byte{}, signature, 400, errText, []update.Update{}, packet.Tag, userId)
 				return
 			}
 			input = i
-			action.(iaction.ISecureAction).SecurlyActChain(userId, packet.RequestId, packet.Payload, packet.Signatures[1], input, packet.Submitter)
+			action.(iaction.ISecureAction).SecurlyActChain(userId, packet.RequestId, packet.Payload, packet.Signatures[1], input, packet.Submitter, packet.Tag)
 			break
 		}
 	case "appRequest":
@@ -557,6 +584,29 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 				if callback.Fn != nil {
 					if packet.Err == "" {
 						callback.Fn(packet.Payload, packet.ResCode, nil)
+						tempCount := int32(0)
+						targetCount := int32(-1)
+						c.ModifyState(false, func(trx trx.ITrx) {
+							countB := trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::tempCount")
+							tempCount = int32(binary.BigEndian.Uint32(countB[:]))
+							countB2 := trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::targetCount")
+							targetCount = int32(binary.BigEndian.Uint32(countB2[:]))
+							tempCount++
+							countBNext := make([]byte, 4)
+							binary.BigEndian.PutUint32(countBNext, uint32(tempCount))
+							trx.PutBytes("obj::ChainCallback::"+packet.ToUserId+"_"+packet.Tag+"::tempCount", countBNext)
+						})
+						if tempCount == targetCount {
+							pointId := ""
+							input := ""
+							c.ModifyState(false, func(trx trx.ITrx) {
+								pointId = string(trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::pointId"))
+								input = string(trx.GetBytes("obj::ChainCallback::" + packet.ToUserId + "_" + packet.Tag + "::input"))
+							})
+							future.Async(func() {
+								c.tools.Wasm().RunVm(packet.ToUserId, pointId, input)
+							}, false)
+						}
 					} else {
 						callback.Fn(packet.Payload, packet.ResCode, errors.New(packet.Err))
 					}
