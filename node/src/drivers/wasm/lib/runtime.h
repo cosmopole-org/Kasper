@@ -202,6 +202,7 @@ WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext
 WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
+WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 
 // Utils: -------------------------------------------------
 
@@ -536,6 +537,9 @@ void WasmMac::registerHost(std::string modPath)
     WasmEdge_ValType Params9[7] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
     WasmEdge_ValType Returns9[1] = {WasmEdge_ValTypeGenI64()};
     this->registerFunction(HostMod, "plantTrigger", plantTrigger, Params9, 7, Returns9);
+    WasmEdge_ValType Params10[8] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
+    WasmEdge_ValType Returns10[1] = {WasmEdge_ValTypeGenI64()};
+    this->registerFunction(HostMod, "signalPoint", signalPoint, Params10, 8, Returns10);
     auto Res = WasmEdge_VMRegisterModuleFromImport(VMCxt, HostMod);
     if (!WasmEdge_ResultOK(Res))
     {
@@ -989,7 +993,7 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     std::string packet = j.dump();
 
     rt->callback(&packet[0]);
-    
+
     // WasmEdge_StringDelete(memName);
 
     return WasmEdge_Result_Success;
@@ -1034,6 +1038,97 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     j2["pointId"] = rt->pointId;
     j2["inputFiles"] = text;
     j2["imageName"] = imageName;
+    j["input"] = j2;
+    std::string packet = j.dump();
+
+    std::string val = rt->callback(&packet[0]);
+    auto valL = val.size();
+
+    WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
+    WasmEdge_Value Returns[1] = {WasmEdge_ValueGenI32(0)};
+
+    WasmEdge_VMExecute(rt->vm, mallocName, Params, 1, Returns, 1);
+    int valOffset = WasmEdge_ValueGetI32(Returns[0]);
+
+    char *rawArr = &val[0];
+    unsigned char *arr = new unsigned char[valL];
+    for (int i = 0; i < valL; i++)
+    {
+        arr[i] = (unsigned char)rawArr[i];
+    }
+
+    WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
+    int64_t c = ((ino64_t)valOffset << 32) | valL;
+
+    Out[0] = WasmEdge_ValueGenI64(c);
+
+    // WasmEdge_StringDelete(memName);
+
+    return WasmEdge_Result_Success;
+}
+
+WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out)
+{
+    auto memName = WasmEdge_StringCreateByCString("memory");
+    auto mallocName = WasmEdge_StringCreateByCString("malloc");
+
+    WasmMac *rt = (WasmMac *)data;
+    auto mod = WasmEdge_VMGetActiveModule(rt->vm);
+    uint32_t typOffset = WasmEdge_ValueGetI32(In[0]);
+    int typL = WasmEdge_ValueGetI32(In[1]);
+    uint32_t pointIdOffset = WasmEdge_ValueGetI32(In[2]);
+    int pointIdL = WasmEdge_ValueGetI32(In[3]);
+    uint32_t userIdOffset = WasmEdge_ValueGetI32(In[4]);
+    int userIdL = WasmEdge_ValueGetI32(In[5]);
+    uint32_t dataOffset = WasmEdge_ValueGetI32(In[6]);
+    int dataL = WasmEdge_ValueGetI32(In[7]);
+
+    auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
+
+    unsigned char *rawTyp = new unsigned char[typL];
+    vector<char> rawTypC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawTyp, typOffset, typL);
+    for (int i = 0; i < typL; i++)
+    {
+        rawTypC.push_back((char)rawTyp[i]);
+    }
+    auto typ = std::string(rawTypC.begin(), rawTypC.end());
+
+    unsigned char *rawPointId = new unsigned char[pointIdL];
+    vector<char> rawPointIdC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawPointId, pointIdOffset, pointIdL);
+    for (int i = 0; i < pointIdL; i++)
+    {
+        rawPointIdC.push_back((char)rawPointId[i]);
+    }
+    auto pointId = std::string(rawPointIdC.begin(), rawPointIdC.end());
+
+    unsigned char *rawUserId = new unsigned char[userIdL];
+    vector<char> rawUserIdC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawUserId, userIdOffset, userIdL);
+    for (int i = 0; i < userIdL; i++)
+    {
+        rawUserIdC.push_back((char)rawUserId[i]);
+    }
+    auto userId = std::string(rawUserIdC.begin(), rawUserIdC.end());
+
+    unsigned char *rawData = new unsigned char[dataL];
+    vector<char> rawDataC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawData, dataOffset, dataL);
+    for (int i = 0; i < dataL; i++)
+    {
+        rawDataC.push_back((char)rawData[i]);
+    }
+    auto payload = std::string(rawDataC.begin(), rawDataC.end());
+
+    json j;
+    j["key"] = "runDocker";
+    json j2;
+    j2["machineId"] = rt->machineId;
+    j2["type"] = typ;
+    j2["pointId"] = pointId;
+    j2["userId"] = userId;
+    j2["data"] = payload;
     j["input"] = j2;
     std::string packet = j.dump();
 

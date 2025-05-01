@@ -33,11 +33,11 @@ func (sm *StorageManager) KvDb() *badger.DB {
 func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string) {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
-	ctx := context.Background()
-	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data) VALUES (?, ?, ?)`,
-		gocql.TimeUUID(), pointId, userId, data).WithContext(ctx).Exec(); err != nil {
-		log.Fatal(err)
-	}
+	// ctx := context.Background()
+	// if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data) VALUES (?, ?, ?)`,
+	// 	gocql.TimeUUID(), pointId, userId, data).WithContext(ctx).Exec(); err != nil {
+	// 	log.Fatal(err)
+	// }
 }
 
 func (sm *StorageManager) ReadPointLogs(pointId string) []packet.LogPacket {
@@ -108,12 +108,12 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	if err != nil {
 		panic(err)
 	}
-	cluster := gocql.NewCluster(logsDbPath)
-	cluster.Keyspace = "kasper"
-	cluster.Consistency = gocql.Quorum
-	session, err := cluster.CreateSession()
-	if err != nil {
-		panic(err)
-	}
-	return &StorageManager{core: core, tsdb: session, kvdb: kvdb, storageRoot: storageRoot}
+	// cluster := gocql.NewCluster(logsDbPath)
+	// cluster.Keyspace = "kasper"
+	// cluster.Consistency = gocql.Quorum
+	// session, err := cluster.CreateSession()
+	// if err != nil {
+	// 	panic(err)
+	// }
+	return &StorageManager{core: core, tsdb: nil /*session*/, kvdb: kvdb, storageRoot: storageRoot}
 }

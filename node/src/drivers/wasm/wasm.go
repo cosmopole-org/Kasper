@@ -21,6 +21,9 @@ import (
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/models/worker"
+	"kasper/src/abstract/state"
+	"kasper/src/core/module/actor/model/base"
+	inputs_points "kasper/src/shell/api/inputs/points"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
@@ -77,7 +80,7 @@ func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
 	isMemberOfPoint := false
 	wm.app.ModifyState(true, func(trx trx.ITrx) {
 		point.Pull(trx)
-		isMemberOfPoint = (trx.GetLink("memberof::" + machineId + "::" + pointId) == "true")
+		isMemberOfPoint = (trx.GetLink("memberof::"+machineId+"::"+pointId) == "true")
 	})
 	if !isMemberOfPoint {
 		return
@@ -313,6 +316,40 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		wm.app.PlantChainTrigger(int(count), machineId, tag, machineId, pointId, data)
+	} else if key == "signal" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		typ, err := checkField(input, "type", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		pointId, err := checkField(input, "pointId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		userId, err := checkField(input, "userId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		data, err := checkField(input, "data", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		wm.app.ModifyStateSecurly(false, base.NewInfo(machineId, pointId), func(s state.IState) {
+			wm.app.Actor().FetchAction("/points/signal").Act(s, inputs_points.SignalInput{
+				Type: typ,
+				Data: data,
+				PointId: pointId,
+				UserId: userId,
+			})
+		})
 	}
 
 	return "{}"
