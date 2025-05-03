@@ -16,8 +16,16 @@ import (
 func plantTrigger(k int32, kl int32, v int32, lv int32, p int32, pv int32, count int32) int64
 
 //go:module env
+//export signalPoint
+func signalPoint(k int32, kl int32, v int32, lv int32, p int32, pv int32, c int32, cv int32) int64
+
+//go:module env
 //export runDocker
-func runDocker(k int32, kl int32, v int32, lv int32) int64
+func runDocker(k int32, kl int32, v int32, lv int32, c int32, cv int32) int64
+
+//go:module env
+//export execDocker
+func execDocker(k int32, kl int32, v int32, lv int32, c int32, cv int32) int64
 
 //go:module env
 //export put
@@ -535,31 +543,50 @@ type Trx[T any] struct {
 	Chain *Chain
 }
 
-func ParseArgs(a int64) string {
+func ParseArgs(a int64) model.Send {
 	input := model.Send{}
 	str := pointerToBytes(a)
-	logger.Log(string(str))
 	e := json.Unmarshal(str, &input)
 	if e != nil {
 		logger.Log("unable to parse args as send.")
-		return ""
+		return model.Send{}
 	}
-	return input.Data
+	return input
 }
 
 type Vm struct{}
 
-func (vm *Vm) RunDocker(imageName string, inputFiles map[string]string) *model.File {
+func (vm *Vm) RunDocker(imageName string, containerName string, inputFiles map[string]string) *model.File {
 	kp, kl := bytesToPointer([]byte(imageName))
+	cp, cl := bytesToPointer([]byte(containerName))
 	b, _ := json.Marshal(inputFiles)
 	vp, vl := bytesToPointer(b)
-	res := pointerToBytes(runDocker(kp, kl, vp, vl))
+	res := pointerToBytes(runDocker(kp, kl, vp, vl, cp, cl))
 	file := &model.File{}
 	err := json.Unmarshal(res, file)
 	if err != nil {
 		logger.Log(err.Error())
 	}
 	return file
+}
+
+func (vm *Vm) ExecDocker(imageName string, containerName string, command string) string {
+	kp, kl := bytesToPointer([]byte(imageName))
+	cp, cl := bytesToPointer([]byte(containerName))
+	cop, col := bytesToPointer([]byte(command))
+	res := pointerToBytes(execDocker(kp, kl, cp, cl, cop, col))
+	logger.Log(string(res))
+	result := map[string]any{}
+	json.Unmarshal(res, &result)
+	return result["data"].(string)
+}
+
+func SendSignal(typ string, pointId string, userId string, data string) {
+	kp, kl := bytesToPointer([]byte(typ))
+	cp, cl := bytesToPointer([]byte(pointId))
+	cop, col := bytesToPointer([]byte(userId))
+	cop2, col2 := bytesToPointer([]byte(data))
+	signalPoint(kp, kl, cp, cl, cop, col, cop2, col2)
 }
 
 // ---------------------------------------------------------------------------
@@ -655,22 +682,28 @@ type FileResponse struct {
 func run(a int64) int64 {
 
 	input := map[string]any{}
-	inputStr := ParseArgs(a)
-	err := json.Unmarshal([]byte(inputStr), &input)
+	signal := ParseArgs(a)
+	logger.Log("------------------------------------------------------------------------")
+	logger.Log(signal.Data)
+	err := json.Unmarshal([]byte(signal.Data), &input)
 	if err != nil {
 		logger.Log(err.Error())
 	}
-
-	vm := Vm{}
-	filesMap := map[string]string{}
-	srcFiles := input["srcFiles"].(map[string]any)
-	for k, v := range srcFiles {
-		filesMap[k] = v.(string)
+	if input["action"].(string) == "startChatbot" {
+		vm := Vm{}
+		filesMap := map[string]string{}
+		srcFiles := input["srcFiles"].(map[string]any)
+		for k, v := range srcFiles {
+			filesMap[k] = v.(string)
+		}
+		vm.RunDocker("deepseek", "mychatbot", filesMap)
+		output(bytesToPointer([]byte("{ \"response\": \"executed deepseek model\" }")))
+	} else if input["action"].(string) == "chat" {
+		vm := Vm{}
+		prompt := input["prompt"].(string)
+		res := vm.ExecDocker("deepseek", "mychatbot", "node /app/input/run.js "+signal.Point.Id+" "+prompt)
+		SendSignal("single", signal.Point.Id, signal.User.Id, res)
 	}
-	modelFile := vm.RunDocker("deepseek", filesMap)
-	chain := Chain{}
-	chain.SubmitBaseFileTrx(modelFile.Id, "")
-	output(bytesToPointer([]byte("{ \"response\": \"executed deepseek model\" }")))
 	return 0
 }
 

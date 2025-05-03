@@ -8,7 +8,7 @@ require (
 	github.com/gammazero/nexus/v3 v3.0.0
 	github.com/go-playground/validator/v10 v10.20.0
 	github.com/jonknight73/badger v0.0.0-20200218142835-fa9c019859f6
-	github.com/mitchellh/mapstructure v1.5.0
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/pion/datachannel v1.4.14
 	github.com/pion/webrtc/v2 v2.2.0
@@ -55,9 +55,9 @@ require (
 	github.com/marten-seemann/qtls v0.2.3 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/onsi/gomega v1.31.1 // indirect
@@ -104,17 +104,15 @@ require (
 )
 
 require (
-	github.com/docker/docker v28.0.4+incompatible
+	github.com/docker/docker v28.1.1+incompatible
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gocql/gocql v1.7.0
-	github.com/gofiber/fiber/v2 v2.52.6
 )
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.18.0 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	gorm.io/datatypes v1.2.4
 	gorm.io/driver/postgres v1.5.7 // indirect
 	gorm.io/gorm v1.25.11

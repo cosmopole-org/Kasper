@@ -90,7 +90,9 @@ func (t *Tcp) handleConnection(socket *Socket) {
 				copy(buf[0:readCount-length], buf[readLength-(readCount-length):readLength])
 				log.Println("packet received")
 				log.Println(string(readData))
-				socket.processPacket(readData)
+				future.Async(func() {
+					socket.processPacket(readData)
+				}, false)
 				readCount -= length
 				break
 			} else {

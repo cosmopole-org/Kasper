@@ -16,8 +16,16 @@ import (
 func plantTrigger(k int32, kl int32, v int32, lv int32, p int32, pv int32, count int32) int64
 
 //go:module env
+//export signalPoint
+func signalPoint(k int32, kl int32, v int32, lv int32, p int32, pv int32, c int32, cv int32) int64
+
+//go:module env
 //export runDocker
-func runDocker(k int32, kl int32, v int32, lv int32) int64
+func runDocker(k int32, kl int32, v int32, lv int32, c int32, cv int32) int64
+
+//go:module env
+//export execDocker
+func execDocker(k int32, kl int32, v int32, lv int32, c int32, cv int32) int64
 
 //go:module env
 //export put
@@ -474,10 +482,10 @@ func (*Db) GetByPrefix(key string) [][]byte {
 type Chain struct {
 }
 
-func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, tag string, input any) []byte {
+func (c *Chain) SubmitAppletPacketTrx(pointId string, targetMachineId string, key string, tag string, input any) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
-	tagO, tagL := bytesToPointer([]byte("0" + "0" + tag))
-	keyO, keyL := bytesToPointer([]byte(key))
+	tagO, tagL := bytesToPointer([]byte("00" + tag))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key))
 	b, e := json.Marshal(input)
 	if e != nil {
 		logger.Log(e.Error())
@@ -489,19 +497,19 @@ func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, tag st
 	return result
 }
 
-func (c *Chain) SubmitAppletFileTrx(targetMachineId string, fileId string, tag string) []byte {
+func (c *Chain) SubmitAppletFileTrx(pointId string, targetMachineId string, fileId string, tag string) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
-	tagO, tagL := bytesToPointer([]byte("1" + "0" + tag))
-	keyO, keyL := bytesToPointer([]byte("/storage/upload"))
+	tagO, tagL := bytesToPointer([]byte("10" + tag))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload"))
 	inputO, inputL := bytesToPointer([]byte(fileId))
 	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
 	return result
 }
 
-func (c *Chain) SubmitBasePacketTrx(key string, tag string, input []byte) []byte {
-	keyO, keyL := bytesToPointer([]byte(key))
-	tagO, tagL := bytesToPointer([]byte("0" + "1" + tag))
+func (c *Chain) SubmitBasePacketTrx(pointId string, key string, tag string, input []byte) []byte {
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key))
+	tagO, tagL := bytesToPointer([]byte("01" + tag))
 	b, e := json.Marshal(input)
 	if e != nil {
 		logger.Log(e.Error())
@@ -513,9 +521,9 @@ func (c *Chain) SubmitBasePacketTrx(key string, tag string, input []byte) []byte
 	return result
 }
 
-func (c *Chain) SubmitBaseFileTrx(fileId string, tag string) []byte {
-	keyO, keyL := bytesToPointer([]byte("/storage/upload"))
-	tagO, tagL := bytesToPointer([]byte("11deepseek"))
+func (c *Chain) SubmitBaseFileTrx(pointId string, fileId string, tag string) []byte {
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload"))
+	tagO, tagL := bytesToPointer([]byte("11" + tag))
 	inputO, inputL := bytesToPointer([]byte(fileId))
 	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
@@ -535,31 +543,51 @@ type Trx[T any] struct {
 	Chain *Chain
 }
 
-func ParseArgs(a int64) string {
+func ParseArgs(a int64) model.Send {
 	input := model.Send{}
 	str := pointerToBytes(a)
 	logger.Log(string(str))
 	e := json.Unmarshal(str, &input)
 	if e != nil {
 		logger.Log("unable to parse args as send.")
-		return ""
+		return model.Send{}
 	}
-	return input.Data
+	return input
 }
 
 type Vm struct{}
 
-func (vm *Vm) RunDocker(imageName string, inputFiles map[string]string) *model.File {
+func (vm *Vm) RunDocker(imageName string, containerName string, inputFiles map[string]string) *model.File {
 	kp, kl := bytesToPointer([]byte(imageName))
+	cp, cl := bytesToPointer([]byte(containerName))
 	b, _ := json.Marshal(inputFiles)
 	vp, vl := bytesToPointer(b)
-	res := pointerToBytes(runDocker(kp, kl, vp, vl))
+	res := pointerToBytes(runDocker(kp, kl, vp, vl, cp, cl))
 	file := &model.File{}
 	err := json.Unmarshal(res, file)
 	if err != nil {
 		logger.Log(err.Error())
 	}
 	return file
+}
+
+func (vm *Vm) ExecDocker(imageName string, containerName string, command string) string {
+	kp, kl := bytesToPointer([]byte(imageName))
+	cp, cl := bytesToPointer([]byte(containerName))
+	cop, col := bytesToPointer([]byte(command))
+	res := pointerToBytes(execDocker(kp, kl, cp, cl, cop, col))
+	logger.Log(string(res))
+	result := map[string]any{}
+	json.Unmarshal(res, &result)
+	return result["data"].(string)
+}
+
+func SendSignal(typ string, pointId string, userId string, data string) {
+	kp, kl := bytesToPointer([]byte(typ))
+	cp, cl := bytesToPointer([]byte(pointId))
+	cop, col := bytesToPointer([]byte(userId))
+	cop2, col2 := bytesToPointer([]byte(data))
+	signalPoint(kp, kl, cp, cl, cop, col, cop2, col2)
 }
 
 // ---------------------------------------------------------------------------
@@ -655,70 +683,129 @@ type FileResponse struct {
 func run(a int64) int64 {
 
 	input := map[string]any{}
-	inputStr := ParseArgs(a)
-	err := json.Unmarshal([]byte(inputStr), &input)
+	signal := ParseArgs(a)
+	err := json.Unmarshal([]byte(signal.Data), &input)
 	if err != nil {
 		logger.Log(err.Error())
 	}
 
-	action, ok := input["action"]
+	attachmentStr := input["attachment"].(string)
+	attachment := map[string]any{}
+	e := json.Unmarshal([]byte(attachmentStr), &attachment)
+	if e != nil {
+		logger.Log("parsing attachment failed")
+	}
+	action := attachment["action"].(string)
 
-	if ok && action.(string) == "train" {
+	if action == "init" {
 		vm := Vm{}
 		filesMap := map[string]string{}
-		srcFiles := input["srcFiles"].(map[string]any)
+		srcFiles := attachment["initSrcFiles"].(map[string]any)
 		for k, v := range srcFiles {
 			filesMap[k] = v.(string)
 		}
-		modelFile := vm.RunDocker("ai", filesMap)
+		modelFile := vm.RunDocker("ai_init", "convnet_1_"+strings.Join(strings.Split(signal.Point.Id, "@"), "_"), filesMap)
 		chain := Chain{}
-		attachment := map[string]any{
-			"srcFiles": input["srcFilesNext"].(map[string]any),
-			"action":   "aggregate",
+		attachmentNext := map[string]any{
+			"srcFiles":         attachment["mergeSrcFiles"].(map[string]any),
+			"srcFilesNext":     attachment["trainSrcFiles"].(map[string]any),
+			"srcFilesNextNext": attachment["aggSrcFiles"].(map[string]any),
+			"trainPointId":     signal.Point.Id,
+			"action":           "merge",
 		}
-		chain.PlantTrigger(1, input["aggPointId"].(string), "deepseek", attachment)
-		chain.SubmitBaseFileTrx(modelFile.Id, "deepseek")
-		output(bytesToPointer([]byte("{ \"response\": \"trained the model\" }")))
+		chain.PlantTrigger(2, attachment["aggPointId"].(string), "convnet1", attachmentNext)
+		chain.SubmitBaseFileTrx(attachment["aggPointId"].(string), modelFile.Id, "convnet1")
+		output(bytesToPointer([]byte("{ \"response\": \"initialized the model\" }")))
 		return 0
-	} else {
-		input := TriggerCallbackPacket{}
-		err := json.Unmarshal([]byte(inputStr), &input)
-		if err != nil {
-			logger.Log(err.Error())
-			return 0
-		}
+	} else if action == "merge" {
 		vm := Vm{}
 		filesMap := map[string]string{}
-		attachmentStr := ""
-		e := json.Unmarshal([]byte(input.Attachment), &attachmentStr)
-		if e != nil {
-			logger.Log(e.Error())
-			return 0
+		srcFiles := attachment["srcFiles"].(map[string]any)
+		for k, v := range srcFiles {
+			filesMap[k] = v.(string)
 		}
-		logger.Log(attachmentStr)
-		attachment := Attachment{}
-		e = json.Unmarshal([]byte(attachmentStr), &attachment)
-		if e != nil {
-			logger.Log(e.Error())
-			return 0
+
+		getPayload := func(index int) {
+			payload := map[string]any{}
+			logger.Log(input["payloads"].([]any)[index].(string))
+			e = json.Unmarshal([]byte(input["payloads"].([]any)[index].(string)), &payload)
+			if e != nil {
+				logger.Log(e.Error())
+				return
+			}
+			modelFileId := payload["file"].(map[string]any)["id"].(string)
+			filesMap[modelFileId] = fmt.Sprintf("model%d", (index + 1))
 		}
-		for k, v := range attachment.SrcFiles {
-			filesMap[k] = v
-		}
-		payload := FileResponse{}
-		e = json.Unmarshal([]byte(input.Payloads[0]), &payload)
-		if e != nil {
-			logger.Log(e.Error())
-			return 0
-		}
-		modelFileId := payload.File.Id
-		filesMap[modelFileId] = "model"
-		modelFile := vm.RunDocker("ai_2", filesMap)
+		getPayload(0)
+		getPayload(1)
+
+		modelFile := vm.RunDocker("ai_merge", "mergenet_"+strings.Join(strings.Split(attachment["trainPointId"].(string), "@"), "_"), filesMap)
 		chain := Chain{}
-		chain.SubmitBaseFileTrx(modelFile.Id, "")
-		output(bytesToPointer([]byte("{ \"response\": \"aggregated the model\" }")))
+		attachmentNext := map[string]any{
+			"srcFiles":     attachment["srcFilesNext"].(map[string]any),
+			"srcFilesNext": attachment["srcFilesNextNext"].(map[string]any),
+			"aggPointId":   signal.Point.Id,
+			"action":       "train",
+		}
+		chain.PlantTrigger(1, attachment["trainPointId"].(string), "convnet_"+attachment["trainPointId"].(string), attachmentNext)
+		chain.SubmitBaseFileTrx(attachment["trainPointId"].(string), modelFile.Id, "convnet_"+attachment["trainPointId"].(string))
+		output(bytesToPointer([]byte("{ \"response\": \"merged the models\" }")))
+		return 0
+	} else if action == "train" {
+		vm := Vm{}
+		filesMap := map[string]string{}
+		srcFiles := attachment["srcFiles"].(map[string]any)
+		for k, v := range srcFiles {
+			filesMap[k] = v.(string)
+		}
+
+		payload := map[string]any{}
+		e = json.Unmarshal([]byte(input["payloads"].([]any)[0].(string)), &payload)
+		if e != nil {
+			logger.Log(e.Error())
+			return 0
+		}
+		modelFileId := payload["file"].(map[string]any)["id"].(string)
+		filesMap[modelFileId] = "model"
+
+		modelFile := vm.RunDocker("ai_train", "convnet_"+strings.Join(strings.Split(signal.Point.Id, "@"), "_"), filesMap)
+		chain := Chain{}
+		attachmentNext := map[string]any{
+			"srcFiles":     attachment["srcFilesNext"].(map[string]any),
+			"trainPointId": signal.Point.Id,
+			"action":       "aggregate",
+		}
+		chain.PlantTrigger(2, attachment["aggPointId"].(string), "convnet2", attachmentNext)
+		chain.SubmitBaseFileTrx(attachment["aggPointId"].(string), modelFile.Id, "convnet2")
+		output(bytesToPointer([]byte("{ \"response\": \"trained the model\" }")))
+		return 0
+	} else if action == "aggregate" {
+		vm := Vm{}
+		filesMap := map[string]string{}
+		for k, v := range attachment["srcFiles"].(map[string]any) {
+			filesMap[k] = v.(string)
+		}
+
+		getPayload := func(index int) {
+			payload := map[string]any{}
+			e = json.Unmarshal([]byte(input["payloads"].([]any)[index].(string)), &payload)
+			if e != nil {
+				logger.Log(e.Error())
+				return
+			}
+			modelFileId := payload["file"].(map[string]any)["id"].(string)
+			filesMap[modelFileId] = fmt.Sprintf("model%d", (index + 1))
+		}
+		getPayload(0)
+		getPayload(1)
+
+		modelFile := vm.RunDocker("ai_agg", "aggnet_"+strings.Join(strings.Split(attachment["trainPointId"].(string), "@"), "_"), filesMap)
+		chain := Chain{}
+		chain.SubmitBaseFileTrx(signal.Point.Id, modelFile.Id, "")
+		output(bytesToPointer([]byte("{ \"response\": \"aggregated the models\" }")))
 		return 0
 	}
+	return 0
 }
 
 func main() {

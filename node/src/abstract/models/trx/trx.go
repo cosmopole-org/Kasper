@@ -12,6 +12,7 @@ type IModel[T any] interface {
 
 type ITrx interface {
 	DelKey(key string)
+	GetByPrefix(string) []string
 	HasObj(typ string, key string) bool
 	GetIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) string
 	PutIndex(typ string, fromColumn string, toColumn string, fromColumnVal string, toColumnVal []byte)

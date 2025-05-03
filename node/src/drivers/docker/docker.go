@@ -2,6 +2,7 @@ package docker
 
 import (
 	"errors"
+	"kasper/src/abstract/adapters/docker"
 	"kasper/src/abstract/adapters/file"
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
@@ -24,6 +25,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	network "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 type Docker struct {
@@ -117,7 +119,10 @@ func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, pointId string) 
 	return nil, err2
 }
 
-func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, inputFile map[string]string) (*models.File, error) {
+func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string) (*models.File, error) {
+
+	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
+
 	ctx := context.Background()
 
 	config := &container.Config{
@@ -136,7 +141,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 		},
 		&network.NetworkingConfig{},
 		nil,
-		crypto.SecureUniqueString(),
+		cn,
 	)
 
 	if err != nil {
@@ -146,7 +151,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 	defer wm.SaRContainer(cont.ID)
 	future.Async(func() {
 		time.Sleep(60 * time.Minute)
-		wm.SaRContainer(cont.ID)
+		wm.SaRContainer(cn)
 	}, false)
 
 	tarId := WriteToTar(inputFile)
@@ -156,7 +161,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 		return nil, err
 	}
 
-	err = wm.client.CopyToContainer(ctx, cont.ID, "/app/input", tarStream, container.CopyToContainerOptions{
+	err = wm.client.CopyToContainer(ctx, cn, "/app/input", tarStream, container.CopyToContainerOptions{
 		AllowOverwriteDirWithFile: true,
 	})
 	if err != nil {
@@ -164,15 +169,15 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 		return nil, err
 	}
 
-	err = wm.client.ContainerStart(ctx, cont.ID, container.StartOptions{})
+	err = wm.client.ContainerStart(ctx, cn, container.StartOptions{})
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
 
-	log.Println("Container ", cont.ID, " is created")
+	log.Println("Container ", cn, " is created")
 
-	waiter, err := wm.client.ContainerAttach(ctx, cont.ID, container.AttachOptions{
+	waiter, err := wm.client.ContainerAttach(ctx, cn, container.AttachOptions{
 		Stderr: true,
 		Stdout: true,
 		Stdin:  true,
@@ -187,7 +192,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 		return nil, err
 	}
 
-	statusCh, errCh := wm.client.ContainerWait(ctx, cont.ID, container.WaitConditionNotRunning)
+	statusCh, errCh := wm.client.ContainerWait(ctx, cn, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
 		if err != nil {
@@ -197,7 +202,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 	case <-statusCh:
 	}
 
-	reader, _, err := wm.client.CopyFromContainer(ctx, cont.ID, "/app/output")
+	reader, _, err := wm.client.CopyFromContainer(ctx, cn, "/app/output")
 	if err != nil {
 		log.Println(err)
 		return nil, nil
@@ -272,7 +277,65 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 	return nil
 }
 
-func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, file file.IFile) *Docker {
+func (wm *Docker) ExecContainer(machineId string, imageName string, containerName string, command string) (string, error) {
+
+	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
+
+	ctx := context.Background()
+
+	config := container.ExecOptions{
+		AttachStderr: true,
+		AttachStdout: true,
+		Cmd:          strings.Split(command, " "),
+	}
+
+	res, err := wm.client.ContainerExecCreate(ctx, cn, config)
+	if err != nil {
+		return "", err
+	}
+	execId := res.ID
+
+    resp, err := wm.client.ContainerExecAttach(ctx, execId, container.ExecAttachOptions{})
+    if err != nil {
+        return "", err
+    }
+    defer resp.Close()
+
+    var outBuf, errBuf bytes.Buffer
+    outputDone := make(chan error)
+
+    go func() {
+        // StdCopy demultiplexes the stream into two buffers
+        _, err = stdcopy.StdCopy(&outBuf, &errBuf, resp.Reader)
+        outputDone <- err
+    }()
+
+    select {
+    case err := <-outputDone:
+        if err != nil {
+            return "", err
+        }
+        break
+
+    case <-ctx.Done():
+        return "", ctx.Err()
+    }
+
+    stdout, err := ioutil.ReadAll(&outBuf)
+    if err != nil {
+        return "", err
+    }
+	stderr, err := ioutil.ReadAll(&errBuf)
+    if err != nil {
+        return "", err
+    }
+
+	log.Println("output of exec :", string(stdout))
+
+    return string(stdout) + string(stderr), nil
+}
+
+func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, file file.IFile) docker.IDocker {
 	client, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		log.Println("Unable to create docker client: ", err.Error())

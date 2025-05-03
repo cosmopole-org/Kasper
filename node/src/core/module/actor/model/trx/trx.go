@@ -135,6 +135,22 @@ func (tw *TrxWrapper) GetString(key string) string {
 	}
 }
 
+func (tw *TrxWrapper) GetByPrefix(p string) []string {
+	prefix := []byte(p)
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = true
+	opts.Prefix = prefix
+	it := tw.dbTrx.NewIterator(opts)
+	defer it.Close()
+	m := []string{}
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		item := it.Item()
+		itemKey := item.Key()
+		m = append(m, string(itemKey))
+	}
+	return m
+}
+
 func (tw *TrxWrapper) GetObj(typ string, key string) map[string][]byte {
 	prefix := []byte("obj::" + typ + "::" + key + "::")
 	opts := badger.DefaultIteratorOptions

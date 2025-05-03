@@ -22,6 +22,6 @@ RUN echo $' #!/bin/bash\n\
 
 RUN bash /app/build.sh
 
-RUN cd /app/input && npm -y init && npm install node-fetch@2
+RUN cd /app/input && npm -y init && npm install node-fetch@2 && npm install sqlite3
 
 ENTRYPOINT [ "bash", "/app/input/run.sh" ]

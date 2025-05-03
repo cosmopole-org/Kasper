@@ -28,6 +28,7 @@ import (
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
 	"log"
+	"strings"
 )
 
 type Wasm struct {
@@ -158,7 +159,12 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, finalInputFiles)
+		containerName, err := checkField(input, "containerName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles)
 		if err != nil {
 			log.Println(err)
 			return err.Error()
@@ -171,6 +177,33 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			}
 			return string(str)
 		}
+	} else if key == "execDocker" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		imageName, err := checkField(input, "imageName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		containerName, err := checkField(input, "containerName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		command, err := checkField(input, "command", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		output, err := wm.docker.ExecContainer(machineId, imageName, containerName, command)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		return output
 	} else if key == "log" {
 		_, err := checkField(input, "text", "")
 		if err != nil {
@@ -216,16 +249,19 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		k, err := checkField(input, "key", "")
+		kRaw, err := checkField(input, "key", "")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
-		pointId, err := checkField(input, "pointId", "")
+		kParts := strings.Split(kRaw, "|")
+		dstPointId := kParts[0]
+	    srcPointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
+		k := kParts[1]
 		isFile, err := checkField(input, "isFile", false)
 		if err != nil {
 			log.Println(err)
@@ -248,8 +284,8 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		var data []byte
 		if isFile {
-			if wm.file.CheckFileFromStorage(wm.storageRoot, pointId, pack) {
-				b, err := wm.file.ReadFileFromStorage(wm.storageRoot, pointId, pack)
+			if wm.file.CheckFileFromStorage(wm.storageRoot, srcPointId, pack) {
+				b, err := wm.file.ReadFileFromStorage(wm.storageRoot, srcPointId, pack)
 				if err != nil {
 					log.Println(err)
 					return err.Error()
@@ -266,7 +302,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			if k == "/storage/upload" {
 				data, _ = json.Marshal(inputs_storage.UploadDataInput{
 					Data:    base64.StdEncoding.EncodeToString(data),
-					PointId: pointId,
+					PointId: dstPointId,
 				})
 			}
 			wm.app.ExecBaseRequestOnChain(k, data, "#appletsign", machineId, tag, func(b []byte, i int, err error) {
@@ -278,7 +314,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 				outputCnan <- 1
 			})
 		} else {
-			wm.app.ExecAppletRequestOnChain(pointId, targetMachineId, k, data, "#appletsign", machineId, tag, func(b []byte, i int, err error) {
+			wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, "#appletsign", machineId, tag, func(b []byte, i int, err error) {
 				if err != nil {
 					log.Println(err)
 					return
@@ -316,7 +352,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		wm.app.PlantChainTrigger(int(count), machineId, tag, machineId, pointId, data)
-	} else if key == "signal" {
+	} else if key == "signalPoint" {
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
 			log.Println(err)

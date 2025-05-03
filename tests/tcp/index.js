@@ -2,6 +2,7 @@ const net = require('net');
 const crypto = require('crypto');
 const fs = require('fs');
 const { exec } = require('child_process');
+const readline = require('node:readline');
 
 const port = 8080;
 let host = '172.77.5.1';
@@ -162,7 +163,7 @@ const executeBash = async (command) => {
 }
 
 async function doTest() {
-    let res = await sendRequest("", "/users/register", { "username": "kasper4" });
+    let res = await sendRequest("", "/users/register", { "username": "kasper3" });
     console.log(res.resCode, res.obj);
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" +
@@ -172,103 +173,179 @@ async function doTest() {
     )
     let userId = res.obj.user.id;
     await sendRequest(userId, "authenticate", {});
+
     res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
     console.log(res.resCode, res.obj);
-    let pointId = res.obj.point.id;
+    let pointOneId = res.obj.point.id;
 
-    // let mainPyScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/src/main.py", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": mainPyScript });
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    console.log(res.resCode, res.obj);
+    let pointTwoId = res.obj.point.id;
+
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    console.log(res.resCode, res.obj);
+    let pointMainId = res.obj.point.id;
+
+    res = await sendRequest(userId, "/machines/create", { "username": "convnet3" });
+    console.log(res.resCode, res.obj);
+    let machineId = res.obj.user.id;
+
+    let keys = {
+        "init": [pointOneId, pointTwoId],
+        "merge": [pointMainId],
+        "train": [pointOneId, pointTwoId],
+        "agg": [pointMainId],
+    };
+
+    let srcFiles = {
+        [pointOneId]: {},
+        [pointTwoId]: {},
+        [pointMainId]: {}
+    };
+
+    for (let key in keys) {
+        let ids = keys[key];
+        for (let i = 0; i < ids.length; i++) {
+            let pointId = ids[i];
+            let mainPyScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_" + key + "/src/main.py", { encoding: 'utf-8' }));
+            res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": mainPyScript });
+            console.log(res.resCode, res.obj);
+            let mainPyId = res.obj.file.id;
+            let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_" + key + "/src/run.sh", { encoding: 'utf-8' }));
+            res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runShScript });
+            console.log(res.resCode, res.obj);
+            let runShId = res.obj.file.id;
+            srcFiles[pointId][key + "SrcFiles"] = {
+                [mainPyId]: "main.py",
+                [runShId]: "run.sh"
+            };
+        }
+    }
+
+    for (let key in keys) {
+        await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/ai_${key}/builder && bash build.sh '' '${userId}'`);
+        let dockerfileBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_" + key + "/builder/Dockerfile");
+        res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "ai_" + key }, "byteCode": dockerfileBC.toString('base64') });
+        console.log(res.resCode, res.obj);
+    }
+
+    await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' '${userId}'`);
+    let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder/main.wasm");
+    res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
+    console.log(res.resCode, res.obj);
+
+    // let runJsScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.js", { encoding: 'utf-8' }));
+    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runJsScript });
     // console.log(res.resCode, res.obj);
-    // let mainPyId = res.obj.file.id;
+    // let runJsId = res.obj.file.id;
 
-    // let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/src/run.sh", { encoding: 'utf-8' }));
+    // let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.sh", { encoding: 'utf-8' }));
     // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runShScript });
     // console.log(res.resCode, res.obj);
     // let runShId = res.obj.file.id;
 
-    // let mainPy2Script = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_2/src/main.py", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": mainPy2Script });
-    // console.log(res.resCode, res.obj);
-    // let mainPy2Id = res.obj.file.id;
-
-    // let runSh2Script = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_2/src/run.sh", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runSh2Script });
-    // console.log(res.resCode, res.obj);
-    // let runSh2Id = res.obj.file.id;
-
-    let runJsScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.js", { encoding: 'utf-8' }));
-    res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runJsScript });
-    console.log(res.resCode, res.obj);
-    let runJsId = res.obj.file.id;
-
-    let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.sh", { encoding: 'utf-8' }));
-    res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runShScript });
-    console.log(res.resCode, res.obj);
-    let runShId = res.obj.file.id;
-
-    res = await sendRequest(userId, "/machines/create", { "username": "maximus4" });
-    console.log(res.resCode, res.obj);
-    let machineId = res.obj.user.id;
-
-    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/ai/builder && bash build.sh '' '${userId}'`);
-    // let dcokerfile1BC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai/builder/Dockerfile");
-    // res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "ai" }, "byteCode": dcokerfile1BC.toString('base64') });
+    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder && bash build.sh '' '${userId}'`);
+    // let dockerfile2BC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder/Dockerfile");
+    // res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "deepseek" }, "byteCode": dockerfile2BC.toString('base64') });
     // console.log(res.resCode, res.obj);
 
-    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/ai_2/builder && bash build.sh '' '${userId}'`);
-    // let dockerfile2BC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_2/builder/Dockerfile");
-    // res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "ai_2" }, "byteCode": dockerfile2BC.toString('base64') });
-    // console.log(res.resCode, res.obj);
-
-    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' '${userId}'`);
-    // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder/main.wasm");
+    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder && bash build.sh '' '${userId}'`);
+    // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder/main.wasm");
     // res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
     // console.log(res.resCode, res.obj);
 
-    await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder && bash build.sh '' '${userId}'`);
-    let dockerfile2BC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder/Dockerfile");
-    res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "deepseek" }, "byteCode": dockerfile2BC.toString('base64') });
+    res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointMainId, "userId": machineId });
     console.log(res.resCode, res.obj);
 
-    await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder && bash build.sh '' '${userId}'`);
-    let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder/main.wasm");
-    res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
+    res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointOneId, "userId": machineId });
     console.log(res.resCode, res.obj);
 
-    res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointId, "userId": machineId });
+    res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointTwoId, "userId": machineId });
     console.log(res.resCode, res.obj);
+
+    res = await sendRequest(userId, "/points/signal", {
+        "type": "single",
+        "pointId": pointOneId,
+        "userId": machineId,
+        "data": JSON.stringify({
+            "attachment": JSON.stringify({
+                "initSrcFiles": srcFiles[pointOneId]["initSrcFiles"],
+                "trainSrcFiles": srcFiles[pointOneId]["trainSrcFiles"],
+                "mergeSrcFiles": srcFiles[pointMainId]["mergeSrcFiles"],
+                "aggSrcFiles": srcFiles[pointMainId]["aggSrcFiles"],
+                "aggPointId": pointMainId,
+                "action": "init"
+            })
+        })
+    });
+    console.log(res.resCode, res.obj);
+
+    res = await sendRequest(userId, "/points/signal", {
+        "type": "single",
+        "pointId": pointTwoId,
+        "userId": machineId,
+        "data": JSON.stringify({
+            "attachment": JSON.stringify({
+                "initSrcFiles": srcFiles[pointTwoId]["initSrcFiles"],
+                "trainSrcFiles": srcFiles[pointTwoId]["trainSrcFiles"],
+                "mergeSrcFiles": srcFiles[pointMainId]["mergeSrcFiles"],
+                "aggSrcFiles": srcFiles[pointMainId]["aggSrcFiles"],
+                "aggPointId": pointMainId,
+                "action": "init"
+            })
+        })
+    });
+    console.log(res.resCode, res.obj);
+
+    // sendRequest(userId, "/points/signal", {
+    //     "type": "single",
+    //     "pointId": pointId,
+    //     "userId": machineId,
+    //     "data": JSON.stringify({
+    //         "action": "startChatbot",
+    //         "srcFiles": {
+    //             [runJsId]: "run.js",
+    //             [runShId]: "run.sh"
+    //         }
+    //     })
+    // });
+
+    // console.log("starting chatserver...")
+    // await sleep(10000);
+
+    // console.log("sending prompt...")
 
     // res = await sendRequest(userId, "/points/signal", {
     //     "type": "single",
     //     "pointId": pointId,
     //     "userId": machineId,
     //     "data": JSON.stringify({
-    //         "srcFiles": {
-    //             [mainPyId]: "main.py",
-    //             [runShId]: "run.sh"
-    //         },
-    //         "srcFilesNext": {
-    //             [mainPy2Id]: "main.py",
-    //             [runSh2Id]: "run.sh"
-    //         },
-    //         "aggPointId": pointId,
-    //         "action": "train"
+    //         "action": "chat",
+    //         "prompt": "hello deepseek. how is weather like ?"
     //     })
     // });
 
-    res = await sendRequest(userId, "/points/signal", {
-        "type": "single",
-        "pointId": pointId,
-        "userId": machineId,
-        "data": JSON.stringify({
-            "srcFiles": {
-                [runJsId]: "run.js",
-                [runShId]: "run.sh"
-            }
-        })
-    });
+    // console.log(res.resCode, res.obj);
 
-    console.log(res.resCode, res.obj);
+    // const rl = readline.createInterface({
+    //     input: process.stdin,
+    //     output: process.stdout,
+    // });
+    // const askMessage = () => {
+    //     rl.question(`message:`, async q => {
+    //         await sendRequest(userId, "/points/signal", {
+    //             "type": "single",
+    //             "pointId": pointId,
+    //             "userId": machineId,
+    //             "data": JSON.stringify({
+    //                 "action": "chat",
+    //                 "prompt": q
+    //             })
+    //         });
+    //         askMessage();
+    //     });
+    // }
+    // askMessage();
     // socket.destroy();
     // console.log("end.");
 }
