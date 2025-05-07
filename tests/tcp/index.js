@@ -163,7 +163,7 @@ const executeBash = async (command) => {
 }
 
 async function doTest() {
-    let res = await sendRequest("", "/users/register", { "username": "kasper3" });
+    let res = await sendRequest("", "/users/register", { "username": "kasper4" });
     console.log(res.resCode, res.obj);
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" +
@@ -186,7 +186,7 @@ async function doTest() {
     console.log(res.resCode, res.obj);
     let pointMainId = res.obj.point.id;
 
-    res = await sendRequest(userId, "/machines/create", { "username": "convnet3" });
+    res = await sendRequest(userId, "/machines/create", { "username": "convnet4" });
     console.log(res.resCode, res.obj);
     let machineId = res.obj.user.id;
 
@@ -221,6 +221,49 @@ async function doTest() {
             };
         }
     }
+
+    let trainsetOne = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_init/src/train.csv", { encoding: 'utf-8' }));
+    res = await sendRequest(userId, "/storage/upload", { "pointId": pointOneId, "data": trainsetOne });
+    console.log(res.resCode, res.obj);
+    let trainsetOneId = res.obj.file.id;
+
+    let testsetOne = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_init/src/test.csv", { encoding: 'utf-8' }));
+    res = await sendRequest(userId, "/storage/upload", { "pointId": pointOneId, "data": testsetOne });
+    console.log(res.resCode, res.obj);
+    let testsetOneId = res.obj.file.id;
+
+    let trainsetTwo = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_init/src/train.csv", { encoding: 'utf-8' }));
+    res = await sendRequest(userId, "/storage/upload", { "pointId": pointTwoId, "data": trainsetTwo });
+    console.log(res.resCode, res.obj);
+    let trainsetTwoId = res.obj.file.id;
+
+    let testsetTwo = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_init/src/test.csv", { encoding: 'utf-8' }));
+    res = await sendRequest(userId, "/storage/upload", { "pointId": pointTwoId, "data": testsetTwo });
+    console.log(res.resCode, res.obj);
+    let testsetTwoId = res.obj.file.id;
+
+    srcFiles[pointOneId]["initSrcFiles"][trainsetOneId] = "train.csv";
+    srcFiles[pointOneId]["initSrcFiles"][testsetOneId] = "test.csv";
+    srcFiles[pointOneId]["trainSrcFiles"][trainsetOneId] = "train.csv";
+    srcFiles[pointOneId]["trainSrcFiles"][testsetOneId] = "test.csv";
+
+    srcFiles[pointTwoId]["initSrcFiles"][trainsetTwoId] = "train.csv";
+    srcFiles[pointTwoId]["initSrcFiles"][testsetTwoId] = "test.csv";
+    srcFiles[pointTwoId]["trainSrcFiles"][trainsetTwoId] = "train.csv";
+    srcFiles[pointTwoId]["trainSrcFiles"][testsetTwoId] = "test.csv";
+
+    let idOne = btoa("{\"value\":1}");
+    res = await sendRequest(userId, "/storage/upload", { "pointId": pointOneId, "data": idOne });
+    console.log(res.resCode, res.obj);
+    let idOneId = res.obj.file.id;
+
+    let idTwo = btoa("{\"value\":2}");
+    res = await sendRequest(userId, "/storage/upload", { "pointId": pointTwoId, "data": idTwo });
+    console.log(res.resCode, res.obj);
+    let idTwoId = res.obj.file.id;
+
+    srcFiles[pointOneId]["trainSrcFiles"][idOneId] = "id";
+    srcFiles[pointTwoId]["trainSrcFiles"][idTwoId] = "id";
 
     for (let key in keys) {
         await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/ai_${key}/builder && bash build.sh '' '${userId}'`);

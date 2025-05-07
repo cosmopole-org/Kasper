@@ -11,6 +11,10 @@ RUN apt-get update \
     gfortran \
     && rm -rf /var/lib/apt/lists/*
 
+RUN pip install numpy
+RUN pip install tensorflow-cpu==1.10.0
+RUN pip install keras==2.3.0
+
 WORKDIR /app
 
 RUN mkdir /app/input

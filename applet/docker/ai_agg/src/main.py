@@ -1,16 +1,26 @@
-import json
+import tensorflow.keras as keras
+import numpy as np
+import os
+
+os.rename('/app/input/model1', '/app/input/model1.h5')
+os.rename('/app/input/model2', '/app/input/model2.h5')
 
 print("aggregate models")
 
-model1 = []
-model2 = []
-with open("/app/input/model1") as f:
-    model1 = json.load(f)
+model1 = keras.models.load_model('/app/input/model1.h5')
+model2 = keras.models.load_model('/app/input/model2.h5')
 
-with open("/app/input/model2") as f:
-    model2 = json.load(f)
+local_models = [model1, model2]
 
-model = model1 + model2
+layers = []
+for i in range(0, len(local_models[0])):
+    sublayers = []
+    for j in range(0, len(local_models[0][i])):
+        sublayers.append(np.mean(np.array([model[i][j] for model in local_models]), axis=0))
+    layers.append(sublayers)
 
-with open("/app/output", 'w', encoding="utf8") as outfile:
-    json.dump(model, outfile)
+for i in range(0, len(layers)):
+    model1.layers[i].set_weights(layers[i])
+
+model1.save("/app/output.h5")
+os.rename("/app/output.h5", "/app/output")
