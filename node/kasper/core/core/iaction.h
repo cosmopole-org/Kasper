@@ -50,5 +50,5 @@ public:
 class ISecAction
 {
 public:
-    virtual ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, std::string userId, char *payload, char *signature) = 0;
+    virtual ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, std::string userId, std::string payload, std::string signature) = 0;
 };

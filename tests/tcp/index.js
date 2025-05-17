@@ -173,10 +173,10 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/api/hello", { "username": "keyhan" });
-    console.log(res.resCode, res.obj);
+    // let res = await sendRequest("", "/api/hello", { "username": "kasper" });
+    // console.log(res.resCode, res.obj);
 
-    res = await sendRequest("", "/api/hello", { "username": "of cosmopole" });
+    res = await sendRequest("", "/api/adminName", {});
     console.log(res.resCode, res.obj);
 
     // let res = await sendRequest("", "/users/register", { "username": "kasper4" });

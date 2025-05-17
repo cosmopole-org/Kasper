@@ -91,12 +91,12 @@ bool Utils::generateRsaKeyPair(std::string destDir)
 }
 
 bool Utils::verify_signature_rsa(RSA *rsa,
-                                 char *data,
-                                 char *sign)
+                                 std::string data,
+                                 std::string sign)
 {
-    const unsigned char *message = (const unsigned char *)data;
+    const unsigned char *message = (const unsigned char *)data.c_str();
     size_t message_len = strlen((const char *)message);
-    const unsigned char *signature = (const unsigned char *)sign;
+    const unsigned char *signature = (const unsigned char *)sign.c_str();
     size_t signature_len = strlen((const char *)signature);
 
     unsigned char hash[SHA256_DIGEST_LENGTH];

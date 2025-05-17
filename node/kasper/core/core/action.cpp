@@ -23,7 +23,7 @@ public:
         this->fn = fn;
     }
 
-    ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, std::string userId, char *payload, char *signature)
+    ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, std::string userId, std::string payload, std::string signature)
     {
         json input = json::parse(payload);
         auto meta = this->intel->extractMeta(input);

@@ -246,10 +246,11 @@ public:
 
 		std::cerr << "received packet length: " << len << std::endl;
 
-		char *signature = "";
+		std::string signature = "";
 		std::string userId = "";
 		std::string path = "";
 		std::string packetId = "";
+		std::string payload = "";
 
 		uint32_t pointer = 0;
 		char *tempBytes = new char[4];
@@ -261,8 +262,10 @@ public:
 		pointer += 4;
 		if (signatureLength > 0)
 		{
-			signature = new char[signatureLength];
-			memcpy(signature, packet + pointer, signatureLength);
+			char* sign = new char[signatureLength];
+			memcpy(sign, packet + pointer, signatureLength);
+			signature = std::string(sign, signatureLength);
+			delete sign;
 			pointer += signatureLength;
 		}
 		std::cerr << "signature: " << signature << std::endl;
@@ -315,8 +318,10 @@ public:
 		}
 		std::cerr << "packetId: " << packetId << std::endl;
 
-		char *payload = new char[len - pointer];
-		memcpy(payload, packet + pointer, len - pointer);
+		char *payloadRaw = new char[len - pointer];
+		memcpy(payloadRaw, packet + pointer, len - pointer);
+		payload = std::string(payloadRaw, len - pointer);
+		delete payloadRaw;
 		std::cerr << "payload: " << payload << std::endl;
 
 		try
@@ -341,9 +346,6 @@ public:
 					res["message"] = "authentication failed";
 					this->writeObjResponse(packetId, 4, res);
 				}
-				if (signatureLength > 0)
-					delete signature;
-				delete payload;
 				return;
 			}
 			auto action = this->core->getActor()->findActionAsSecure(path);
@@ -352,9 +354,6 @@ public:
 				json res;
 				res["message"] = "action not found";
 				this->writeObjResponse(packetId, 1, res);
-				if (signatureLength > 0)
-					delete signature;
-				delete payload;
 				return;
 			}
 			auto response = action->run(this->core->getIp(), [this](std::function<void(StateTrx *)> fn)
@@ -364,9 +363,6 @@ public:
 				json data;
 				data["message"] = response.err;
 				this->writeObjResponse(packetId, response.resCode, data);
-				if (signatureLength > 0)
-					delete signature;
-				delete payload;
 				return;
 			}
 			this->writeObjResponse(packetId, 0, response.data);
@@ -382,9 +378,6 @@ public:
 		{
 			std::cerr << "Unknown exception caught" << std::endl;
 		}
-		if (signatureLength > 0)
-			delete signature;
-		delete payload;
 	}
 };
 

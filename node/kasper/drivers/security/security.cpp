@@ -78,7 +78,7 @@ public:
 		return {this->keys[tag]->priKey, this->keys[tag]->pubKey};
 	}
 
-	SignVerifyRes authWithSignature(std::string userId, char *packet, char *signatureBase64) override
+	SignVerifyRes authWithSignature(std::string userId, std::string packet, std::string signatureBase64) override
 	{
 		RSA *publicKey;
 		this->core->modifyState([userId, &publicKey](StateTrx *trx)
