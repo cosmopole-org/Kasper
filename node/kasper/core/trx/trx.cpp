@@ -1,6 +1,9 @@
 #pragma once
 
 #include "trx.h"
+#include <vector>
+
+using json = nlohmann::json;
 
 StateTrx::StateTrx(TransactionDB *db)
 {
@@ -82,20 +85,36 @@ std::string StateTrx::getIndex(std::string key)
     return this->getString("index::" + key);
 }
 
-std::string StateTrx::putObj(std::string objType, std::string key, std::map<std::string, std::string> obj)
+void StateTrx::putJsonObj(std::string objType, std::string key, json obj)
 {
-    for (auto item : obj)
+    std::vector<std::pair<std::string, std::string>> data{};
+    for (auto &[k, val] : obj.items())
     {
-        this->putString("obj::" + objType + ":;" + key + "::" + item.first, item.second);
+        std::string v = val.template get<std::string>();
+        data.push_back({k, v});
+    }
+
+    for (auto p : data)
+    {
+        this->putString("obj::" + objType + "::" + key + "::" + p.first, p.second);
+        std::cerr << std::endl << p.first << " " << p.second << std::endl;
     }
 }
 
-std::map<std::string, std::string> StateTrx::getObj(std::string objType, std::string key)
+void StateTrx::putObj(std::string objType, std::string key, std::map<std::string, std::string> obj)
 {
-    std::map<std::string, std::string> obj{};
+    for (auto item : obj)
+    {
+        this->putString("obj::" + objType + "::" + key + "::" + item.first, item.second);
+    }
+}
+
+std::map<std::string, std::string> StateTrx::getObjAsMap(std::string objType, std::string key)
+{
+    std::map<std::string, std::string> obj;
     ReadOptions options = ReadOptions();
     auto itr = this->trx->GetIterator(options);
-    std::string prefix = "obj::" + objType + ":;" + key;
+    std::string prefix = "obj::" + objType + "::" + key + "::";
     itr->Seek(prefix);
     while (itr->Valid())
     {
@@ -103,7 +122,34 @@ std::map<std::string, std::string> StateTrx::getObj(std::string objType, std::st
         std::string value = itr->value().ToString();
         if (!Utils::getInstance().stringStartsWith(key, prefix))
             break;
-        obj[key] = value;
+        std::string k = key.substr(prefix.length(), key.length() - prefix.length());
+        if (k != "|")
+        {
+            obj[k] = value;
+        }
+        itr->Next();
+    }
+    return obj;
+}
+
+json StateTrx::getObjAsJson(std::string objType, std::string key)
+{
+    json obj;
+    ReadOptions options = ReadOptions();
+    auto itr = this->trx->GetIterator(options);
+    std::string prefix = "obj::" + objType + "::" + key + "::";
+    itr->Seek(prefix);
+    while (itr->Valid())
+    {
+        std::string key = itr->key().ToString();
+        std::string value = itr->value().ToString();
+        if (!Utils::getInstance().stringStartsWith(key, prefix))
+            break;
+        std::string k = key.substr(prefix.length(), key.length() - prefix.length());
+        if (k != "|")
+        {
+            obj[k] = value;
+        }
         itr->Next();
     }
     return obj;

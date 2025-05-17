@@ -3,8 +3,27 @@
 #include <string>
 #include <map>
 #include <vector>
+#include "../../utils/nlohmann/json.hpp"
 #include "../../utils/utils.h"
-#include "../../drivers/storage/storage.cpp"
+
+#include <rocksdb/db.h>
+#include <rocksdb/options.h>
+#include <rocksdb/slice.h>
+#include <rocksdb/utilities/transaction.h>
+#include <rocksdb/utilities/transaction_db.h>
+#include <mutex>
+
+using ROCKSDB_NAMESPACE::Options;
+using ROCKSDB_NAMESPACE::ReadOptions;
+using ROCKSDB_NAMESPACE::Snapshot;
+using ROCKSDB_NAMESPACE::Status;
+using ROCKSDB_NAMESPACE::Transaction;
+using ROCKSDB_NAMESPACE::TransactionDB;
+using ROCKSDB_NAMESPACE::TransactionDBOptions;
+using ROCKSDB_NAMESPACE::TransactionOptions;
+using ROCKSDB_NAMESPACE::WriteOptions;
+
+using json = nlohmann::json;
 
 struct ValPack
 {
@@ -29,8 +48,10 @@ public:
     void delIndex(std::string key);
     void putIndex(std::string key, std::string val);
     std::string getIndex(std::string key);
-    std::string putObj(std::string objType, std::string key, std::map<std::string, std::string> obj);
-    std::map<std::string, std::string> getObj(std::string objType, std::string key);
+    void putJsonObj(std::string objType, std::string key, json obj);
+    void putObj(std::string objType, std::string key, std::map<std::string, std::string> obj);
+    json getObjAsJson(std::string objType, std::string key);
+    std::map<std::string, std::string> getObjAsMap(std::string objType, std::string key);
     ValPack getColumn(std::string objType, std::string key, std::string columnKey);
     std::vector<std::string> getLinksList(std::string prefix);
     RSA* getPubKey(std::string userId);

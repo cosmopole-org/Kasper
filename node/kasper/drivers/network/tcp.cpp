@@ -17,6 +17,7 @@
 #include "itcp.h"
 #include "../../utils/utils.h"
 #include "../../core/core/icore.h"
+#include "../file/datapack.h"
 #include <thread>
 
 using json = nlohmann::json;
@@ -250,7 +251,7 @@ public:
 		std::string userId = "";
 		std::string path = "";
 		std::string packetId = "";
-		std::string payload = "";
+		DataPack payload;
 
 		uint32_t pointer = 0;
 		char *tempBytes = new char[4];
@@ -262,7 +263,7 @@ public:
 		pointer += 4;
 		if (signatureLength > 0)
 		{
-			char* sign = new char[signatureLength];
+			char *sign = new char[signatureLength];
 			memcpy(sign, packet + pointer, signatureLength);
 			signature = std::string(sign, signatureLength);
 			delete sign;
@@ -320,16 +321,15 @@ public:
 
 		char *payloadRaw = new char[len - pointer];
 		memcpy(payloadRaw, packet + pointer, len - pointer);
-		payload = std::string(payloadRaw, len - pointer);
-		delete payloadRaw;
-		std::cerr << "payload: " << payload << std::endl;
+		payload = DataPack{payloadRaw, len - pointer};
+		std::cerr << "payload: " << payload.data << std::endl;
 
 		try
 		{
 			if (path == "authenticate")
 			{
 				std::function<void(std::string, std::any, size_t)> lis;
-				auto checkRes = this->core->getTools()->getSecurity()->authWithSignature(userId, payload, &signature[0]);
+				auto checkRes = this->core->getTools()->getSecurity()->authWithSignature(userId, std::string(payload.data, payload.len), &signature[0]);
 				if (checkRes.verified)
 				{
 					lis = this->connectListener(userId);
@@ -346,6 +346,7 @@ public:
 					res["message"] = "authentication failed";
 					this->writeObjResponse(packetId, 4, res);
 				}
+				delete payloadRaw;
 				return;
 			}
 			auto action = this->core->getActor()->findActionAsSecure(path);
@@ -354,15 +355,17 @@ public:
 				json res;
 				res["message"] = "action not found";
 				this->writeObjResponse(packetId, 1, res);
+				delete payloadRaw;
 				return;
 			}
 			auto response = action->run(this->core->getIp(), [this](std::function<void(StateTrx *)> fn)
-										{ this->core->modifyState(fn); }, userId, payload, signature);
+										{ this->core->modifyState(fn); }, core->getTools(), userId, payload, signature);
 			if (response.err != "")
 			{
 				json data;
 				data["message"] = response.err;
 				this->writeObjResponse(packetId, response.resCode, data);
+				delete payloadRaw;
 				return;
 			}
 			this->writeObjResponse(packetId, 0, response.data);
@@ -378,6 +381,7 @@ public:
 		{
 			std::cerr << "Unknown exception caught" << std::endl;
 		}
+		delete payloadRaw;
 	}
 };
 
@@ -487,18 +491,24 @@ public:
 				}
 				else if (readCount >= length)
 				{
-					std::cerr << std::endl << "keyhan " << oldReadCount << " " << length << " " << static_cast<int>(nextBuf[0]) << " " << static_cast<int>(nextBuf[1]) << " " << static_cast<int>(nextBuf[2]) << " " << static_cast<int>(nextBuf[3]) << " "  << std::endl << std::endl;
+					std::cerr << std::endl
+							  << "keyhan " << oldReadCount << " " << length << " " << static_cast<int>(nextBuf[0]) << " " << static_cast<int>(nextBuf[1]) << " " << static_cast<int>(nextBuf[2]) << " " << static_cast<int>(nextBuf[3]) << " " << std::endl
+							  << std::endl;
 					memcpy(readData + oldReadCount, nextBuf, length - oldReadCount);
 					memcpy(nextBuf, nextBuf + (readLength - (readCount - length)), readCount - length);
 					remainedReadLength = (readCount - length);
-					std::cerr << std::endl << "keyhan -- " << static_cast<int>(readData[0]) << " " << static_cast<int>(readData[1]) << " " << static_cast<int>(readData[2]) << " " << static_cast<int>(readData[3]) << " "  << std::endl << std::endl;
+					std::cerr << std::endl
+							  << "keyhan -- " << static_cast<int>(readData[0]) << " " << static_cast<int>(readData[1]) << " " << static_cast<int>(readData[2]) << " " << static_cast<int>(readData[3]) << " " << std::endl
+							  << std::endl;
 					std::cerr << "packet received" << std::endl;
-					char* packet = new char[length];
+					char *packet = new char[length];
 					memcpy(packet, readData, length);
 					delete readData;
-					std::cerr << std::endl << "konstantin -- " << static_cast<int>(packet[0]) << " " << static_cast<int>(packet[1]) << " " << static_cast<int>(packet[2]) << " " << static_cast<int>(packet[3]) << " "  << std::endl << std::endl;
-					
-					std::thread t([&socket, length](char* packet)
+					std::cerr << std::endl
+							  << "konstantin -- " << static_cast<int>(packet[0]) << " " << static_cast<int>(packet[1]) << " " << static_cast<int>(packet[2]) << " " << static_cast<int>(packet[3]) << " " << std::endl
+							  << std::endl;
+
+					std::thread t([&socket, length](char *packet)
 								  {
 								   try
 								   {
@@ -512,8 +522,7 @@ public:
 								   {
 									   std::cerr << "Unknown exception caught" << std::endl;
 								   }
-								   delete packet;
-								  }, packet);
+								   delete packet; }, packet);
 					t.detach();
 					readCount -= length;
 					enough = true;

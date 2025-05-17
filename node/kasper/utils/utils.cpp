@@ -1,6 +1,8 @@
 
 #include "utils.h"
 
+namespace fs = std::filesystem;
+
 Utils &Utils::getInstance()
 {
     static Utils instance;
@@ -47,6 +49,8 @@ RSA *Utils::load_private_key_from_string(const char *keyStr)
 
 bool Utils::generateRsaKeyPair(std::string destDir)
 {
+    fs::create_directories(destDir);
+
     std::string priPath = destDir + "/private.pem";
     std::string pubPath = destDir + "/public.pem";
 

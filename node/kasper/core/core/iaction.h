@@ -7,7 +7,9 @@
 #include <mutex>
 #include <unordered_map>
 #include "../trx/trx.h"
+#include "../tools/itools.h"
 #include "../../utils/nlohmann/json.hpp"
+#include "../../drivers/file/datapack.h"
 
 using json = nlohmann::json;
 
@@ -45,10 +47,11 @@ public:
     std::string pointId;
     std::string origin;
     StateTrx *trx;
+    ITools *tools;
 };
 
 class ISecAction
 {
 public:
-    virtual ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, std::string userId, std::string payload, std::string signature) = 0;
+    virtual ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature) = 0;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "packet.h"
+#include "../../core/trx/trx.h"
 #include <string>
 #include <vector>
 
@@ -27,4 +28,5 @@ public:
     virtual void logPacket(std::string pointId, std::string userId, std::string data) = 0;
     virtual std::vector<Packet> getPacketLogs(std::string pointId, std::string userId) = 0;
     virtual TransactionDB *getBasedb() = 0;
+    virtual std::string generateId(StateTrx *trx, std::string origin) = 0;
 };

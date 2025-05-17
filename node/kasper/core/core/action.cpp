@@ -6,6 +6,7 @@
 #include <map>
 #include <mutex>
 #include <unordered_map>
+#include "../tools/itools.h"
 #include "iaction.h"
 #include "icore.h"
 
@@ -23,9 +24,9 @@ public:
         this->fn = fn;
     }
 
-    ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, std::string userId, std::string payload, std::string signature)
+    ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature)
     {
-        json input = json::parse(payload);
+        json input = json::parse(std::string(payload.data, payload.len));
         auto meta = this->intel->extractMeta(input);
 
         if (meta.origin == "global")
@@ -39,7 +40,7 @@ public:
 
         if (this->intel->mustBeUser())
         {
-            auto checkres = this->security->authWithSignature(userId, payload, signature);
+            auto checkres = this->security->authWithSignature(userId, std::string(payload.data, payload.len), signature);
             if (!checkres.verified)
             {
                 ActionOutput response;
@@ -64,9 +65,9 @@ public:
             }
         }
         ActionOutput output;
-        stateModifier([&output, this, &input, userId, meta](StateTrx *trx)
+        stateModifier([&output, this, &input, userId, meta, &tools](StateTrx *trx)
                       {
-            auto state = StateHolder{userId, meta.pointId, meta.origin, trx};
+            auto state = StateHolder{userId, meta.pointId, meta.origin, trx, tools};
             output = this->fn(state, ActionInput{input}); });
         return output;
     }

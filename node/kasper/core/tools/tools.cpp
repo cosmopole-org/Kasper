@@ -46,6 +46,11 @@ public:
         return this->signaler;
     }
 
+    IFile *getFile() override
+    {
+        return this->file;
+    }
+
     ITcp *getNetwork() override
     {
         return this->network;
