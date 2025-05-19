@@ -7,8 +7,12 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <map>
 #include <unordered_set>
 #include "isignaler.h"
+#include "../../utils/nlohmann/json.hpp"
+
+using json = nlohmann::json;
 
 class Signaler : public ISignaler
 {
@@ -22,8 +26,10 @@ public:
         this->listeners = {};
     }
 
-    std::function<void(std::string, std::any, size_t)> findListener(std::string userId) {
-        if (auto lis = this->listeners.find(userId); lis != this->listeners.end()) {
+    std::function<void(std::string, std::any, size_t)> findListener(std::string userId)
+    {
+        if (auto lis = this->listeners.find(userId); lis != this->listeners.end())
+        {
             return lis->second;
         }
         return NULL;
@@ -32,6 +38,35 @@ public:
     void listenToSingle(std::string userId, std::function<void(std::string, std::any, size_t)> listener) override
     {
         this->listeners.insert({userId, listener});
+    }
+
+    json createPoint(std::map<std::string, std::any> point) override
+    {
+        std::string pointId = std::any_cast<std::string>(point["id"]);
+        std::string owner = std::any_cast<std::string>(point["owner"]);
+        std::string persHist = std::string(1, std::any_cast<bool>(point["persHist"]) ? 0x01 : 0x02);
+        std::string isPublic = std::string(1, std::any_cast<bool>(point["isPublic"]) ? 0x01 : 0x02);
+        json j = {
+            {"id", pointId},
+            {"owner", owner},
+            {"persHist", persHist},
+            {"isPublic", isPublic},
+        };
+        this->core->modifyState([pointId, j](StateTrx *trx)
+                                { trx->putObj("Point", pointId, j); });
+        j["persHist"] = std::any_cast<bool>(point["persHist"]);
+        j["isPublic"] = std::any_cast<bool>(point["isPublic"]);
+        return j;
+    }
+
+    json getPoint(std::string pointId)
+    {
+        json j;
+        this->core->modifyState([pointId, &j](StateTrx *trx)
+                                { j = trx->getObjAsJson("Point", pointId); });
+        j["persHist"] = j["persHist"].template get<std::string>().c_str()[0] == 0x01;
+        j["isPublic"] = j["isPublic"].template get<std::string>().c_str()[0] == 0x01;
+        return j;
     }
 
     void join(std::string userId, std::string pointId) override

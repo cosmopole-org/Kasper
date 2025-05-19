@@ -173,26 +173,22 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/create", { "username": "kasper" });
+    let res = await sendRequest("", "/users/create", { "username": "keyhan10" });
     console.log(res.resCode, res.obj);
 
-    // res = await sendRequest("", "/api/adminName", {});
-    // console.log(res.resCode, res.obj);
-
-    // let res = await sendRequest("", "/users/register", { "username": "kasper4" });
-    // console.log(res.resCode, res.obj);
-    // privateKey = Buffer.from(
-    //     "-----BEGIN RSA PRIVATE KEY-----\n" +
-    //     res.obj.privateKey +
-    //     "\n-----END RSA PRIVATE KEY-----\n",
-    //     'utf-8'
-    // )
-    // let userId = res.obj.user.id;
+    privateKey = Buffer.from(
+        res.obj.user.privateKey,
+        'utf-8'
+    )
+    let userId = res.obj.user.id;
     // await sendRequest(userId, "authenticate", {});
 
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    // console.log(res.resCode, res.obj);
-    // let pointOneId = res.obj.point.id;
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    console.log(res.resCode, res.obj);
+    let pointOneId = res.obj.point.id;
+
+    res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
+    console.log(res.resCode, res.obj);
 
     // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
     // console.log(res.resCode, res.obj);

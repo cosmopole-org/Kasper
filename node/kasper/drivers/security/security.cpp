@@ -64,13 +64,14 @@ public:
 		}
 	}
 
-	void generateSecureKeyPair(std::string tag) override
+	std::vector<DataPack> generateSecureKeyPair(std::string tag) override
 	{
 		fs::create_directories(this->storageRoot + "/" + keysFolderName + "/" + tag);
 		Utils::getInstance().generateRsaKeyPair(this->storageRoot + "/" + keysFolderName + "/" + tag);
 		auto priKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/private.pem");
 		auto pubKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/public.pem");
 		this->keys[tag] = new KeyPack{priKey, pubKey};
+		return {this->keys[tag]->priKey, this->keys[tag]->pubKey};
 	}
 
 	std::vector<DataPack> fetchKeyPair(std::string tag) override
@@ -80,7 +81,7 @@ public:
 
 	SignVerifyRes authWithSignature(std::string userId, std::string packet, std::string signatureBase64) override
 	{
-		RSA *publicKey;
+		EVP_PKEY *publicKey;
 		this->core->modifyState([userId, &publicKey](StateTrx *trx)
 								{ publicKey = trx->getPubKey(userId); });
 		if (publicKey == NULL)

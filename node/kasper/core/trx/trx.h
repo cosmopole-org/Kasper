@@ -54,7 +54,7 @@ public:
     std::map<std::string, std::string> getObjAsMap(std::string objType, std::string key);
     ValPack getColumn(std::string objType, std::string key, std::string columnKey);
     std::vector<std::string> getLinksList(std::string prefix);
-    RSA* getPubKey(std::string userId);
+    EVP_PKEY* getPubKey(std::string userId);
     void commit();
     void discard();
     void dispose();

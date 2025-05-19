@@ -51,7 +51,7 @@ ValPack StateTrx::getBytes(std::string key)
             0};
     }
     return ValPack{
-        &val[0],
+        (char*)val.c_str(),
         val.length()};
 }
 
@@ -179,9 +179,11 @@ std::vector<std::string> StateTrx::getLinksList(std::string p)
     return links;
 }
 
-RSA *StateTrx::getPubKey(std::string userId)
+EVP_PKEY *StateTrx::getPubKey(std::string userId)
 {
-    return Utils::getInstance().load_public_key_from_string(this->getBytes("obj::User::" + userId + "::publicKey").data);
+    auto data = this->getString("obj::User::" + userId + "::publicKey");
+    std::cerr << "public key data: [" << data << "]" << std::endl;
+    return Utils::getInstance().load_public_key_from_string(data);
 }
 
 void StateTrx::commit()

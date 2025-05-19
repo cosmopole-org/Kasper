@@ -4,6 +4,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <map>
 
 class ISignaler
 {
@@ -11,6 +12,8 @@ public:
     virtual ~ISignaler() = default;
     virtual std::function<void(std::string, std::any, size_t)> findListener(std::string userId) = 0;
     virtual void listenToSingle(std::string userId, std::function<void(std::string, std::any, size_t)> listener) = 0;
+    virtual json createPoint(std::map<std::string, std::any> point) = 0;
+    virtual json getPoint(std::string pointId) = 0;
     virtual void join(std::string userId, std::string pointId) = 0;
     virtual void leave(std::string userId, std::string pointId) = 0;
     virtual void signalUserAsObj(std::string userId, std::string key, std::any data) = 0;

@@ -57,20 +57,18 @@ public:
         std::lock_guard<std::mutex> lock(this->lock);
         if (origin == "global")
         {
-            std::cerr << "hellooo" << std::endl;
             auto old = trx->getBytes("maxGlobalId");
-            std::cerr << "hellooo 2" << std::endl;
             int counter = 0;
             if (old.len > 0)
             {
-                std::cerr << "hellooo 3" << std::endl;
                 counter = Utils::getInstance().parseDataAsInt(old.data);
+                std::cerr << static_cast<int>(old.data[0]) << " " << static_cast<int>(old.data[1]) << " " << static_cast<int>(old.data[2]) << " " << static_cast<int>(old.data[3]) << " " << std::endl;
             }
-            std::cerr << "hellooo 4" << std::endl;
             counter++;
-            trx->putBytes("maxGlobalId", Utils::getInstance().convertIntToData(counter), 4);
-            std::cerr << "hellooo 5" << std::endl;
-            return std::to_string(counter) + "::glboal";
+            char* d = Utils::getInstance().convertIntToData(counter);
+            std::cerr << static_cast<int>(d[0]) << " " << static_cast<int>(d[1]) << " " << static_cast<int>(d[2]) << " " << static_cast<int>(d[3]) << " " << std::endl;
+            trx->putBytes("maxGlobalId", d, 4);
+            return std::to_string(counter) + ">glboal";
         }
         else
         {
@@ -82,7 +80,7 @@ public:
             }
             counter++;
             trx->putBytes("maxLocalId", Utils::getInstance().convertIntToData(counter), 4);
-            return std::to_string(counter) + "::local";
+            return std::to_string(counter) + ">local";
         }
     }
 

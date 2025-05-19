@@ -9,42 +9,45 @@ Utils &Utils::getInstance()
     return instance;
 }
 
-RSA *Utils::load_public_key_from_string(const char *keyStr)
+EVP_PKEY *Utils::load_public_key_from_string(const std::string &key_str)
 {
-    BIO *bio = BIO_new_mem_buf(keyStr, -1);
+    BIO *bio = BIO_new_mem_buf(key_str.data(), static_cast<int>(key_str.size()));
     if (!bio)
     {
-        std::cerr << "BIO_new_mem_buf failed\n";
+        std::cerr << "Failed to create BIO\n";
         return nullptr;
     }
 
-    RSA *rsa = PEM_read_bio_RSA_PUBKEY(bio, nullptr, nullptr, nullptr);
+    EVP_PKEY *pubkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
     BIO_free(bio);
 
-    if (!rsa)
+    if (!pubkey)
     {
-        std::cerr << "PEM_read_bio_RSA_PUBKEY failed\n";
+        std::cerr << "Failed to parse public key from string\n";
+        ERR_print_errors_fp(stderr);
     }
-    return rsa;
+
+    return pubkey;
 }
 
-RSA *Utils::load_private_key_from_string(const char *keyStr)
+EVP_PKEY *Utils::load_private_key_from_string(const std::string &key_str)
 {
-    BIO *bio = BIO_new_mem_buf(keyStr, -1);
+    BIO *bio = BIO_new_mem_buf(key_str.data(), static_cast<int>(key_str.size()));
     if (!bio)
     {
-        std::cerr << "BIO_new_mem_buf failed\n";
+        std::cerr << "Failed to create BIO\n";
         return nullptr;
     }
 
-    RSA *rsa = PEM_read_bio_RSAPrivateKey(bio, nullptr, nullptr, nullptr);
+    EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
     BIO_free(bio);
 
-    if (!rsa)
+    if (!pkey)
     {
-        std::cerr << "PEM_read_bio_RSAPrivateKey failed\n";
+        std::cerr << "Failed to parse private key from string\n";
+        ERR_print_errors_fp(stderr);
     }
-    return rsa;
+    return pkey;
 }
 
 bool Utils::generateRsaKeyPair(std::string destDir)
@@ -54,68 +57,118 @@ bool Utils::generateRsaKeyPair(std::string destDir)
     std::string priPath = destDir + "/private.pem";
     std::string pubPath = destDir + "/public.pem";
 
-    int bits = 2048;
-    unsigned long e = RSA_F4;
-
-    RSA *rsa = RSA_new();
-    BIGNUM *bne = BN_new();
-    if (!BN_set_word(bne, e))
+    EVP_PKEY *pkey = nullptr;
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
+    if (!ctx)
     {
-        std::cerr << "BN_set_word failed\n";
-        return false;
+        std::cerr << "Failed to create context\n";
+        ERR_print_errors_fp(stderr);
+        return 1;
     }
 
-    if (!RSA_generate_key_ex(rsa, bits, bne, nullptr))
+    if (EVP_PKEY_keygen_init(ctx) <= 0)
     {
-        std::cerr << "RSA_generate_key_ex failed\n";
-        return false;
+        std::cerr << "Failed to initialize keygen\n";
+        ERR_print_errors_fp(stderr);
+        EVP_PKEY_CTX_free(ctx);
+        return 1;
     }
 
-    // Save private key
-    FILE *privFile = fopen(priPath.c_str(), "wb");
-    if (!PEM_write_RSAPrivateKey(privFile, rsa, nullptr, nullptr, 0, nullptr, nullptr))
+    if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0)
     {
-        std::cerr << "Failed to write private key\n";
+        std::cerr << "Failed to set RSA key size\n";
+        ERR_print_errors_fp(stderr);
+        EVP_PKEY_CTX_free(ctx);
+        return 1;
     }
-    fclose(privFile);
 
-    // Save public key
-    FILE *pubFile = fopen(pubPath.c_str(), "wb");
-    if (!PEM_write_RSA_PUBKEY(pubFile, rsa))
+    if (EVP_PKEY_keygen(ctx, &pkey) <= 0)
     {
-        std::cerr << "Failed to write public key\n";
+        std::cerr << "Failed to generate key\n";
+        ERR_print_errors_fp(stderr);
+        EVP_PKEY_CTX_free(ctx);
+        return 1;
     }
-    fclose(pubFile);
 
-    // Clean up
-    RSA_free(rsa);
-    BN_free(bne);
+    FILE *priv_fp = fopen(priPath.c_str(), "wb");
+    PEM_write_PrivateKey(priv_fp, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+    fclose(priv_fp);
+
+    FILE *pub_fp = fopen(pubPath.c_str(), "wb");
+    PEM_write_PUBKEY(pub_fp, pkey);
+    fclose(pub_fp);
+
+    // Cleanup
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
 
     return true;
 }
 
-bool Utils::verify_signature_rsa(RSA *rsa,
+std::vector<unsigned char> base64_decode(const std::string &base64_input)
+{
+    BIO *bio = BIO_new_mem_buf(base64_input.data(), base64_input.size());
+    BIO *b64 = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64, bio);
+
+    // Don't expect newlines
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+
+    std::vector<unsigned char> buffer(base64_input.size()); // max possible size
+    int decoded_len = BIO_read(bio, buffer.data(), buffer.size());
+
+    BIO_free_all(bio);
+
+    if (decoded_len <= 0)
+        return {};
+    buffer.resize(decoded_len);
+    return buffer;
+}
+
+bool Utils::verify_signature_rsa(EVP_PKEY *pubkey,
                                  std::string data,
                                  std::string sign)
 {
-    const unsigned char *message = (const unsigned char *)data.c_str();
-    size_t message_len = strlen((const char *)message);
-    const unsigned char *signature = (const unsigned char *)sign.c_str();
-    size_t signature_len = strlen((const char *)signature);
+    const unsigned char *message = reinterpret_cast<const unsigned char*>(data.data());
+    size_t message_len = data.size();
 
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256(message, message_len, hash);
+    auto signatureBuffer = base64_decode(sign);
+    const unsigned char *signature = signatureBuffer.data();
+    size_t signature_len = signatureBuffer.size();
 
-    int result = RSA_verify(NID_sha256, hash, SHA256_DIGEST_LENGTH, signature, signature_len, rsa);
-    if (result == 1)
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx)
+        return false;
+
+    bool result = false;
+
+    // Init verify context with digest and public key
+    if (EVP_DigestVerifyInit(ctx, nullptr, EVP_sha256(), nullptr, pubkey) <= 0)
     {
-        return true;
+
+        EVP_MD_CTX_free(ctx);
+        return result;
+    }
+
+    // Add message to be verified
+    if (EVP_DigestVerifyUpdate(ctx, message, message_len) <= 0)
+    {
+        EVP_MD_CTX_free(ctx);
+        return result;
+    }
+
+    // Final verification
+    if (EVP_DigestVerifyFinal(ctx, signature, signature_len) == 1)
+    {
+        result = true; // Signature is valid
     }
     else
     {
-        std::cerr << "RSA_verify failed: " << ERR_error_string(ERR_get_error(), nullptr) << "\n";
-        return false;
+        ERR_print_errors_fp(stderr); // Print OpenSSL error stack
     }
+
+    EVP_MD_CTX_free(ctx);
+    return result;
 }
 
 std::string Utils::getKasperNodeIPAddress()
@@ -168,7 +221,7 @@ bool Utils::stringStartsWith(const std::string &s1, const std::string &s2)
     return s1.compare(0, s2.length(), s2) == 0;
 }
 
-int Utils::parseDataAsInt(char* buffer)
+int Utils::parseDataAsInt(char *buffer)
 {
     return uint32_t((unsigned char)(buffer[0]) << 24 |
                     (unsigned char)(buffer[1]) << 16 |
@@ -178,7 +231,7 @@ int Utils::parseDataAsInt(char* buffer)
 
 char *Utils::convertIntToData(int n)
 {
-    char* bytes = new char[4];
+    char *bytes = new char[4];
     bytes[3] = n & 0xFF;
     bytes[2] = (n >> 8) & 0xFF;
     bytes[1] = (n >> 16) & 0xFF;
