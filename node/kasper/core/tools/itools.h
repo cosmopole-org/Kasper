@@ -6,6 +6,7 @@
 #include "../../drivers/network/itcp.h"
 #include "../../drivers/file/ifile.h"
 #include "../../drivers/wasm/iwasm.h"
+#include "../../drivers/network/ifed.h"
 #include <map>
 #include <string>
 
@@ -19,4 +20,5 @@ public:
     virtual IFile *getFile() = 0;
     virtual ITcp *getNetwork() = 0;
     virtual IWasm *getWasm() = 0;
+    virtual IFed *getFederation() = 0;
 };

@@ -38,3 +38,8 @@ IWasm *Tools::getWasm()
 {
     return this->wasm;
 }
+
+IFed *Tools::getFederation()
+{
+    return this->federation;
+}

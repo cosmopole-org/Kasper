@@ -142,135 +142,218 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 	std::string packetId = "";
 	DataPack payload;
 
-	uint32_t pointer = 0;
-	char *tempBytes = new char[4];
-	memcpy(tempBytes, packet + pointer, 4);
-	std::cerr << "kasper " << static_cast<int>(packet[0]) << " " << static_cast<int>(packet[1]) << " " << static_cast<int>(packet[2]) << " " << static_cast<int>(packet[3]) << std::endl;
-	uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
-	delete tempBytes;
-	std::cerr << "signature length: " << signatureLength << std::endl;
-	pointer += 4;
-	if (signatureLength > 0)
-	{
-		char *sign = new char[signatureLength];
-		memcpy(sign, packet + pointer, signatureLength);
-		signature = std::string(sign, signatureLength);
-		delete sign;
-		pointer += signatureLength;
-	}
-	std::cerr << "signature: " << signature << std::endl;
+	uint32_t pointer = 1;
 
-	char *tempBytes3 = new char[4];
-	memcpy(tempBytes3, packet + pointer, 4);
-	uint32_t userIdLength = Utils::getInstance().parseDataAsInt(tempBytes3);
-	delete tempBytes3;
-	std::cerr << "userId length: " << userIdLength << std::endl;
-	pointer += 4;
-	if (userIdLength > 0)
+	if (packet[0] == 0x01)
 	{
-		char *tempBytes4 = new char[userIdLength];
-		memcpy(tempBytes4, packet + pointer, userIdLength);
-		userId = std::string(tempBytes4, userIdLength);
-		delete tempBytes4;
-		pointer += userIdLength;
-	}
-	std::cerr << "userId: " << userId << std::endl;
+		std::string signature = "";
+		std::string key = "";
 
-	char *tempBytes5 = new char[4];
-	memcpy(tempBytes5, packet + pointer, 4);
-	uint32_t pathLength = Utils::getInstance().parseDataAsInt(tempBytes5);
-	delete tempBytes5;
-	std::cerr << "path length: " << pathLength << std::endl;
-	pointer += 4;
-	if (pathLength > 0)
-	{
-		char *tempBytes6 = new char[pathLength];
-		memcpy(tempBytes6, packet + pointer, pathLength);
-		path = std::string(tempBytes6, pathLength);
-		delete tempBytes6;
-		pointer += pathLength;
-	}
-	std::cerr << "path: " << path << std::endl;
-
-	char *tempBytes7 = new char[4];
-	memcpy(tempBytes7, packet + pointer, 4);
-	uint32_t packetIdLength = Utils::getInstance().parseDataAsInt(tempBytes7);
-	delete tempBytes7;
-	std::cerr << "packetId length: " << packetIdLength << std::endl;
-	pointer += 4;
-	if (packetIdLength > 0)
-	{
-		char *tempBytes8 = new char[packetIdLength];
-		memcpy(tempBytes8, packet + pointer, packetIdLength);
-		packetId = std::string(tempBytes8, packetIdLength);
-		delete tempBytes8;
-		pointer += packetIdLength;
-	}
-	std::cerr << "packetId: " << packetId << std::endl;
-
-	char *payloadRaw = new char[len - pointer];
-	memcpy(payloadRaw, packet + pointer, len - pointer);
-	payload = DataPack{payloadRaw, len - pointer};
-	std::cerr << "payload: " << payload.data << std::endl;
-
-	try
-	{
-		if (path == "authenticate")
+		std::cerr << "received update" << std::endl;
+		char *tempBytes = new char[4];
+		memcpy(tempBytes, packet + pointer, 4);
+		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
+		delete tempBytes;
+		std::cerr << "signature length: " << signatureLength << std::endl;
+		pointer += 4;
+		if (signatureLength > 0)
 		{
-			std::function<void(std::string, std::any, size_t)> lis;
-			auto checkRes = this->core->getTools()->getSecurity()->authWithSignature(userId, std::string(payload.data, payload.len), &signature[0]);
-			if (checkRes.verified)
-			{
-				lis = this->connectListener(userId);
-				json res;
-				res["message"] = "authenticated";
-				this->writeObjResponse(packetId, 0, res);
-				this->core->getTools()->getSignaler()->listenToSingle(userId, lis);
-				json obj;
-				lis("old_queue_end", obj, 0);
-			}
-			else
-			{
-				json res;
-				res["message"] = "authentication failed";
-				this->writeObjResponse(packetId, 4, res);
-			}
-			delete payloadRaw;
-			return;
+			char *sign = new char[signatureLength];
+			memcpy(sign, packet + pointer, signatureLength);
+			signature = std::string(sign, signatureLength);
+			delete sign;
+			pointer += signatureLength;
 		}
-		auto action = this->core->getActor()->findActionAsSecure(path);
-		if (action == NULL)
+		std::cerr << "signature: " << signature << std::endl;
+		char *keyBytesLen = new char[4];
+		memcpy(keyBytesLen, packet + pointer, 4);
+		pointer += 4;
+		uint32_t keyLen = Utils::getInstance().parseDataAsInt(keyBytesLen);
+		std::cerr << "key length: " << keyLen << std::endl;
+		delete keyBytesLen;
+		if (keyLen > 0)
 		{
-			json res;
-			res["message"] = "action not found";
-			this->writeObjResponse(packetId, 1, res);
-			delete payloadRaw;
-			return;
+			char *keyBytes = new char[keyLen];
+			memcpy(keyBytes, packet + pointer, keyLen);
+			pointer += keyLen;
+			key = std::string(keyBytes, keyLen);
+			delete keyBytes;
 		}
-		auto response = action->run(this->core->getIp(), [this](std::function<void(StateTrx *)> fn)
-									{ this->core->modifyState(fn); }, core->getTools(), userId, payload, signature);
-		if (response.err != "")
+		std::cerr << "key: " << key << std::endl;
+		uint32_t payloadLen = len - pointer;
+		std::cerr << "payload length: " << payloadLen << std::endl;
+		if (payloadLen > 0)
 		{
+			char *payload = new char[payloadLen];
+			memcpy(payload, packet + pointer, payloadLen);
+			std::string updatePack = std::string(payload, payloadLen);
+			std::cerr << "payload: " << updatePack << std::endl;
+			pointer += payloadLen;
+			this->writeRawUpdate(key, payload, payloadLen);
+		}
+	}
+	else if (packet[0] == 0x02)
+	{
+		std::string signature = "";
+		std::string requestId = "";
+
+		std::cerr << "received response" << std::endl;
+		
+		std::cerr << "received update" << std::endl;
+		char *tempBytes = new char[4];
+		memcpy(tempBytes, packet + pointer, 4);
+		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
+		delete tempBytes;
+		std::cerr << "signature length: " << signatureLength << std::endl;
+		pointer += 4;
+		if (signatureLength > 0)
+		{
+			char *sign = new char[signatureLength];
+			memcpy(sign, packet + pointer, signatureLength);
+			signature = std::string(sign, signatureLength);
+			delete sign;
+			pointer += signatureLength;
+		}
+
+		char *b1Len = new char[4];
+		memcpy(b1Len, packet + pointer, 4);
+		pointer += 4;
+		uint32_t requestIdLen = Utils::getInstance().parseDataAsInt(b1Len);
+		std::cerr << "requestId length: " << requestIdLen << std::endl;
+		delete b1Len;
+		if (b1Len > 0)
+		{
+			char *b1 = new char[4];
+			memcpy(b1, packet + pointer, requestIdLen);
+			pointer += requestIdLen;
+			requestId = std::string(b1, requestIdLen);
+			std::cerr << "requestId: " << requestId << std::endl;
+			delete b1;
+		}
+		char *b2 = new char[4];
+		memcpy(b2, packet + pointer, 4);
+		pointer += 4;
+		int resCode = Utils::getInstance().parseDataAsInt(b2);
+		std::cerr << "resCode: " << resCode << std::endl;
+		delete b2;
+		int payloadLength = len - pointer;
+		if (payloadLength > 0)
+		{
+			char *payload = new char[payloadLength];
+			memcpy(payload, packet + pointer, payloadLength);
+			std::string response = std::string(payload, payloadLength);
+			std::cerr << "response: " << response << std::endl;
+			pointer += payloadLength;
+			this->writeRawResponse(requestId, resCode, payload, payloadLength);
+		}
+	}
+	else if (packet[0] == 0x03)
+	{
+		char *tempBytes = new char[4];
+		memcpy(tempBytes, packet + pointer, 4);
+		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
+		delete tempBytes;
+		std::cerr << "signature length: " << signatureLength << std::endl;
+		pointer += 4;
+		if (signatureLength > 0)
+		{
+			char *sign = new char[signatureLength];
+			memcpy(sign, packet + pointer, signatureLength);
+			signature = std::string(sign, signatureLength);
+			delete sign;
+			pointer += signatureLength;
+		}
+		std::cerr << "signature: " << signature << std::endl;
+
+		char *tempBytes3 = new char[4];
+		memcpy(tempBytes3, packet + pointer, 4);
+		uint32_t userIdLength = Utils::getInstance().parseDataAsInt(tempBytes3);
+		delete tempBytes3;
+		std::cerr << "userId length: " << userIdLength << std::endl;
+		pointer += 4;
+		if (userIdLength > 0)
+		{
+			char *tempBytes4 = new char[userIdLength];
+			memcpy(tempBytes4, packet + pointer, userIdLength);
+			userId = std::string(tempBytes4, userIdLength);
+			delete tempBytes4;
+			pointer += userIdLength;
+		}
+		std::cerr << "userId: " << userId << std::endl;
+
+		char *tempBytes5 = new char[4];
+		memcpy(tempBytes5, packet + pointer, 4);
+		uint32_t pathLength = Utils::getInstance().parseDataAsInt(tempBytes5);
+		delete tempBytes5;
+		std::cerr << "path length: " << pathLength << std::endl;
+		pointer += 4;
+		if (pathLength > 0)
+		{
+			char *tempBytes6 = new char[pathLength];
+			memcpy(tempBytes6, packet + pointer, pathLength);
+			path = std::string(tempBytes6, pathLength);
+			delete tempBytes6;
+			pointer += pathLength;
+		}
+		std::cerr << "path: " << path << std::endl;
+
+		char *tempBytes7 = new char[4];
+		memcpy(tempBytes7, packet + pointer, 4);
+		uint32_t packetIdLength = Utils::getInstance().parseDataAsInt(tempBytes7);
+		delete tempBytes7;
+		std::cerr << "packetId length: " << packetIdLength << std::endl;
+		pointer += 4;
+		if (packetIdLength > 0)
+		{
+			char *tempBytes8 = new char[packetIdLength];
+			memcpy(tempBytes8, packet + pointer, packetIdLength);
+			packetId = std::string(tempBytes8, packetIdLength);
+			delete tempBytes8;
+			pointer += packetIdLength;
+		}
+		std::cerr << "packetId: " << packetId << std::endl;
+
+		char *payloadRaw = new char[len - pointer];
+		memcpy(payloadRaw, packet + pointer, len - pointer);
+		payload = DataPack{payloadRaw, len - pointer};
+		std::cerr << "payload: " << payload.data << std::endl;
+
+		try
+		{
+			auto action = this->core->getActor()->findActionAsSecure(path);
+			if (action == NULL)
+			{
+				json res;
+				res["message"] = "action not found";
+				this->writeObjResponse(packetId, 1, res);
+				delete payloadRaw;
+				return;
+			}
+			auto response = action->run(this->core->getIp(), [this](std::function<void(StateTrx *)> fn)
+										{ this->core->modifyState(fn); }, core->getTools(), userId, payload, signature);
+			if (response.err != "")
+			{
+				json data;
+				data["message"] = response.err;
+				this->writeObjResponse(packetId, response.resCode, data);
+				delete payloadRaw;
+				return;
+			}
+			this->writeObjResponse(packetId, 0, response.data);
+		}
+		catch (const std::exception &e)
+		{
+			std::cerr << "Standard exception caught: " << e.what() << std::endl;
 			json data;
-			data["message"] = response.err;
-			this->writeObjResponse(packetId, response.resCode, data);
-			delete payloadRaw;
-			return;
+			data["message"] = e.what();
+			this->writeObjResponse(packetId, 2, data);
 		}
-		this->writeObjResponse(packetId, 0, response.data);
+		catch (...)
+		{
+			std::cerr << "Unknown exception caught" << std::endl;
+		}
+		delete payloadRaw;
 	}
-	catch (const std::exception &e)
-	{
-		std::cerr << "Standard exception caught: " << e.what() << std::endl;
-		json data;
-		data["message"] = e.what();
-		this->writeObjResponse(packetId, 2, data);
-	}
-	catch (...)
-	{
-		std::cerr << "Unknown exception caught" << std::endl;
-	}
-	delete payloadRaw;
 }
 
 Tcp::Tcp(ICore *core)
@@ -282,7 +365,7 @@ Tcp::Tcp(ICore *core)
 
 std::shared_future<void> Tcp::run(int port)
 {
-	std::cerr << "starting tcp server on port " << port << "..." << std::endl;
+	std::cerr << "starting fed server on port " << port << "..." << std::endl;
 	return std::async(std::launch::async, [port, this]
 					  {
 			int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
