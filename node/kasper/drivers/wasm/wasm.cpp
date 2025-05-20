@@ -1,34 +1,19 @@
-#pragma once
-
-#include <stdio.h>
-#include <unordered_map>
-#include <string>
-#include <list>
-#include <unistd.h>
-#include <mutex>
-#include <string.h>
-#include <any>
-#include <unordered_set>
-#include <condition_variable>
-#include <queue>
-#include <thread>
-#include <functional>
-#include <iostream>
-#include <fstream>
-
-#include "lib/runtime.h"
+#include "wasm.h"
 
 using namespace std;
 
-void init(char* kvDbPath)
+void Wasm::init(char *kvDbPath)
 {
-  // wasmSend = wasmCallback;
+  Options options;
+  TransactionDBOptions txn_db_options;
+  TransactionDB *txn_db;
   options.create_if_missing = true;
   Status s = TransactionDB::Open(options, txn_db_options, kvDbPath, &txn_db);
   assert(s.ok());
+  set_txn_db(txn_db);
 }
 
-void wasmRunVm(
+void Wasm::wasmRunVm(
     char *astPath,
     char *input,
     char *machineId)
@@ -41,11 +26,11 @@ void wasmRunVm(
   rt->finalize();
 }
 
-void wasmRunEffects(char *effectsStr)
+void Wasm::wasmRunEffects(char *effectsStr)
 {
   json j = json::parse(effectsStr);
   WriteOptions write_options;
-  Transaction *trx = txn_db->BeginTransaction(write_options);
+  Transaction *trx = get_txn_db()->BeginTransaction(write_options);
   for (json::iterator item = j.begin(); item != j.end(); ++item)
   {
     if (item.value()["opType"].template get<std::string>() == "put")
@@ -68,7 +53,7 @@ void wasmRunEffects(char *effectsStr)
   }
 }
 
-void wasmRunTrxs(
+void Wasm::wasmRunTrxs(
     char *astStorePath,
     char *input)
 {
@@ -83,6 +68,6 @@ void wasmRunTrxs(
         item.value()["userId"].template get<std::string>(),
         item.value()["callbackId"].template get<std::string>()));
   }
-  ConcurrentRunner* cr = new ConcurrentRunner(astStorePath, trxs);
+  ConcurrentRunner *cr = new ConcurrentRunner(astStorePath, trxs);
   cr->run();
 }

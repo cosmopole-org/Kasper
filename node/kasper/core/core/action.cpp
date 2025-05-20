@@ -1,74 +1,56 @@
-#pragma once
+#include "action.h"
 
-#include "../../drivers/security/isecurity.h"
-#include <functional>
-#include <string>
-#include <map>
-#include <mutex>
-#include <unordered_map>
-#include "../tools/itools.h"
-#include "iaction.h"
-#include "icore.h"
-
-class SecAction : public ISecAction
+SecAction::SecAction(ISecurity *security, Intelligence *intel, std::function<ActionOutput(StateHolder, ActionInput)> fn)
 {
-    Intelligence *intel;
-    ISecurity *security;
-    std::function<ActionOutput(StateHolder, ActionInput)> fn;
+    this->intel = intel;
+    this->security = security;
+    this->fn = fn;
+}
 
-public:
-    SecAction(ISecurity *security, Intelligence *intel, std::function<ActionOutput(StateHolder, ActionInput)> fn)
+ActionOutput SecAction::run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature)
+{
+    json input = json::parse(std::string(payload.data, payload.len));
+    auto meta = this->intel->extractMeta(input);
+
+    if (meta.origin == "global")
     {
-        this->intel = intel;
-        this->security = security;
-        this->fn = fn;
+        return {};
+    }
+    else if ((meta.origin != "") && (meta.origin != myOrigin))
+    {
+        return {};
     }
 
-    ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature)
+    if (this->intel->mustBeUser())
     {
-        json input = json::parse(std::string(payload.data, payload.len));
-        auto meta = this->intel->extractMeta(input);
-
-        if (meta.origin == "global")
+        auto checkres = this->security->authWithSignature(userId, std::string(payload.data, payload.len), signature);
+        if (!checkres.verified)
         {
-            return {};
+            ActionOutput response;
+            json data;
+            response.data = data;
+            response.resCode = 1;
+            response.err = "authentication failed";
+            return response;
         }
-        else if ((meta.origin != "") && (meta.origin != myOrigin))
+        if (this->intel->mustBeMember())
         {
-            return {};
-        }
-
-        if (this->intel->mustBeUser())
-        {
-            auto checkres = this->security->authWithSignature(userId, std::string(payload.data, payload.len), signature);
-            if (!checkres.verified)
+            auto accessVerified = this->security->hasAccessToPoint(userId, meta.pointId);
+            if (!accessVerified)
             {
                 ActionOutput response;
                 json data;
                 response.data = data;
-                response.resCode = 1;
-                response.err = "authentication failed";
+                response.resCode = 2;
+                response.err = "authorization failed";
                 return response;
             }
-            if (this->intel->mustBeMember())
-            {
-                auto accessVerified = this->security->hasAccessToPoint(userId, meta.pointId);
-                if (!accessVerified)
-                {
-                    ActionOutput response;
-                    json data;
-                    response.data = data;
-                    response.resCode = 2;
-                    response.err = "authorization failed";
-                    return response;
-                }
-            }
         }
-        ActionOutput output;
-        stateModifier([&output, this, &input, userId, meta, &tools](StateTrx *trx)
-                      {
+    }
+    ActionOutput output;
+    stateModifier([&output, this, &input, userId, meta, &tools](StateTrx *trx)
+                  {
             auto state = StateHolder{userId, meta.pointId, meta.origin, trx, tools};
             output = this->fn(state, ActionInput{input}); });
-        return output;
-    }
-};
+    return output;
+}

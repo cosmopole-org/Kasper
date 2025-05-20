@@ -5,6 +5,7 @@
 #include "../../drivers/security/isecurity.h"
 #include "../../drivers/network/itcp.h"
 #include "../../drivers/file/ifile.h"
+#include "../../drivers/wasm/iwasm.h"
 #include <map>
 #include <string>
 
@@ -17,4 +18,5 @@ public:
     virtual ISignaler *getSignaler() = 0;
     virtual IFile *getFile() = 0;
     virtual ITcp *getNetwork() = 0;
+    virtual IWasm *getWasm() = 0;
 };

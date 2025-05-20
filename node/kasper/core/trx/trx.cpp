@@ -1,5 +1,3 @@
-#pragma once
-
 #include "trx.h"
 #include <vector>
 

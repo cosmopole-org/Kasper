@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../tools/tools.cpp"
+#include "../tools/tools.h"
 #include "../trx/trx.h"
-#include "actor.cpp"
+#include "actor.h"
 #include "icore.h"
 #include "../../utils/utils.h"
 #include <functional>

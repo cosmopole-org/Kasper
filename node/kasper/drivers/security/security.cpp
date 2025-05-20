@@ -1,122 +1,96 @@
-#pragma once
-
-#include <string>
-#include <iostream>
-#include <filesystem>
-#include <vector>
-#include <map>
-#include "../../core/core/icore.h"
-#include "../file/ifile.h"
-#include "../storage/istorage.h"
-#include "../signaler/isignaler.h"
-#include "../file/ifile.h"
-#include "isecurity.h"
-#include "../../utils/utils.h"
+#include "security.h"
 
 namespace fs = std::filesystem;
 
-const std::string keysFolderName = "keys";
-
-class Security : public ISecurity
+Security::Security(ICore *core, std::string storageRoot, IFile *file, IStorage *storage, ISignaler *signaler)
 {
-public:
-	ICore *core;
-	IStorage *storage;
-	ISignaler *signaler;
-	IFile *file;
-	std::string storageRoot;
-	std::map<std::string, KeyPack *> keys;
+	this->core = core;
+	this->storageRoot = storageRoot;
+	this->file = file;
+	this->storage = storage;
+	this->signaler = signaler;
+	this->keys = {};
+	this->loadKeys();
+}
 
-	Security(ICore *core, std::string storageRoot, IFile* file, IStorage *storage, ISignaler *signaler)
+void Security::loadKeys()
+{
+	try
 	{
-		this->core = core;
-		this->storageRoot = storageRoot;
-		this->file = file;
-		this->storage = storage;
-		this->signaler = signaler;
-		this->keys = {};
-		this->loadKeys();
-	}
-
-	void loadKeys() override
-	{
-		try
+		fs::create_directories(this->storageRoot + "/" + keysFolderName);
+		for (const auto &entry : fs::directory_iterator(this->storageRoot + "/" + keysFolderName))
 		{
-			fs::create_directories(this->storageRoot + "/" + keysFolderName);
-			for (const auto &entry : fs::directory_iterator(this->storageRoot + "/" + keysFolderName))
+			if (entry.is_directory())
 			{
-				if (entry.is_directory())
-				{
-					std::string tag = entry.path().filename().string();
-					auto priKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/private.pem");
-					auto pubKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/public.pem");
-					this->keys[tag] = new KeyPack{priKey, pubKey};
-				}
+				std::string tag = entry.path().filename().string();
+				auto priKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/private.pem");
+				auto pubKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/public.pem");
+				this->keys[tag] = new KeyPack{priKey, pubKey};
 			}
 		}
-		catch (const fs::filesystem_error &e)
-		{
-			std::cerr << "Error: " << e.what() << '\n';
-		}
-		if (this->keys.find("server_key") == this->keys.end())
-		{
-			this->generateSecureKeyPair("server_key");
-		}
 	}
-
-	std::vector<DataPack> generateSecureKeyPair(std::string tag) override
+	catch (const fs::filesystem_error &e)
 	{
-		fs::create_directories(this->storageRoot + "/" + keysFolderName + "/" + tag);
-		Utils::getInstance().generateRsaKeyPair(this->storageRoot + "/" + keysFolderName + "/" + tag);
-		auto priKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/private.pem");
-		auto pubKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/public.pem");
-		this->keys[tag] = new KeyPack{priKey, pubKey};
-		return {this->keys[tag]->priKey, this->keys[tag]->pubKey};
+		std::cerr << "Error: " << e.what() << '\n';
 	}
-
-	std::vector<DataPack> fetchKeyPair(std::string tag) override
+	if (this->keys.find("server_key") == this->keys.end())
 	{
-		return {this->keys[tag]->priKey, this->keys[tag]->pubKey};
+		this->generateSecureKeyPair("server_key");
 	}
+}
 
-	SignVerifyRes authWithSignature(std::string userId, std::string packet, std::string signatureBase64) override
+std::vector<DataPack> Security::generateSecureKeyPair(std::string tag)
+{
+	fs::create_directories(this->storageRoot + "/" + keysFolderName + "/" + tag);
+	Utils::getInstance().generateRsaKeyPair(this->storageRoot + "/" + keysFolderName + "/" + tag);
+	auto priKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/private.pem");
+	auto pubKey = file->readFileFromGlobal(keysFolderName + "/" + tag + "/public.pem");
+	this->keys[tag] = new KeyPack{priKey, pubKey};
+	return {this->keys[tag]->priKey, this->keys[tag]->pubKey};
+}
+
+std::vector<DataPack> Security::fetchKeyPair(std::string tag)
+{
+	return {this->keys[tag]->priKey, this->keys[tag]->pubKey};
+}
+
+SignVerifyRes Security::authWithSignature(std::string userId, std::string packet, std::string signatureBase64)
+{
+	EVP_PKEY *publicKey;
+	this->core->modifyState([userId, &publicKey](StateTrx *trx)
+							{ publicKey = trx->getPubKey(userId); });
+	if (publicKey == NULL)
 	{
-		EVP_PKEY *publicKey;
-		this->core->modifyState([userId, &publicKey](StateTrx *trx)
-								{ publicKey = trx->getPubKey(userId); });
-		if (publicKey == NULL)
-		{
-			return {false, "", false};
-		}
-		if (!Utils::getInstance().verify_signature_rsa(publicKey, packet, signatureBase64))
-		{
-			return {false, "", false};
-		}
-		else
-		{
-			std::string userType = "";
-			bool isGod = false;
-			this->core->modifyState([&userType, &isGod, userId](StateTrx *trx)
-									{
+		return {false, "", false};
+	}
+	if (!Utils::getInstance().verify_signature_rsa(publicKey, packet, signatureBase64))
+	{
+		return {false, "", false};
+	}
+	else
+	{
+		std::string userType = "";
+		bool isGod = false;
+		this->core->modifyState([&userType, &isGod, userId](StateTrx *trx)
+								{
 				auto typ = trx->getColumn("User", userId, "type");
 				userType = std::string(typ.data, typ.len);
 				isGod = (trx->getLink("god::" + userId) == "true"); });
-			return {true, userType, isGod};
-		}
+		return {true, userType, isGod};
 	}
+}
 
-	bool hasAccessToPoint(std::string userId, std::string pointId) override
+bool Security::hasAccessToPoint(std::string userId, std::string pointId)
+{
+	if (pointId == "")
 	{
-		if (pointId == "")
-		{
-			return false;
-		}
-		bool found = false;
-		this->core->modifyState([userId, pointId, &found](StateTrx *trx)
-								{
+		return false;
+	}
+	bool found = false;
+	this->core->modifyState([userId, pointId, &found](StateTrx *trx)
+							{
 			if (trx->getLink("memberof::"+userId+"::"+pointId) == "true") {
 				found = true;
 			} });
-		return found;
-	}
-};
+	return found;
+}
