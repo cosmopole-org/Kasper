@@ -1,10 +1,16 @@
-#include "tcp.h"
+#include "fed.h"
+
+#define SA struct sockaddr
 
 using json = nlohmann::json;
 
-void SocketItem::writeRawUpdate(std::string key, char *updatePack, uint32_t len)
+void SocketItem::writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len)
 {
 	std::cerr << "preparing update..." << std::endl;
+
+	std::string target = targetType + "::" + targetId;
+	const char *targetBytes = target.c_str();
+	auto targetBytesLen = Utils::getInstance().convertIntToData(target.size());
 
 	const char *keyBytes = key.c_str();
 	auto keyBytesLen = Utils::getInstance().convertIntToData(key.size());
@@ -15,11 +21,16 @@ void SocketItem::writeRawUpdate(std::string key, char *updatePack, uint32_t len)
 
 	packet[0] = 0x01;
 
+	memcpy(packet + pointer, targetBytesLen, 4);
+	pointer += 4;
+	memcpy(packet + pointer, targetBytes, target.size());
+	pointer += target.size();
+
 	memcpy(packet + pointer, keyBytesLen, 4);
 	pointer += 4;
-	delete keyBytesLen;
 	memcpy(packet + pointer, keyBytes, key.size());
 	pointer += key.size();
+
 	memcpy(packet + pointer, updatePack, len);
 	pointer += len;
 
@@ -30,10 +41,10 @@ void SocketItem::writeRawUpdate(std::string key, char *updatePack, uint32_t len)
 	this->pushBuffer();
 }
 
-void SocketItem::writeObjUpdate(std::string key, json updatePack)
+void SocketItem::writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack)
 {
 	std::string data = updatePack.dump();
-	this->writeRawUpdate(key, &data[0], data.size());
+	this->writeRawUpdate(targetType, targetId, key, &data[0], data.size());
 }
 
 void SocketItem::writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len)
@@ -101,22 +112,8 @@ void SocketItem::pushBuffer()
 	}
 }
 
-std::function<void(std::string, std::any, size_t)> SocketItem::connectListener(std::string uid)
-{
-	auto lis = [this](std::string key, std::any data, size_t len)
-	{
-		if (len == 0)
-		{
-			this->writeObjUpdate(key, std::any_cast<json>(data));
-		}
-		else
-		{
-			this->writeRawUpdate(key, std::any_cast<char *>(data), len);
-		}
-	};
-	this->ack = true;
-	return lis;
-}
+std::string userTargetPrefix = "user::";
+std::string pointTargetPrefix = "point::";
 
 void SocketItem::processPacket(char *packet, uint32_t len)
 {
@@ -147,6 +144,7 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 	if (packet[0] == 0x01)
 	{
 		std::string signature = "";
+		std::string target = "";
 		std::string key = "";
 
 		std::cerr << "received update" << std::endl;
@@ -165,6 +163,21 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 			pointer += signatureLength;
 		}
 		std::cerr << "signature: " << signature << std::endl;
+		char *targetBytesLen = new char[4];
+		memcpy(targetBytesLen, packet + pointer, 4);
+		pointer += 4;
+		uint32_t targetLen = Utils::getInstance().parseDataAsInt(targetBytesLen);
+		std::cerr << "target length: " << targetLen << std::endl;
+		delete targetBytesLen;
+		if (targetLen > 0)
+		{
+			char *targetBytes = new char[targetLen];
+			memcpy(targetBytes, packet + pointer, targetLen);
+			pointer += targetLen;
+			target = std::string(targetBytes, targetLen);
+			delete targetBytes;
+		}
+
 		char *keyBytesLen = new char[4];
 		memcpy(keyBytesLen, packet + pointer, 4);
 		pointer += 4;
@@ -189,7 +202,32 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 			std::string updatePack = std::string(payload, payloadLen);
 			std::cerr << "payload: " << updatePack << std::endl;
 			pointer += payloadLen;
-			this->writeRawUpdate(key, payload, payloadLen);
+
+			if (key == "/points/join")
+			{
+				std::string jsonStr = std::string(payload, payloadLen);
+				json j = json::parse(jsonStr);
+				std::string pointId = j["point"]["id"].template get<std::string>();
+				std::string userId = j["user"]["id"].template get<std::string>();
+				this->core->getTools()->getSignaler()->join(userId, pointId);
+			}
+			else if (key == "/points/leave")
+			{
+				std::string jsonStr = std::string(payload, payloadLen);
+				json j = json::parse(jsonStr);
+				std::string pointId = j["point"]["id"].template get<std::string>();
+				std::string userId = j["user"]["id"].template get<std::string>();
+				this->core->getTools()->getSignaler()->leave(userId, pointId);
+			}
+
+			if (Utils::getInstance().stringStartsWith(target, userTargetPrefix))
+			{
+				this->core->getTools()->getSignaler()->signalUserAsBytes(target.substr(userTargetPrefix.length()), key, payload, payloadLen);
+			}
+			else
+			{
+				this->core->getTools()->getSignaler()->signalPointAsBytes(target.substr(pointTargetPrefix.length()), key, payload, payloadLen, {});
+			}
 		}
 	}
 	else if (packet[0] == 0x02)
@@ -198,7 +236,7 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 		std::string requestId = "";
 
 		std::cerr << "received response" << std::endl;
-		
+
 		std::cerr << "received update" << std::endl;
 		char *tempBytes = new char[4];
 		memcpy(tempBytes, packet + pointer, 4);
@@ -244,7 +282,32 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 			std::string response = std::string(payload, payloadLength);
 			std::cerr << "response: " << response << std::endl;
 			pointer += payloadLength;
-			this->writeRawResponse(requestId, resCode, payload, payloadLength);
+
+			if (auto request = this->fed->requests.find(requestId); request != this->fed->requests.end())
+			{
+				auto req = request->second;
+				if (req->key == "/points/create")
+				{
+					this->core->getTools()->getSignaler()->createPoint({
+						{"id", req->input.data["id"].template get<std::string>()},
+						{"owner", req->input.data["owner"].template get<std::string>()},
+						{"isPublic", (req->input.data["isPublic"].template get<std::string>().c_str()[0] == 0x01)},
+						{"persHist", (req->input.data["persHist"].template get<std::string>().c_str()[0] == 0x01)},
+					});
+				}
+				else if (req->key == "/points/join")
+				{
+					this->core->getTools()->getSignaler()->join(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
+				}
+				else if (req->key == "/points/leave")
+				{
+					this->core->getTools()->getSignaler()->leave(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
+				}
+
+				req->callback(resCode, response);
+				this->fed->requests.erase(requestId);
+				delete req;
+			}
 		}
 	}
 	else if (packet[0] == 0x03)
@@ -356,14 +419,14 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 	}
 }
 
-Tcp::Tcp(ICore *core)
+Fed::Fed(ICore *core)
 {
 	this->core = core;
 	this->idCounter = 0;
 	this->sockets = {};
 }
 
-std::shared_future<void> Tcp::run(int port)
+std::shared_future<void> Fed::run(int port)
 {
 	std::cerr << "starting fed server on port " << port << "..." << std::endl;
 	return std::async(std::launch::async, [port, this]
@@ -391,9 +454,9 @@ std::shared_future<void> Tcp::run(int port)
 		.share();
 }
 
-void Tcp::handleConnection(uint64_t connId, int conn)
+void Fed::handleConnection(uint64_t connId, int conn)
 {
-	auto socket = new SocketItem{conn, {}, true, this->core};
+	auto socket = new SocketItem{this, conn, {}, true, this->core};
 	this->sockets.insert({connId, socket});
 	char lenBuf[4];
 	char buf[1024];
@@ -500,4 +563,85 @@ void Tcp::handleConnection(uint64_t connId, int conn)
 			}
 		}
 	}
+}
+
+void Fed::request(std::string origin, std::string userId, std::string key, std::string payload, std::string signature, ActionInput input, std::function<void(int, std::string)> callback)
+{
+	int sockfd, connfd;
+	struct sockaddr_in servaddr, cli;
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sockfd == -1)
+	{
+		printf("socket creation failed...\n");
+		return;
+	}
+	else
+		printf("Socket successfully created..\n");
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = inet_addr(origin.c_str());
+	servaddr.sin_port = htons(8081);
+	if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
+	{
+		printf("connection with the server failed...\n");
+		return;
+	}
+	else
+		printf("connected to the server..\n");
+
+	uint32_t packetLen = 1 + 4 + signature.size() + 4 + userId.size() + 4 + key.size() + payload.size();
+	int pointer = 1;
+	char *packet = new char[packetLen];
+	packet[0] = 0x03;
+	int signatureSize = signature.size();
+	char* signatureLength = Utils::getInstance().convertIntToData(signatureSize);
+	memcpy(packet + pointer, signatureLength, 4);
+	pointer += 4;
+	delete signatureLength;
+	memcpy(packet + pointer, signature.c_str(), signatureSize);
+	pointer += signatureSize;
+
+	int userIdSize = userId.size();
+	char* userIdLength = Utils::getInstance().convertIntToData(userIdSize);
+	memcpy(packet + pointer, userIdLength, 4);
+	pointer += 4;
+	delete userIdLength;
+	memcpy(packet + pointer, userId.c_str(), userIdSize);
+	pointer += userIdSize;
+
+	int keySize = key.size();
+	char* keyLength = Utils::getInstance().convertIntToData(keySize);
+	memcpy(packet + pointer, keyLength, 4);
+	pointer += 4;
+	delete keyLength;
+	memcpy(packet + pointer, key.c_str(), keySize);
+	pointer += keySize;
+
+	uint32_t newReqNum = this->reqCounter++;
+	std::string pid = std::to_string(newReqNum);
+
+	int pidSize = pid.size();
+	char* pidLength = Utils::getInstance().convertIntToData(pidSize);
+	memcpy(packet + pointer, pidLength, 4);
+	pointer += 4;
+	delete pidLength;
+	memcpy(packet + pointer, pid.c_str(), pidSize);
+	pointer += pidSize;
+
+	memcpy(packet + pointer, payload.c_str(), payload.size());
+
+	this->requests.insert({
+		pid,
+		new Request{
+			userId,
+			pid,
+			key,
+			input,
+			callback
+		}
+	});
+
+	send(sockfd, packet, packetLen, 0);
+
+	close(sockfd);
 }

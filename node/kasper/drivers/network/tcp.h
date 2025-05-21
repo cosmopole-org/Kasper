@@ -23,7 +23,7 @@
 
 using json = nlohmann::json;
 
-class SocketItem
+class SocketItem : public ISocketItem
 {
 public:
 	int conn;
@@ -31,6 +31,7 @@ public:
 	bool ack;
 	ICore *core;
 	std::mutex lock;
+	SocketItem(int conn, ICore *core);
 	void writeRawUpdate(std::string key, char *updatePack, uint32_t len);
 	void writeObjUpdate(std::string key, json updatePack);
 	void writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len);

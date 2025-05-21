@@ -1,13 +1,14 @@
 #include "action.h"
 
-SecAction::SecAction(ISecurity *security, Intelligence *intel, std::function<ActionOutput(StateHolder, ActionInput)> fn)
+SecAction::SecAction(ISecurity *security, IFed *federation, std::string key, Intelligence *intel, std::function<ActionOutput(StateHolder, ActionInput)> fn)
 {
     this->intel = intel;
     this->security = security;
+    this->federation = federation;
     this->fn = fn;
 }
 
-ActionOutput SecAction::run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature)
+ActionOutput SecAction::run(ISocketItem *socket, std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature, std::string requestId)
 {
     json input = json::parse(std::string(payload.data, payload.len));
     auto meta = this->intel->extractMeta(input);
@@ -18,7 +19,12 @@ ActionOutput SecAction::run(std::string myOrigin, std::function<void(std::functi
     }
     else if ((meta.origin != "") && (meta.origin != myOrigin))
     {
-        return {};
+        this->federation->request(meta.origin, userId, this->key, std::string(payload.data, payload.len), signature, ActionInput{input}, [&socket, requestId](int resCode, std::string response) {
+           socket->writeRawResponse(requestId, resCode, (char*) response.c_str(), response.size());
+        });
+        return {
+            -1
+        };
     }
 
     if (this->intel->mustBeUser())
@@ -53,4 +59,9 @@ ActionOutput SecAction::run(std::string myOrigin, std::function<void(std::functi
             auto state = StateHolder{userId, meta.pointId, meta.origin, trx, tools};
             output = this->fn(state, ActionInput{input}); });
     return output;
+}
+
+Intelligence *SecAction::getIntel()
+{
+    return this->intel;
 }

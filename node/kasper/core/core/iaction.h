@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../drivers/security/isecurity.h"
+#include "../../drivers/network/itcp.h"
 #include <functional>
 #include <string>
 #include <map>
@@ -53,5 +54,6 @@ public:
 class ISecAction
 {
 public:
-    virtual ActionOutput run(std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature) = 0;
+    virtual ActionOutput run(ISocketItem *socket, std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature, std::string requestId) = 0;
+    virtual Intelligence *getIntel() = 0;
 };

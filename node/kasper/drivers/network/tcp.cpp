@@ -247,8 +247,8 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 			delete payloadRaw;
 			return;
 		}
-		auto response = action->run(this->core->getIp(), [this](std::function<void(StateTrx *)> fn)
-									{ this->core->modifyState(fn); }, core->getTools(), userId, payload, signature);
+		auto response = action->run(this, this->core->getIp(), [this](std::function<void(StateTrx *)> fn)
+									{ this->core->modifyState(fn); }, core->getTools(), userId, payload, signature, packetId);
 		if (response.err != "")
 		{
 			json data;
@@ -271,6 +271,13 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 		std::cerr << "Unknown exception caught" << std::endl;
 	}
 	delete payloadRaw;
+}
+
+SocketItem::SocketItem(int conn, ICore *core)
+{
+	this->conn = conn;
+	this->core = core;
+	this->ack = true;
 }
 
 Tcp::Tcp(ICore *core)
@@ -310,7 +317,7 @@ std::shared_future<void> Tcp::run(int port)
 
 void Tcp::handleConnection(uint64_t connId, int conn)
 {
-	auto socket = new SocketItem{conn, {}, true, this->core};
+	auto socket = new SocketItem(conn, this->core);
 	this->sockets.insert({connId, socket});
 	char lenBuf[4];
 	char buf[1024];

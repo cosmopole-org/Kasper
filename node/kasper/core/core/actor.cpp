@@ -1,8 +1,9 @@
 #include "actor.h"
 
-Actor::Actor(ISecurity *security)
+Actor::Actor(ISecurity *security, IFed *federation)
 {
     this->security = security;
+    this->federation = federation;
     this->store = {};
     this->secStore = {};
 }
@@ -31,5 +32,5 @@ void Actor::insertAction(std::string path, Intelligence *intel, std::function<Ac
 {
     std::lock_guard<std::mutex> lock(this->lock);
     this->store[path] = fn;
-    this->secStore[path] = new SecAction(this->security, intel, fn);
+    this->secStore[path] = new SecAction(this->security, this->federation, path, intel, fn);
 }

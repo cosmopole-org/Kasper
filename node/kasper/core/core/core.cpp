@@ -8,7 +8,7 @@ Core::Core()
                                 {"BASE_DB_PATH", "/app/basedb"},
                                 {"STORAGE_ROOT", "/app/storage"},
                             });
-    this->actor = new Actor(this->tools->getSecurity());
+    this->actor = new Actor(this->tools->getSecurity(), this->getTools()->getFederation());
 }
 
 void Core::modifyState(std::function<void(StateTrx *)> fn)

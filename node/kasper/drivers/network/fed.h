@@ -20,19 +20,21 @@
 #include "../file/datapack.h"
 #include <thread>
 #include "queue.h"
+#include <functional>
 
 using json = nlohmann::json;
 
 class SocketItem
 {
 public:
+	Fed *fed;
 	int conn;
 	SafeQueue<ValPack> buffer;
 	bool ack;
 	ICore *core;
 	std::mutex lock;
-	void writeRawUpdate(std::string key, char *updatePack, uint32_t len);
-	void writeObjUpdate(std::string key, json updatePack);
+	void writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len);
+	void writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack);
 	void writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len);
 	void writeObjResponse(std::string requestId, int resCode, json response);
 	void pushBuffer();
@@ -40,14 +42,27 @@ public:
 	void processPacket(char *packet, uint32_t len);
 };
 
-class Tcp : public ITcp
+struct Request
 {
+public:
+	std::string userId;
+	std::string requestId;
+	std::string key;
+	ActionInput input;
+	std::function<void(int resCode, std::string response)> callback;
+};
+
+class Fed : public IFed
+{
+public:
 	ICore *core;
 	std::unordered_map<uint64_t, SocketItem *> sockets;
+	std::unordered_map<std::string, Request*> requests;
 	uint64_t idCounter;
+	uint64_t reqCounter;
 
-public:
-	Tcp(ICore *core);
+	Fed(ICore *core);
 	std::shared_future<void> run(int port) override;
 	void handleConnection(uint64_t connId, int conn);
+	void request(std::string origin, std::string userId, std::string key, std::string payload, std::string signature, ActionInput input, std::function<void(int, std::string)> callback) override;
 };
