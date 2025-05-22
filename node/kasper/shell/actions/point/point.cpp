@@ -40,6 +40,7 @@ namespace service_point
         json point = state.tools->getSignaler()->createPoint(pointMap);
         state.trx->putLink("adminof::" + state.userId + "::" + pointId, "true");
         state.tools->getSignaler()->join(state.userId, pointId);
+        output.resCode = 0;
         output.data["point"] = point;
         return output;
     }
@@ -73,6 +74,7 @@ namespace service_point
             return output;
         }
         json point = state.tools->getSignaler()->getPoint(pointId);
+        output.resCode = 0;
         output.data["point"] = point;
         return output;
     }
@@ -113,6 +115,7 @@ namespace service_point
             return output;
         }
         state.tools->getSignaler()->join(state.userId, pointId);
+        output.resCode = 0;
         return output;
     }
 
@@ -139,6 +142,7 @@ namespace service_point
         ActionOutput output;
         std::string pointId = input.data["pointId"].template get<std::string>();
         state.tools->getSignaler()->leave(state.userId, pointId);
+        output.resCode = 0;
         return output;
     }
 
@@ -178,6 +182,7 @@ namespace service_point
             return output;
         }
         state.tools->getSignaler()->join(userId, pointId);
+        output.resCode = 0;
         return output;
     }
 
@@ -217,6 +222,7 @@ namespace service_point
             return output;
         }
         state.tools->getSignaler()->leave(userId, pointId);
+        output.resCode = 0;
         return output;
     }
 
@@ -256,6 +262,7 @@ namespace service_point
             return output;
         }
         state.trx->putLink("invitedto::" + userId + "::" + pointId, "true");
+        output.resCode = 0;
         return output;
     }
 
@@ -295,6 +302,7 @@ namespace service_point
             return output;
         }
         state.trx->delLink("invitedto::" + userId + "::" + pointId);
+        output.resCode = 0;
         return output;
     }
 
@@ -328,6 +336,7 @@ namespace service_point
         }
         state.trx->delLink("invitedto::" + state.userId + "::" + pointId);
         state.tools->getSignaler()->join(state.userId, pointId);
+        output.resCode = 0;
         return output;
     }
 
@@ -360,6 +369,7 @@ namespace service_point
             return output;
         }
         state.trx->delLink("invitedto::" + state.userId + "::" + pointId);
+        output.resCode = 0;
         return output;
     }
 
@@ -427,6 +437,7 @@ namespace service_point
             state.trx->delLink("reqParentof::" + parentPointId + "::" + childPointId + "::" + childPointId);
             state.trx->delLink("reqParentof::" + parentPointId + "::" + childPointId + "::" + childPointId);
         }
+        output.resCode = 0;
         return output;
     }
 

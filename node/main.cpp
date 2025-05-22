@@ -1,4 +1,6 @@
 #include <iostream>
+#include <condition_variable>
+#include <mutex>
 #include "kasper/core/core/core.h"
 #include "kasper/shell/actions/hello/hello.h"
 #include "kasper/shell/actions/user/user.h"
@@ -6,9 +8,10 @@
 
 using namespace std;
 
-int main() {
+int main()
+{
 
-    printf("starting kasper node...\n");
+    std::cerr << "starting kasper node..." << std::endl;
 
     auto core = new Core();
 
@@ -18,7 +21,11 @@ int main() {
 
     core->run();
 
-    sleep(10);
-    
+    std::condition_variable cv;
+    std::mutex m;
+    std::unique_lock<std::mutex> lock(m);
+    cv.wait(lock, []
+            { return false; });
+
     return 0;
 }

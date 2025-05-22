@@ -249,15 +249,19 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 		}
 		auto response = action->run(this, this->core->getIp(), [this](std::function<void(StateTrx *)> fn)
 									{ this->core->modifyState(fn); }, core->getTools(), userId, payload, signature, packetId);
-		if (response.err != "")
+
+		if (response.resCode >= 0)
 		{
-			json data;
-			data["message"] = response.err;
-			this->writeObjResponse(packetId, response.resCode, data);
-			delete payloadRaw;
-			return;
+			if (response.err != "")
+			{
+				json data;
+				data["message"] = response.err;
+				this->writeObjResponse(packetId, response.resCode, data);
+				delete payloadRaw;
+				return;
+			}
+			this->writeObjResponse(packetId, 0, response.data);
 		}
-		this->writeObjResponse(packetId, 0, response.data);
 	}
 	catch (const std::exception &e)
 	{
@@ -291,7 +295,7 @@ void Tcp::run(int port)
 {
 	std::cerr << "starting tcp server on port " << port << "..." << std::endl;
 	std::thread t([port, this]
-					  {
+				  {
 			int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 			sockaddr_in serverAddress;
 			serverAddress.sin_family = AF_INET;

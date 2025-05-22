@@ -9,6 +9,8 @@ Core::Core()
                                 {"STORAGE_ROOT", "/app/storage"},
                             });
     this->actor = new Actor(this->tools->getSecurity(), this->getTools()->getFederation());
+    auto priKeyData = this->tools->getSecurity()->fetchKeyPair("server_key")[0];
+    this->pkey = Utils::getInstance().load_private_key_from_string(std::string(priKeyData.data, priKeyData.len));
 }
 
 void Core::modifyState(std::function<void(StateTrx *)> fn)
@@ -45,6 +47,10 @@ IActor *Core::getActor()
 std::string Core::getIp()
 {
     return this->ip;
+}
+
+std::string Core::signPacket(std::string data) {
+    return Utils::getInstance().sign_payload_with_rsa(this->pkey, data);
 }
 
 void Core::run()

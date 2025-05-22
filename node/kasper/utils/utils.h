@@ -27,10 +27,12 @@ public:
     int parseDataAsInt(char *buffer);
     char *convertIntToData(int n);
     std::string getKasperNodeIPAddress();
-    EVP_PKEY *load_public_key_from_string(const std::string& keyStr);
-    EVP_PKEY *load_private_key_from_string(const std::string& keyStr);
+    EVP_PKEY *load_public_key_from_string(const std::string &keyStr);
+    EVP_PKEY *load_private_key_from_string(const std::string &keyStr);
     bool generateRsaKeyPair(std::string destDir);
     bool verify_signature_rsa(EVP_PKEY *rsa,
                               std::string data,
                               std::string sign);
+    std::string sign_payload_with_rsa(EVP_PKEY *rsa,
+                                      std::string data);
 };

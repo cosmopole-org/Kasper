@@ -27,6 +27,7 @@ namespace service_hello
                                        {
         ActionOutput output;
         std::string username = input.data["name"].template get<std::string>();
+        output.resCode = 0;
         output.data["message"] = "hello " + username + " !";
         return output; });
     }

@@ -42,6 +42,7 @@ namespace service_user
             {"privateKey", std::string(keys[0].data, keys[0].len)}};
         state.trx->putJsonObj("User", userId, user);
         state.trx->putIndex("User::username::id::" + username, userId);
+        output.resCode = 0;
         output.data["user"] = user;
         return output;
     }
@@ -74,6 +75,7 @@ namespace service_user
             return output;
         }
         json user = state.trx->getObjAsJson("User", userId);
+        output.resCode = 0;
         output.data["user"] = user;
         return output;
     }

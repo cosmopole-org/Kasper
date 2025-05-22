@@ -13,5 +13,6 @@ public:
     virtual ITools *getTools() = 0;
     virtual IActor *getActor() = 0;
     virtual std::string getIp() = 0;
+    virtual std::string signPacket(std::string data) = 0;
     virtual void run() = 0;
 };

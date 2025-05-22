@@ -18,10 +18,12 @@ public:
     std::string ip;
     ITools *tools;
     IActor *actor;
+    EVP_PKEY *pkey;
     Core();
     void modifyState(std::function<void(StateTrx *)> fn) override;
     ITools *getTools() override;
     IActor *getActor() override;
     std::string getIp() override;
+    std::string signPacket(std::string data) override;
     void run() override;
 };

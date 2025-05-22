@@ -125,11 +125,43 @@ std::vector<unsigned char> base64_decode(const std::string &base64_input)
     return buffer;
 }
 
+std::string Utils::sign_payload_with_rsa(EVP_PKEY *pkey,
+                                         std::string data)
+{
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) return "";
+
+    if (EVP_SignInit(ctx, EVP_sha256()) != 1 ||
+        EVP_SignUpdate(ctx, data.c_str(), data.size()) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return "";
+    }
+
+    std::vector<unsigned char> signature{};
+
+    unsigned int sig_len = EVP_PKEY_size(pkey);
+    signature.resize(sig_len);
+
+    if (EVP_SignFinal(ctx, signature.data(), &sig_len, pkey) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return "";
+    }
+
+    signature.resize(sig_len);
+    EVP_MD_CTX_free(ctx);
+    
+    std::string sign = "";
+    for (auto unit : signature) {
+        sign.push_back((char)unit);
+    }
+    return sign;
+}
+
 bool Utils::verify_signature_rsa(EVP_PKEY *pubkey,
                                  std::string data,
                                  std::string sign)
 {
-    const unsigned char *message = reinterpret_cast<const unsigned char*>(data.data());
+    const unsigned char *message = reinterpret_cast<const unsigned char *>(data.data());
     size_t message_len = data.size();
 
     auto signatureBuffer = base64_decode(sign);

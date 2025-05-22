@@ -57,7 +57,7 @@ public:
 	uint64_t reqCounter;
 
 	Fed(ICore *core);
-	void handleConnection(uint64_t connId, int conn);
+	void handleConnection(std::string origin, uint64_t connId, int conn);
 	void run(int port) override;
     Request* findRequest(std::string requestId) override;
     void clearRequest(std::string requestId) override;

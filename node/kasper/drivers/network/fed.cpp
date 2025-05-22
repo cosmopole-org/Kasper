@@ -8,6 +8,10 @@ void FedSocketItem::writeRawUpdate(std::string targetType, std::string targetId,
 {
 	std::cerr << "preparing update..." << std::endl;
 
+	std::string signature = this->core->signPacket(std::string(updatePack, len));
+	const char *signBytes = signature.c_str();
+	auto signBytesLen = Utils::getInstance().convertIntToData(signature.size());
+
 	std::string target = targetType + "::" + targetId;
 	const char *targetBytes = target.c_str();
 	auto targetBytesLen = Utils::getInstance().convertIntToData(target.size());
@@ -15,22 +19,27 @@ void FedSocketItem::writeRawUpdate(std::string targetType, std::string targetId,
 	const char *keyBytes = key.c_str();
 	auto keyBytesLen = Utils::getInstance().convertIntToData(key.size());
 
-	uint32_t packetSize = 1 + 4 + key.size() + len;
+	uint32_t packetSize = 1 + 4 + signature.size() + 4 + target.size() + 4 + key.size() + len;
 	auto packet = new char[packetSize];
 	uint32_t pointer = 1;
 
 	packet[0] = 0x01;
 
+	memcpy(packet + pointer, signBytesLen, 4);
+	pointer += 4;
+	memcpy(packet + pointer, signBytes, signature.size());
+	pointer += signature.size();
+	delete signBytesLen;
 	memcpy(packet + pointer, targetBytesLen, 4);
 	pointer += 4;
 	memcpy(packet + pointer, targetBytes, target.size());
 	pointer += target.size();
-
+	delete targetBytesLen;
 	memcpy(packet + pointer, keyBytesLen, 4);
 	pointer += 4;
 	memcpy(packet + pointer, keyBytes, key.size());
 	pointer += key.size();
-
+	delete keyBytesLen;
 	memcpy(packet + pointer, updatePack, len);
 	pointer += len;
 
@@ -51,18 +60,27 @@ void FedSocketItem::writeRawResponse(std::string requestId, int resCode, char *r
 {
 	std::cerr << "preparing response..." << std::endl;
 
+	std::string signature = this->core->signPacket(std::string(response, len));
+	const char *signBytes = signature.c_str();
+	auto signBytesLen = Utils::getInstance().convertIntToData(signature.size());
+
 	const char *b1 = requestId.c_str();
 	char *b1Len = Utils::getInstance().convertIntToData(requestId.size());
 
 	char *b2 = Utils::getInstance().convertIntToData(resCode);
 
-	uint32_t packetSize = 1 + 4 + requestId.size() + 4 + len;
+	uint32_t packetSize = 1 + 4 + signature.size() + 4 + requestId.size() + 4 + len;
 	char *packet = new char[packetSize];
 
 	uint32_t pointer = 1;
 
 	packet[0] = 0x02;
 
+	memcpy(packet + pointer, signBytesLen, 4);
+	pointer += 4;
+	delete signBytesLen;
+	memcpy(packet + pointer, signBytes, signature.size());
+	pointer += signature.size();
 	memcpy(packet + pointer, b1Len, 4);
 	pointer += 4;
 	delete b1Len;
@@ -70,6 +88,7 @@ void FedSocketItem::writeRawResponse(std::string requestId, int resCode, char *r
 	pointer += requestId.size();
 	memcpy(packet + pointer, b2, 4);
 	pointer += 4;
+	delete b2;
 	memcpy(packet + pointer, response, len);
 	pointer += len;
 
@@ -174,7 +193,7 @@ void FedSocketItem::processPacket(std::string origin, char *packet, uint32_t len
 		std::string key = "";
 
 		std::cerr << "received update" << std::endl;
-		
+
 		char *tempBytes = new char[4];
 		memcpy(tempBytes, packet + pointer, 4);
 		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
@@ -311,24 +330,27 @@ void FedSocketItem::processPacket(std::string origin, char *packet, uint32_t len
 
 			if (auto req = this->fed->findRequest(requestId); req != NULL)
 			{
-				if (req->key == "/points/create")
+				if (resCode == 0)
 				{
-					this->core->getTools()->getSignaler()->createPoint({
-						{"id", req->input.data["id"].template get<std::string>()},
-						{"owner", req->input.data["owner"].template get<std::string>()},
-						{"isPublic", (req->input.data["isPublic"].template get<std::string>().c_str()[0] == 0x01)},
-						{"persHist", (req->input.data["persHist"].template get<std::string>().c_str()[0] == 0x01)},
-					});
+					if (req->key == "/points/create")
+					{
+						json res = json::parse(response);
+						this->core->getTools()->getSignaler()->createPoint({
+							{"id", res["point"]["id"].template get<std::string>()},
+							{"owner", res["point"]["owner"].template get<std::string>()},
+							{"isPublic", (res["point"]["isPublic"].template get<std::string>().c_str()[0] == 0x01)},
+							{"persHist", (res["point"]["persHist"].template get<std::string>().c_str()[0] == 0x01)},
+						});
+					}
+					else if (req->key == "/points/join")
+					{
+						this->core->getTools()->getSignaler()->join(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
+					}
+					else if (req->key == "/points/leave")
+					{
+						this->core->getTools()->getSignaler()->leave(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
+					}
 				}
-				else if (req->key == "/points/join")
-				{
-					this->core->getTools()->getSignaler()->join(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
-				}
-				else if (req->key == "/points/leave")
-				{
-					this->core->getTools()->getSignaler()->leave(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
-				}
-
 				req->callback(resCode, response);
 				this->fed->clearRequest(requestId);
 				delete req;
@@ -482,11 +504,20 @@ void Fed::run(int port)
 			listen(serverSocket, 5);
 			while (true)
 			{
-				int clientSocket = accept(serverSocket, nullptr, nullptr);
+				struct sockaddr_in client_addr{};
+				socklen_t client_len = sizeof(client_addr);
+
+				int clientSocket = accept(serverSocket, (struct sockaddr*)&client_addr, &client_len);
 				std::cerr << "new client connected." << std::endl;
+
+				char client_ip[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
+				std::string origin = std::string(client_ip, sizeof(client_ip));
+				std::cerr << "connection from origin: " << origin << std::endl;
+
 				auto id = this->idCounter++;
-				std::thread t([this, clientSocket, id]{
-					this->handleConnection(id, clientSocket);
+				std::thread t([this, clientSocket, id, origin]{
+					this->handleConnection(origin, id, clientSocket);
 					this->sockets.erase(id);
 					close(clientSocket);
 				});
@@ -509,7 +540,7 @@ void Fed::clearRequest(std::string requestId)
 	this->requests.erase(requestId);
 }
 
-void Fed::handleConnection(uint64_t connId, int conn)
+void Fed::handleConnection(std::string origin, uint64_t connId, int conn)
 {
 	auto socket = new FedSocketItem(this, conn, this->core);
 	this->sockets.insert({connId, socket});
@@ -580,13 +611,6 @@ void Fed::handleConnection(uint64_t connId, int conn)
 				char *packet = new char[length];
 				memcpy(packet, readData, length);
 				delete readData;
-
-				struct sockaddr_in client_addr{};
-				char client_ip[INET_ADDRSTRLEN];
-				inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
-				std::string origin = std::string(client_ip, sizeof(client_ip));
-
-				std::cerr << "connection from origin: " << origin << std::endl;
 
 				std::thread t([&socket, length, origin](char *packet)
 							  {
