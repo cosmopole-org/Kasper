@@ -287,10 +287,10 @@ Tcp::Tcp(ICore *core)
 	this->sockets = {};
 }
 
-std::shared_future<void> Tcp::run(int port)
+void Tcp::run(int port)
 {
 	std::cerr << "starting tcp server on port " << port << "..." << std::endl;
-	return std::async(std::launch::async, [port, this]
+	std::thread t([port, this]
 					  {
 			int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 			sockaddr_in serverAddress;
@@ -311,8 +311,8 @@ std::shared_future<void> Tcp::run(int port)
 					close(clientSocket);
 				});
 				t.detach();
-	 		} })
-		.share();
+	 		} });
+	t.detach();
 }
 
 void Tcp::handleConnection(uint64_t connId, int conn)

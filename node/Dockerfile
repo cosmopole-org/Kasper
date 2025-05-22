@@ -45,7 +45,7 @@ COPY . .
 RUN bash /app/build.sh
 
 RUN cp genesis /bin/genesis
-EXPOSE 8080
+EXPOSE 8080 8081
 ENV HOME=/
 ENTRYPOINT ["bash", "run.sh"]
 CMD [] 

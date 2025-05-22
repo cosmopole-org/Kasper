@@ -20,5 +20,5 @@ class ITcp
 {
 public:
     virtual ~ITcp() = default;
-    virtual std::shared_future<void> run(int port) = 0;
+    virtual void run(int port) = 0;
 };

@@ -4,7 +4,7 @@
 
 using json = nlohmann::json;
 
-void SocketItem::writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len)
+void FedSocketItem::writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len)
 {
 	std::cerr << "preparing update..." << std::endl;
 
@@ -41,13 +41,13 @@ void SocketItem::writeRawUpdate(std::string targetType, std::string targetId, st
 	this->pushBuffer();
 }
 
-void SocketItem::writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack)
+void FedSocketItem::writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack)
 {
 	std::string data = updatePack.dump();
 	this->writeRawUpdate(targetType, targetId, key, &data[0], data.size());
 }
 
-void SocketItem::writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len)
+void FedSocketItem::writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len)
 {
 	std::cerr << "preparing response..." << std::endl;
 
@@ -80,13 +80,13 @@ void SocketItem::writeRawResponse(std::string requestId, int resCode, char *resp
 	this->pushBuffer();
 }
 
-void SocketItem::writeObjResponse(std::string requestId, int resCode, json response)
+void FedSocketItem::writeObjResponse(std::string requestId, int resCode, json response)
 {
 	std::string data = response.dump();
 	this->writeRawResponse(requestId, resCode, &data[0], data.size());
 }
 
-void SocketItem::pushBuffer()
+void FedSocketItem::pushBuffer()
 {
 	if (this->ack)
 	{
@@ -115,7 +115,33 @@ void SocketItem::pushBuffer()
 std::string userTargetPrefix = "user::";
 std::string pointTargetPrefix = "point::";
 
-void SocketItem::processPacket(char *packet, uint32_t len)
+FedSocketItem *FedSocketItem::openSocket(std::string origin)
+{
+	int sockfd, connfd;
+	struct sockaddr_in servaddr, cli;
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sockfd == -1)
+	{
+		printf("socket creation failed...\n");
+		return NULL;
+	}
+	else
+		printf("Socket successfully created..\n");
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = inet_addr(origin.c_str());
+	servaddr.sin_port = htons(8081);
+	if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
+	{
+		printf("connection with the server failed...\n");
+		return NULL;
+	}
+	else
+		printf("connected to the server..\n");
+	return new FedSocketItem(this->fed, sockfd, this->core);
+}
+
+void FedSocketItem::processPacket(std::string origin, char *packet, uint32_t len)
 {
 	if (len == 1 && packet[0] == 0x01)
 	{
@@ -148,6 +174,7 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 		std::string key = "";
 
 		std::cerr << "received update" << std::endl;
+		
 		char *tempBytes = new char[4];
 		memcpy(tempBytes, packet + pointer, 4);
 		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
@@ -237,7 +264,6 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 
 		std::cerr << "received response" << std::endl;
 
-		std::cerr << "received update" << std::endl;
 		char *tempBytes = new char[4];
 		memcpy(tempBytes, packet + pointer, 4);
 		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
@@ -259,7 +285,7 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 		uint32_t requestIdLen = Utils::getInstance().parseDataAsInt(b1Len);
 		std::cerr << "requestId length: " << requestIdLen << std::endl;
 		delete b1Len;
-		if (b1Len > 0)
+		if (requestIdLen > 0)
 		{
 			char *b1 = new char[4];
 			memcpy(b1, packet + pointer, requestIdLen);
@@ -283,9 +309,8 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 			std::cerr << "response: " << response << std::endl;
 			pointer += payloadLength;
 
-			if (auto request = this->fed->requests.find(requestId); request != this->fed->requests.end())
+			if (auto req = this->fed->findRequest(requestId); req != NULL)
 			{
-				auto req = request->second;
 				if (req->key == "/points/create")
 				{
 					this->core->getTools()->getSignaler()->createPoint({
@@ -305,7 +330,7 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 				}
 
 				req->callback(resCode, response);
-				this->fed->requests.erase(requestId);
+				this->fed->clearRequest(requestId);
 				delete req;
 			}
 		}
@@ -381,42 +406,58 @@ void SocketItem::processPacket(char *packet, uint32_t len)
 		payload = DataPack{payloadRaw, len - pointer};
 		std::cerr << "payload: " << payload.data << std::endl;
 
-		try
+		auto s = this->openSocket(origin);
+
+		if (s != NULL)
 		{
-			auto action = this->core->getActor()->findActionAsSecure(path);
-			if (action == NULL)
+			try
 			{
-				json res;
-				res["message"] = "action not found";
-				this->writeObjResponse(packetId, 1, res);
-				delete payloadRaw;
-				return;
+				auto action = this->core->getActor()->findActionAsSecure(path);
+				if (action == NULL)
+				{
+					json res;
+					res["message"] = "action not found";
+					s->writeObjResponse(packetId, 1, res);
+					delete payloadRaw;
+					return;
+				}
+				auto response = action->runAsFed([this](std::function<void(StateTrx *)> fn)
+												 { this->core->modifyState(fn); }, core->getTools(), userId, payload, signature);
+				if (response.err != "")
+				{
+					json data;
+					data["message"] = response.err;
+					s->writeObjResponse(packetId, response.resCode, data);
+					delete payloadRaw;
+					return;
+				}
+				s->writeObjResponse(packetId, 0, response.data);
 			}
-			auto response = action->run(this->core->getIp(), [this](std::function<void(StateTrx *)> fn)
-										{ this->core->modifyState(fn); }, core->getTools(), userId, payload, signature);
-			if (response.err != "")
+			catch (const std::exception &e)
 			{
+				std::cerr << "Standard exception caught: " << e.what() << std::endl;
 				json data;
-				data["message"] = response.err;
-				this->writeObjResponse(packetId, response.resCode, data);
-				delete payloadRaw;
-				return;
+				data["message"] = e.what();
+				s->writeObjResponse(packetId, 2, data);
 			}
-			this->writeObjResponse(packetId, 0, response.data);
+			catch (...)
+			{
+				std::cerr << "Unknown exception caught" << std::endl;
+			}
+			delete payloadRaw;
+
+			close(s->conn);
+			delete s;
 		}
-		catch (const std::exception &e)
-		{
-			std::cerr << "Standard exception caught: " << e.what() << std::endl;
-			json data;
-			data["message"] = e.what();
-			this->writeObjResponse(packetId, 2, data);
-		}
-		catch (...)
-		{
-			std::cerr << "Unknown exception caught" << std::endl;
-		}
-		delete payloadRaw;
 	}
+}
+
+FedSocketItem::FedSocketItem(IFed *fed, int conn, ICore *core)
+{
+	this->fed = fed;
+	this->conn = conn;
+	this->core = core;
+	this->ack = true;
 }
 
 Fed::Fed(ICore *core)
@@ -426,11 +467,11 @@ Fed::Fed(ICore *core)
 	this->sockets = {};
 }
 
-std::shared_future<void> Fed::run(int port)
+void Fed::run(int port)
 {
 	std::cerr << "starting fed server on port " << port << "..." << std::endl;
-	return std::async(std::launch::async, [port, this]
-					  {
+	std::thread t([port, this]
+				  {
 			int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 			sockaddr_in serverAddress;
 			serverAddress.sin_family = AF_INET;
@@ -450,13 +491,27 @@ std::shared_future<void> Fed::run(int port)
 					close(clientSocket);
 				});
 				t.detach();
-	 		} })
-		.share();
+	 		} });
+	t.detach();
+}
+
+Request *Fed::findRequest(std::string requestId)
+{
+	if (auto req = this->requests.find(requestId); req != this->requests.end())
+	{
+		return req->second;
+	}
+	return NULL;
+}
+
+void Fed::clearRequest(std::string requestId)
+{
+	this->requests.erase(requestId);
 }
 
 void Fed::handleConnection(uint64_t connId, int conn)
 {
-	auto socket = new SocketItem{this, conn, {}, true, this->core};
+	auto socket = new FedSocketItem(this, conn, this->core);
 	this->sockets.insert({connId, socket});
 	char lenBuf[4];
 	char buf[1024];
@@ -518,28 +573,26 @@ void Fed::handleConnection(uint64_t connId, int conn)
 			}
 			else if (readCount >= length)
 			{
-				std::cerr << std::endl
-						  << "keyhan " << oldReadCount << " " << length << " " << static_cast<int>(nextBuf[0]) << " " << static_cast<int>(nextBuf[1]) << " " << static_cast<int>(nextBuf[2]) << " " << static_cast<int>(nextBuf[3]) << " " << std::endl
-						  << std::endl;
 				memcpy(readData + oldReadCount, nextBuf, length - oldReadCount);
 				memcpy(nextBuf, nextBuf + (readLength - (readCount - length)), readCount - length);
 				remainedReadLength = (readCount - length);
-				std::cerr << std::endl
-						  << "keyhan -- " << static_cast<int>(readData[0]) << " " << static_cast<int>(readData[1]) << " " << static_cast<int>(readData[2]) << " " << static_cast<int>(readData[3]) << " " << std::endl
-						  << std::endl;
 				std::cerr << "packet received" << std::endl;
 				char *packet = new char[length];
 				memcpy(packet, readData, length);
 				delete readData;
-				std::cerr << std::endl
-						  << "konstantin -- " << static_cast<int>(packet[0]) << " " << static_cast<int>(packet[1]) << " " << static_cast<int>(packet[2]) << " " << static_cast<int>(packet[3]) << " " << std::endl
-						  << std::endl;
 
-				std::thread t([&socket, length](char *packet)
+				struct sockaddr_in client_addr{};
+				char client_ip[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
+				std::string origin = std::string(client_ip, sizeof(client_ip));
+
+				std::cerr << "connection from origin: " << origin << std::endl;
+
+				std::thread t([&socket, length, origin](char *packet)
 							  {
 								   try
 								   {
-									   socket->processPacket(packet, length);
+									   socket->processPacket(origin, packet, length);
 								   }
 								   catch (const std::exception &e)
 								   {
@@ -589,12 +642,15 @@ void Fed::request(std::string origin, std::string userId, std::string key, std::
 	else
 		printf("connected to the server..\n");
 
-	uint32_t packetLen = 1 + 4 + signature.size() + 4 + userId.size() + 4 + key.size() + payload.size();
+	uint32_t newReqNum = this->reqCounter++;
+	std::string pid = std::to_string(newReqNum);
+
+	uint32_t packetLen = 1 + 4 + signature.size() + 4 + userId.size() + 4 + key.size() + 4 + pid.size() + payload.size();
 	int pointer = 1;
 	char *packet = new char[packetLen];
 	packet[0] = 0x03;
 	int signatureSize = signature.size();
-	char* signatureLength = Utils::getInstance().convertIntToData(signatureSize);
+	char *signatureLength = Utils::getInstance().convertIntToData(signatureSize);
 	memcpy(packet + pointer, signatureLength, 4);
 	pointer += 4;
 	delete signatureLength;
@@ -602,7 +658,7 @@ void Fed::request(std::string origin, std::string userId, std::string key, std::
 	pointer += signatureSize;
 
 	int userIdSize = userId.size();
-	char* userIdLength = Utils::getInstance().convertIntToData(userIdSize);
+	char *userIdLength = Utils::getInstance().convertIntToData(userIdSize);
 	memcpy(packet + pointer, userIdLength, 4);
 	pointer += 4;
 	delete userIdLength;
@@ -610,18 +666,15 @@ void Fed::request(std::string origin, std::string userId, std::string key, std::
 	pointer += userIdSize;
 
 	int keySize = key.size();
-	char* keyLength = Utils::getInstance().convertIntToData(keySize);
+	char *keyLength = Utils::getInstance().convertIntToData(keySize);
 	memcpy(packet + pointer, keyLength, 4);
 	pointer += 4;
 	delete keyLength;
 	memcpy(packet + pointer, key.c_str(), keySize);
 	pointer += keySize;
 
-	uint32_t newReqNum = this->reqCounter++;
-	std::string pid = std::to_string(newReqNum);
-
 	int pidSize = pid.size();
-	char* pidLength = Utils::getInstance().convertIntToData(pidSize);
+	char *pidLength = Utils::getInstance().convertIntToData(pidSize);
 	memcpy(packet + pointer, pidLength, 4);
 	pointer += 4;
 	delete pidLength;
@@ -630,18 +683,18 @@ void Fed::request(std::string origin, std::string userId, std::string key, std::
 
 	memcpy(packet + pointer, payload.c_str(), payload.size());
 
-	this->requests.insert({
-		pid,
-		new Request{
-			userId,
-			pid,
-			key,
-			input,
-			callback
-		}
-	});
-
+	this->requests.insert({pid,
+						   new Request{
+							   userId,
+							   pid,
+							   key,
+							   input,
+							   callback}});
+	char *packetLenBytes = Utils::getInstance().convertIntToData(packetLen);
+	send(sockfd, packetLenBytes, 4, 0);
 	send(sockfd, packet, packetLen, 0);
+	delete packet;
+	delete packetLenBytes;
 
 	close(sockfd);
 }

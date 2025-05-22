@@ -3,6 +3,7 @@
 #include "../trx/trx.h"
 #include "../tools/itools.h"
 #include "iaction.h"
+#include "actionio.h"
 #include <functional>
 #include <string>
 #include <map>

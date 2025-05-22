@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include "../tools/itools.h"
 #include "iaction.h"
+#include "actionio.h"
 #include "icore.h"
 
 class SecAction : public ISecAction
@@ -24,4 +25,5 @@ public:
     SecAction(ISecurity *security, IFed *federation, std::string key, Intelligence *intel, std::function<ActionOutput(StateHolder, ActionInput)> fn);
     Intelligence *getIntel() override;
     ActionOutput run(ISocketItem *socket, std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature, std::string requestId) override;
+    ActionOutput runAsFed(std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature) override;
 };

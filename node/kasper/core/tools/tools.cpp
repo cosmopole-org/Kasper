@@ -7,6 +7,7 @@ Tools::Tools(ICore *core, std::map<std::string, std::string> env)
     this->signaler = new Signaler(core);
     this->security = new Security(core, env["STORAGE_ROOT"], this->file, this->storage, this->signaler);
     this->network = new Tcp(core);
+    this->federation = new Fed(core);
 }
 
 IStorage *Tools::getStorage()

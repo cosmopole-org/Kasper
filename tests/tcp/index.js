@@ -5,7 +5,7 @@ const { exec } = require('child_process');
 const readline = require('node:readline');
 
 const port = 8080;
-let host = '127.0.0.1';
+let host = '172.77.5.1';
 var privateKey = undefined;
 
 let callbacks = {};
@@ -173,7 +173,7 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/create", { "username": "keyhan10" });
+    let res = await sendRequest("", "/users/create", { "username": "keyhan" });
     console.log(res.resCode, res.obj);
 
     privateKey = Buffer.from(
@@ -183,7 +183,7 @@ async function doTest() {
     let userId = res.obj.user.id;
     // await sendRequest(userId, "authenticate", {});
 
-    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.2" });
     console.log(res.resCode, res.obj);
     let pointOneId = res.obj.point.id;
 

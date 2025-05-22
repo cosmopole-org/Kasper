@@ -1,23 +1,14 @@
+#pragma once
 
 #include <queue>
 #include <mutex>
 #include <condition_variable>
 #include <string>
-#include <future>
 #include <unordered_map>
 #include <cstring>
-#include <iostream>
-#include <netinet/in.h>
-#include <sys/socket.h>
 #include <unistd.h>
-#include "../../utils/nlohmann/json.hpp"
 #include <any>
 #include <optional>
-#include "itcp.h"
-#include "../../utils/utils.h"
-#include "../../core/core/icore.h"
-#include "../file/datapack.h"
-#include <thread>
 
 template <typename T>
 class SafeQueue
@@ -31,12 +22,79 @@ public:
 	void push(T &&item);
 	T wait_and_pop();
 	std::optional<T> try_pop();
-	bool empty() const;
-	size_t size() const;
-	ValPack peek() const;
+	bool empty();
+	size_t size();
+	T peek();
 
 private:
 	mutable std::mutex mutex_;
 	std::condition_variable cond_var_;
 	std::queue<T> queue_;
 };
+
+template <typename T>
+void SafeQueue<T>::push(const T &item)
+{
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		queue_.push(item);
+	}
+	cond_var_.notify_one();
+}
+
+template <typename T>
+void SafeQueue<T>::push(T &&item)
+{
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		queue_.push(std::move(item));
+	}
+	cond_var_.notify_one();
+}
+
+template <typename T>
+T SafeQueue<T>::wait_and_pop()
+{
+	std::unique_lock<std::mutex> lock(mutex_);
+	cond_var_.wait(lock, [this]()
+				   { return !queue_.empty(); });
+
+	T item = std::move(queue_.front());
+	queue_.pop();
+	return item;
+}
+
+template <typename T>
+std::optional<T> SafeQueue<T>::try_pop()
+{
+	std::lock_guard<std::mutex> lock(mutex_);
+	if (queue_.empty())
+	{
+		return std::nullopt;
+	}
+
+	T item = std::move(queue_.front());
+	queue_.pop();
+	return item;
+}
+
+template <typename T>
+bool SafeQueue<T>::empty()
+{
+	std::lock_guard<std::mutex> lock(mutex_);
+	return queue_.empty();
+}
+
+template <typename T>
+size_t SafeQueue<T>::size()
+{
+	std::lock_guard<std::mutex> lock(mutex_);
+	return queue_.size();
+}
+
+template <typename T>
+T SafeQueue<T>::peek()
+{
+	std::lock_guard<std::mutex> lock(mutex_);
+	return queue_.front();
+}

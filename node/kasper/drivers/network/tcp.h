@@ -27,7 +27,7 @@ class SocketItem : public ISocketItem
 {
 public:
 	int conn;
-	SafeQueue<ValPack> buffer;
+	SafeQueue<DataPack> buffer;
 	bool ack;
 	ICore *core;
 	std::mutex lock;
@@ -49,6 +49,6 @@ class Tcp : public ITcp
 
 public:
 	Tcp(ICore *core);
-	std::shared_future<void> run(int port) override;
+	void run(int port) override;
 	void handleConnection(uint64_t connId, int conn);
 };

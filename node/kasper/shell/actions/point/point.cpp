@@ -22,7 +22,10 @@ namespace service_point
 
         Meta extractMeta(json data) override
         {
-            return Meta{};
+            return Meta{
+                "",
+                data["orig"].template get<std::string>()
+            };
         }
     };
     ActionOutput createPoint(StateHolder state, ActionInput input)

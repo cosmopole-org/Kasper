@@ -11,20 +11,9 @@
 #include "../tools/itools.h"
 #include "../../utils/nlohmann/json.hpp"
 #include "../../drivers/file/datapack.h"
+#include "actionio.h"
 
 using json = nlohmann::json;
-
-struct ActionOutput
-{
-    int resCode;
-    json data;
-    std::string err;
-};
-
-struct ActionInput
-{
-    json data;
-};
 
 class Meta
 {
@@ -55,5 +44,6 @@ class ISecAction
 {
 public:
     virtual ActionOutput run(ISocketItem *socket, std::string myOrigin, std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature, std::string requestId) = 0;
+    virtual ActionOutput runAsFed(std::function<void(std::function<void(StateTrx *)>)> stateModifier, ITools *tools, std::string userId, DataPack payload, std::string signature) = 0;
     virtual Intelligence *getIntel() = 0;
 };
