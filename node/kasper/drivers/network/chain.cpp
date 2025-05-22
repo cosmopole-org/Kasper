@@ -1,10 +1,10 @@
-#include "fed.h"
+#include "chain.h"
 
 #define SA struct sockaddr
 
 using json = nlohmann::json;
 
-void FedSocketItem::writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len)
+void ChainSocketItem::writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len)
 {
 	std::cerr << "preparing update..." << std::endl;
 
@@ -50,13 +50,13 @@ void FedSocketItem::writeRawUpdate(std::string targetType, std::string targetId,
 	this->pushBuffer();
 }
 
-void FedSocketItem::writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack)
+void ChainSocketItem::writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack)
 {
 	std::string data = updatePack.dump();
 	this->writeRawUpdate(targetType, targetId, key, &data[0], data.size());
 }
 
-void FedSocketItem::writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len)
+void ChainSocketItem::writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len)
 {
 	std::cerr << "preparing response..." << std::endl;
 
@@ -99,13 +99,13 @@ void FedSocketItem::writeRawResponse(std::string requestId, int resCode, char *r
 	this->pushBuffer();
 }
 
-void FedSocketItem::writeObjResponse(std::string requestId, int resCode, json response)
+void ChainSocketItem::writeObjResponse(std::string requestId, int resCode, json response)
 {
 	std::string data = response.dump();
 	this->writeRawResponse(requestId, resCode, &data[0], data.size());
 }
 
-void FedSocketItem::pushBuffer()
+void ChainSocketItem::pushBuffer()
 {
 	if (this->ack)
 	{
@@ -134,7 +134,7 @@ void FedSocketItem::pushBuffer()
 std::string userTargetPrefix = "user::";
 std::string pointTargetPrefix = "point::";
 
-FedSocketItem *FedSocketItem::openSocket(std::string origin)
+ChainSocketItem *ChainSocketItem::openSocket(std::string origin)
 {
 	int sockfd, connfd;
 	struct sockaddr_in servaddr, cli;
@@ -157,10 +157,10 @@ FedSocketItem *FedSocketItem::openSocket(std::string origin)
 	}
 	else
 		printf("connected to the server..\n");
-	return new FedSocketItem(this->fed, sockfd, this->core);
+	return new ChainSocketItem(this->fed, sockfd, this->core);
 }
 
-void FedSocketItem::processPacket(std::string origin, char *packet, uint32_t len)
+void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t len)
 {
 	if (len == 1 && packet[0] == 0x01)
 	{
@@ -474,7 +474,7 @@ void FedSocketItem::processPacket(std::string origin, char *packet, uint32_t len
 	}
 }
 
-FedSocketItem::FedSocketItem(IFed *fed, int conn, ICore *core)
+ChainSocketItem::ChainSocketItem(IChain *chain, int conn, ICore *core)
 {
 	this->fed = fed;
 	this->conn = conn;
@@ -482,17 +482,15 @@ FedSocketItem::FedSocketItem(IFed *fed, int conn, ICore *core)
 	this->ack = true;
 }
 
-Fed::Fed(ICore *core)
+Chain::Chain(ICore *core)
 {
 	this->core = core;
-	this->idCounter = 0;
-	this->reqCounter = 0;
 	this->sockets = {};
 }
 
-void Fed::run(int port)
+void Chain::run(int port)
 {
-	std::cerr << "starting fed server on port " << port << "..." << std::endl;
+	std::cerr << "starting chain server on port " << port << "..." << std::endl;
 	std::thread t([port, this]
 				  {
 			int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -516,35 +514,28 @@ void Fed::run(int port)
 				std::string origin = std::string(client_ip, sizeof(client_ip));
 				std::cerr << "connection from origin: " << origin << std::endl;
 
-				auto id = this->idCounter++;
-				std::thread t([this, clientSocket, id, origin]{
-					this->handleConnection(origin, id, clientSocket);
-					this->sockets.erase(id);
+				std::thread t([this, clientSocket, origin]{
+					this->handleConnection(origin, clientSocket);
+					this->sockets.erase(origin);
 					close(clientSocket);
 				});
 				t.detach();
 	 		} });
 	t.detach();
+	std::thread t2([port, this]
+				   {
+					while (true)
+					{
+						
+						std::this_thread::sleep_for(std::chrono::milliseconds(100));
+					} });
+	t2.detach();
 }
 
-Request *Fed::findRequest(std::string requestId)
+void Chain::handleConnection(std::string origin, int conn)
 {
-	if (auto req = this->requests.find(requestId); req != this->requests.end())
-	{
-		return req->second;
-	}
-	return NULL;
-}
-
-void Fed::clearRequest(std::string requestId)
-{
-	this->requests.erase(requestId);
-}
-
-void Fed::handleConnection(std::string origin, uint64_t connId, int conn)
-{
-	auto socket = new FedSocketItem(this, conn, this->core);
-	this->sockets.insert({connId, socket});
+	auto socket = new ChainSocketItem(this, conn, this->core);
+	this->sockets.insert({origin, socket});
 	char lenBuf[4];
 	char buf[1024];
 	char nextBuf[2048];
@@ -643,7 +634,7 @@ void Fed::handleConnection(std::string origin, uint64_t connId, int conn)
 	}
 }
 
-void Fed::request(std::string origin, std::string userId, std::string key, std::string payload, std::string signature, ActionInput input, std::function<void(int, std::string)> callback)
+void Chain::consensus()
 {
 	int sockfd, connfd;
 	struct sockaddr_in servaddr, cli;
