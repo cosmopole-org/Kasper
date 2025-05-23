@@ -178,12 +178,6 @@ void FedSocketItem::processPacket(std::string origin, char *packet, uint32_t len
 
 	std::cerr << "received packet length: " << len << std::endl;
 
-	std::string signature = "";
-	std::string userId = "";
-	std::string path = "";
-	std::string packetId = "";
-	DataPack payload;
-
 	uint32_t pointer = 1;
 
 	if (packet[0] == 0x01)
@@ -344,11 +338,11 @@ void FedSocketItem::processPacket(std::string origin, char *packet, uint32_t len
 					}
 					else if (req->key == "/points/join")
 					{
-						this->core->getTools()->getSignaler()->join(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
+						this->core->getTools()->getSignaler()->join(req->userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
 					}
 					else if (req->key == "/points/leave")
 					{
-						this->core->getTools()->getSignaler()->leave(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
+						this->core->getTools()->getSignaler()->leave(req->userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
 					}
 				}
 				req->callback(resCode, response);
@@ -359,6 +353,12 @@ void FedSocketItem::processPacket(std::string origin, char *packet, uint32_t len
 	}
 	else if (packet[0] == 0x03)
 	{
+		std::string signature = "";
+		std::string userId = "";
+		std::string path = "";
+		std::string packetId = "";
+		DataPack payload;
+
 		char *tempBytes = new char[4];
 		memcpy(tempBytes, packet + pointer, 4);
 		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);

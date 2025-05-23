@@ -25,19 +25,21 @@
 #include "queue.h"
 #include <functional>
 #include <vector>
+#include "block.h"
 
 using json = nlohmann::json;
 
 class ChainSocketItem
 {
 public:
-	IFed *fed;
+	IChain *chain;
 	int conn;
 	SafeQueue<DataPack> buffer;
 	bool ack;
 	ICore *core;
+	EVP_PKEY *pkey;
 	std::mutex lock;
-	ChainSocketItem(IChain *chain, int conn, ICore* core);
+	ChainSocketItem(IChain *chain, int conn, ICore *core);
 	void writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len);
 	void writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack);
 	void writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len);
@@ -48,21 +50,25 @@ public:
 	ChainSocketItem *openSocket(std::string origin);
 };
 
-class Block {
-	uint64_t index;
-	std::vector<std::pair<std::string, std::string>> trxs;
-};
-
 class Chain : public IChain
 {
 public:
 	ICore *core;
 	std::vector<std::pair<std::string, std::string>> pendingTrxs;
+	std::vector<Event*> pendingEvents;
 	std::vector<Block> blocks;
-	std::unordered_map<std::string, ChainSocketItem *> sockets;
+	std::unordered_map<std::string, Event *> proofEvents;
+	std::unordered_map<std::string, ChainSocketItem *> shardPeers;
+	std::mutex lock;
 
 	Chain(ICore *core);
 	void handleConnection(std::string origin, int conn);
 	void run(int port) override;
-	void submitTrx(std::string data) override;
+	void submitTrx(std::string t, std::string data) override;
+	void addPendingEvent(Event *e) override;
+	bool addBackedProof(std::string proof, std::string origin, std::string signedProof) override;
+	void broadcastInShard(char* payload, uint32_t len) override;
+	bool memorizeResponseBacked(std::string proof, std::string origin) override;
+	Event *getEventByProof(std::string proof) override;
+	int getOrderIndexOfEvent(std::string proof) override;
 };

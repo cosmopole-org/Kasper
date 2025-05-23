@@ -4,195 +4,18 @@
 
 using json = nlohmann::json;
 
-void ChainSocketItem::writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len)
-{
-	std::cerr << "preparing update..." << std::endl;
-
-	std::string signature = this->core->signPacket(std::string(updatePack, len));
-	const char *signBytes = signature.c_str();
-	auto signBytesLen = Utils::getInstance().convertIntToData(signature.size());
-
-	std::string target = targetType + "::" + targetId;
-	const char *targetBytes = target.c_str();
-	auto targetBytesLen = Utils::getInstance().convertIntToData(target.size());
-
-	const char *keyBytes = key.c_str();
-	auto keyBytesLen = Utils::getInstance().convertIntToData(key.size());
-
-	uint32_t packetSize = 1 + 4 + signature.size() + 4 + target.size() + 4 + key.size() + len;
-	auto packet = new char[packetSize];
-	uint32_t pointer = 1;
-
-	packet[0] = 0x01;
-
-	memcpy(packet + pointer, signBytesLen, 4);
-	pointer += 4;
-	memcpy(packet + pointer, signBytes, signature.size());
-	pointer += signature.size();
-	delete signBytesLen;
-	memcpy(packet + pointer, targetBytesLen, 4);
-	pointer += 4;
-	memcpy(packet + pointer, targetBytes, target.size());
-	pointer += target.size();
-	delete targetBytesLen;
-	memcpy(packet + pointer, keyBytesLen, 4);
-	pointer += 4;
-	memcpy(packet + pointer, keyBytes, key.size());
-	pointer += key.size();
-	delete keyBytesLen;
-	memcpy(packet + pointer, updatePack, len);
-	pointer += len;
-
-	std::cerr << "appending to buffer..." << std::endl;
-
-	std::lock_guard<std::mutex> lock(this->lock);
-	this->buffer.push({packet, packetSize});
-	this->pushBuffer();
-}
-
-void ChainSocketItem::writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack)
-{
-	std::string data = updatePack.dump();
-	this->writeRawUpdate(targetType, targetId, key, &data[0], data.size());
-}
-
-void ChainSocketItem::writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len)
-{
-	std::cerr << "preparing response..." << std::endl;
-
-	std::string signature = this->core->signPacket(std::string(response, len));
-	const char *signBytes = signature.c_str();
-	auto signBytesLen = Utils::getInstance().convertIntToData(signature.size());
-
-	const char *b1 = requestId.c_str();
-	char *b1Len = Utils::getInstance().convertIntToData(requestId.size());
-
-	char *b2 = Utils::getInstance().convertIntToData(resCode);
-
-	uint32_t packetSize = 1 + 4 + signature.size() + 4 + requestId.size() + 4 + len;
-	char *packet = new char[packetSize];
-
-	uint32_t pointer = 1;
-
-	packet[0] = 0x02;
-
-	memcpy(packet + pointer, signBytesLen, 4);
-	pointer += 4;
-	delete signBytesLen;
-	memcpy(packet + pointer, signBytes, signature.size());
-	pointer += signature.size();
-	memcpy(packet + pointer, b1Len, 4);
-	pointer += 4;
-	delete b1Len;
-	memcpy(packet + pointer, b1, requestId.size());
-	pointer += requestId.size();
-	memcpy(packet + pointer, b2, 4);
-	pointer += 4;
-	delete b2;
-	memcpy(packet + pointer, response, len);
-	pointer += len;
-
-	std::cerr << "appending to buffer..." << std::endl;
-
-	std::lock_guard<std::mutex> lock(this->lock);
-	this->buffer.push({packet, packetSize});
-	this->pushBuffer();
-}
-
-void ChainSocketItem::writeObjResponse(std::string requestId, int resCode, json response)
-{
-	std::string data = response.dump();
-	this->writeRawResponse(requestId, resCode, &data[0], data.size());
-}
-
-void ChainSocketItem::pushBuffer()
-{
-	if (this->ack)
-	{
-		if (this->buffer.size() > 0)
-		{
-			this->ack = false;
-			auto data = this->buffer.peek();
-			char *packetLen = Utils::getInstance().convertIntToData(data.len);
-			auto res = send(this->conn, packetLen, 4, 0);
-			delete packetLen;
-			if (res == -1)
-			{
-				this->ack = true;
-				std::cerr << "error writing to socket." << std::endl;
-			}
-			send(this->conn, data.data, data.len, 0);
-			if (res == -1)
-			{
-				this->ack = true;
-				std::cerr << "error writing to socket." << std::endl;
-			}
-		}
-	}
-}
-
-std::string userTargetPrefix = "user::";
-std::string pointTargetPrefix = "point::";
-
-ChainSocketItem *ChainSocketItem::openSocket(std::string origin)
-{
-	int sockfd, connfd;
-	struct sockaddr_in servaddr, cli;
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sockfd == -1)
-	{
-		printf("socket creation failed...\n");
-		return NULL;
-	}
-	else
-		printf("Socket successfully created..\n");
-	bzero(&servaddr, sizeof(servaddr));
-	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = inet_addr(origin.c_str());
-	servaddr.sin_port = htons(8081);
-	if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
-	{
-		printf("connection with the server failed...\n");
-		return NULL;
-	}
-	else
-		printf("connected to the server..\n");
-	return new ChainSocketItem(this->fed, sockfd, this->core);
-}
-
 void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t len)
 {
-	if (len == 1 && packet[0] == 0x01)
-	{
-		std::lock_guard<std::mutex> lock(this->lock);
-		this->ack = true;
-		if (this->buffer.size() > 0)
-		{
-			auto top = this->buffer.peek();
-			this->buffer.try_pop();
-			delete top.data;
-			this->pushBuffer();
-		}
-		return;
-	}
-
 	std::cerr << "received packet length: " << len << std::endl;
-
-	std::string signature = "";
-	std::string userId = "";
-	std::string path = "";
-	std::string packetId = "";
-	DataPack payload;
 
 	uint32_t pointer = 1;
 
 	if (packet[0] == 0x01)
 	{
 		std::string signature = "";
-		std::string target = "";
-		std::string key = "";
+		std::string data = "";
 
-		std::cerr << "received update" << std::endl;
+		std::cerr << "received consensus packet phase 1" << std::endl;
 
 		char *tempBytes = new char[4];
 		memcpy(tempBytes, packet + pointer, 4);
@@ -209,274 +32,203 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
 			pointer += signatureLength;
 		}
 		std::cerr << "signature: " << signature << std::endl;
-		char *targetBytesLen = new char[4];
-		memcpy(targetBytesLen, packet + pointer, 4);
+
+		char *tempBytes2 = new char[4];
+		memcpy(tempBytes2, packet + pointer, 4);
+		uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+		delete tempBytes2;
+		std::cerr << "data length: " << dataLength << std::endl;
 		pointer += 4;
-		uint32_t targetLen = Utils::getInstance().parseDataAsInt(targetBytesLen);
-		std::cerr << "target length: " << targetLen << std::endl;
-		delete targetBytesLen;
-		if (targetLen > 0)
+		if (dataLength > 0)
 		{
-			char *targetBytes = new char[targetLen];
-			memcpy(targetBytes, packet + pointer, targetLen);
-			pointer += targetLen;
-			target = std::string(targetBytes, targetLen);
-			delete targetBytes;
+			char *da = new char[dataLength];
+			memcpy(da, packet + pointer, dataLength);
+			data = std::string(da, dataLength);
+			delete da;
+			pointer += dataLength;
+		}
+		std::cerr << "data: " << data << std::endl;
+
+		json eventObj = json::parse(data);
+		json dataObj = eventObj["trxs"];
+		std::string claimedOrigin = eventObj["origin"].template get<std::string>();
+		if (claimedOrigin != origin)
+		{
+			return;
 		}
 
-		char *keyBytesLen = new char[4];
-		memcpy(keyBytesLen, packet + pointer, 4);
+		std::vector<std::pair<std::string, std::string>> trxs{};
+		for (json::iterator item = dataObj.begin(); item != dataObj.end(); ++item)
+		{
+			trxs.push_back({item.value()["type"].template get<std::string>(), item.value()["data"].template get<std::string>()});
+		}
+		Event *e = new Event{claimedOrigin, trxs, eventObj["proof"].template get<std::string>(), {}};
+		this->chain->addPendingEvent(e);
+		std::string proofSign = this->core->signPacket(e->proof);
+		const char *proofSignBytes = proofSign.c_str();
+		uint32_t proofSignLen = proofSign.size();
+		char *proofSignLenBytes = Utils::getInstance().convertIntToData(proofSignLen);
+		const char *proofBytes = e->proof.c_str();
+		uint32_t proofLen = e->proof.size();
+		char *proofLenBytes = Utils::getInstance().convertIntToData(proofLen);
+
+		uint32_t updateLen = 1 + 4 + proofSignLen + 4 + proofLen;
+
+		char *update = new char[updateLen];
+		uint32_t pointer = 1;
+		update[0] = 0x04;
+		memcpy(update + pointer, proofSignLenBytes, 4);
 		pointer += 4;
-		uint32_t keyLen = Utils::getInstance().parseDataAsInt(keyBytesLen);
-		std::cerr << "key length: " << keyLen << std::endl;
-		delete keyBytesLen;
-		if (keyLen > 0)
-		{
-			char *keyBytes = new char[keyLen];
-			memcpy(keyBytes, packet + pointer, keyLen);
-			pointer += keyLen;
-			key = std::string(keyBytes, keyLen);
-			delete keyBytes;
-		}
-		std::cerr << "key: " << key << std::endl;
-		uint32_t payloadLen = len - pointer;
-		std::cerr << "payload length: " << payloadLen << std::endl;
-		if (payloadLen > 0)
-		{
-			char *payload = new char[payloadLen];
-			memcpy(payload, packet + pointer, payloadLen);
-			std::string updatePack = std::string(payload, payloadLen);
-			std::cerr << "payload: " << updatePack << std::endl;
-			pointer += payloadLen;
+		memcpy(update + pointer, proofSignBytes, proofSignLen);
+		pointer += proofSignLen;
+		memcpy(update + pointer, proofLenBytes, 4);
+		pointer += 4;
+		memcpy(update + pointer, proofBytes, proofLen);
+		pointer += proofLen;
+		e->myUpdate = std::string(update, updateLen);
 
-			if (key == "/points/join")
-			{
-				std::string jsonStr = std::string(payload, payloadLen);
-				json j = json::parse(jsonStr);
-				std::string pointId = j["point"]["id"].template get<std::string>();
-				std::string userId = j["user"]["id"].template get<std::string>();
-				this->core->getTools()->getSignaler()->join(userId, pointId);
-			}
-			else if (key == "/points/leave")
-			{
-				std::string jsonStr = std::string(payload, payloadLen);
-				json j = json::parse(jsonStr);
-				std::string pointId = j["point"]["id"].template get<std::string>();
-				std::string userId = j["user"]["id"].template get<std::string>();
-				this->core->getTools()->getSignaler()->leave(userId, pointId);
-			}
+		delete update;
 
-			if (Utils::getInstance().stringStartsWith(target, userTargetPrefix))
-			{
-				this->core->getTools()->getSignaler()->signalUserAsBytes(target.substr(userTargetPrefix.length()), key, payload, payloadLen);
-			}
-			else
-			{
-				this->core->getTools()->getSignaler()->signalPointAsBytes(target.substr(pointTargetPrefix.length()), key, payload, payloadLen, {});
-			}
-		}
+		uint32_t responseLen = 1 + 4 + proofLen;
+		char *response = new char[responseLen];
+		response[0] = 0x02;
+		pointer = 1;
+		memcpy(response + pointer, proofLenBytes, 4);
+		pointer += 4;
+		memcpy(response + pointer, proofBytes, proofLen);
+		pointer += proofLen;
+		char *responseLenBytes = Utils::getInstance().convertIntToData(responseLen);
+		send(this->conn, responseLenBytes, 4, 0);
+		send(this->conn, response, 1, 0);
+
+		delete response;
+		delete responseLenBytes;
 	}
 	else if (packet[0] == 0x02)
 	{
-		std::string signature = "";
-		std::string requestId = "";
+		std::string proof = "";
 
-		std::cerr << "received response" << std::endl;
+		std::cerr << "received consensus packet phase 2" << std::endl;
 
-		char *tempBytes = new char[4];
-		memcpy(tempBytes, packet + pointer, 4);
-		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
-		delete tempBytes;
-		std::cerr << "signature length: " << signatureLength << std::endl;
+		char *tempBytes2 = new char[4];
+		memcpy(tempBytes2, packet + pointer, 4);
+		uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+		delete tempBytes2;
+		std::cerr << "data length: " << dataLength << std::endl;
 		pointer += 4;
-		if (signatureLength > 0)
+		if (dataLength > 0)
 		{
-			char *sign = new char[signatureLength];
-			memcpy(sign, packet + pointer, signatureLength);
-			signature = std::string(sign, signatureLength);
-			delete sign;
-			pointer += signatureLength;
+			char *da = new char[dataLength];
+			memcpy(da, packet + pointer, dataLength);
+			proof = std::string(da, dataLength);
+			delete da;
+			pointer += dataLength;
+		}
+		std::cerr << "proof: " << proof << std::endl;
+
+		auto done = this->chain->memorizeResponseBacked(proof, origin);
+
+		if (!done)
+		{
+			return;
 		}
 
-		char *b1Len = new char[4];
-		memcpy(b1Len, packet + pointer, 4);
-		pointer += 4;
-		uint32_t requestIdLen = Utils::getInstance().parseDataAsInt(b1Len);
-		std::cerr << "requestId length: " << requestIdLen << std::endl;
-		delete b1Len;
-		if (requestIdLen > 0)
-		{
-			char *b1 = new char[4];
-			memcpy(b1, packet + pointer, requestIdLen);
-			pointer += requestIdLen;
-			requestId = std::string(b1, requestIdLen);
-			std::cerr << "requestId: " << requestId << std::endl;
-			delete b1;
-		}
-		char *b2 = new char[4];
-		memcpy(b2, packet + pointer, 4);
-		pointer += 4;
-		int resCode = Utils::getInstance().parseDataAsInt(b2);
-		std::cerr << "resCode: " << resCode << std::endl;
-		delete b2;
-		int payloadLength = len - pointer;
-		if (payloadLength > 0)
-		{
-			char *payload = new char[payloadLength];
-			memcpy(payload, packet + pointer, payloadLength);
-			std::string response = std::string(payload, payloadLength);
-			std::cerr << "response: " << response << std::endl;
-			pointer += payloadLength;
+		char *proofLenBytes = Utils::getInstance().convertIntToData(proof.size());
+		const char *proofBytes = proof.c_str();
 
-			if (auto req = this->fed->findRequest(requestId); req != NULL)
-			{
-				if (resCode == 0)
-				{
-					if (req->key == "/points/create")
-					{
-						json res = json::parse(response);
-						this->core->getTools()->getSignaler()->createPoint({
-							{"id", res["point"]["id"].template get<std::string>()},
-							{"owner", res["point"]["owner"].template get<std::string>()},
-							{"isPublic", (res["point"]["isPublic"].template get<std::string>().c_str()[0] == 0x01)},
-							{"persHist", (res["point"]["persHist"].template get<std::string>().c_str()[0] == 0x01)},
-						});
-					}
-					else if (req->key == "/points/join")
-					{
-						this->core->getTools()->getSignaler()->join(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
-					}
-					else if (req->key == "/points/leave")
-					{
-						this->core->getTools()->getSignaler()->leave(userId, this->core->getActor()->findActionAsSecure(req->key)->getIntel()->extractMeta(req->input.data).pointId);
-					}
-				}
-				req->callback(resCode, response);
-				this->fed->clearRequest(requestId);
-				delete req;
-			}
-		}
+		uint32_t reqLen = 1 + 4 + proof.size();
+		char *req = new char[reqLen];
+		uint32_t pointer = 1;
+		req[0] = 0x03;
+		memcpy(req + pointer, proofLenBytes, 4);
+		pointer += 4;
+		memcpy(req + pointer, proofBytes, proof.size());
+		pointer += proof.size();
+
+		this->chain->broadcastInShard(req, reqLen);
+		delete req;
 	}
 	else if (packet[0] == 0x03)
 	{
+		std::string proof = "";
+
+		std::cerr << "received consensus packet phase 3" << std::endl;
+
+		char *tempBytes2 = new char[4];
+		memcpy(tempBytes2, packet + pointer, 4);
+		uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+		delete tempBytes2;
+		std::cerr << "data length: " << dataLength << std::endl;
+		pointer += 4;
+		if (dataLength > 0)
+		{
+			char *da = new char[dataLength];
+			memcpy(da, packet + pointer, dataLength);
+			proof = std::string(da, dataLength);
+			delete da;
+			pointer += dataLength;
+		}
+		std::cerr << "proof: " << proof << std::endl;
+
+		auto e = this->chain->getEventByProof(proof);
+		this->chain->broadcastInShard((char *)e->myUpdate.c_str(), e->myUpdate.size());
+	}
+	else if (packet[0] == 0x04)
+	{
+		std::string proof = "";
+
+		std::cerr << "received consensus packet phase 4" << std::endl;
+
+		std::string signature = "";
+		std::string proof = "";
+
 		char *tempBytes = new char[4];
 		memcpy(tempBytes, packet + pointer, 4);
-		uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
+		uint32_t signLength = Utils::getInstance().parseDataAsInt(tempBytes);
 		delete tempBytes;
-		std::cerr << "signature length: " << signatureLength << std::endl;
+		std::cerr << "signature length: " << signLength << std::endl;
 		pointer += 4;
-		if (signatureLength > 0)
+		if (signLength > 0)
 		{
-			char *sign = new char[signatureLength];
-			memcpy(sign, packet + pointer, signatureLength);
-			signature = std::string(sign, signatureLength);
-			delete sign;
-			pointer += signatureLength;
+			char *da = new char[signLength];
+			memcpy(da, packet + pointer, signLength);
+			signature = std::string(da, signLength);
+			delete da;
+			pointer += signLength;
 		}
 		std::cerr << "signature: " << signature << std::endl;
 
-		char *tempBytes3 = new char[4];
-		memcpy(tempBytes3, packet + pointer, 4);
-		uint32_t userIdLength = Utils::getInstance().parseDataAsInt(tempBytes3);
-		delete tempBytes3;
-		std::cerr << "userId length: " << userIdLength << std::endl;
+		char *tempBytes2 = new char[4];
+		memcpy(tempBytes2, packet + pointer, 4);
+		uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+		delete tempBytes2;
+		std::cerr << "data length: " << dataLength << std::endl;
 		pointer += 4;
-		if (userIdLength > 0)
+		if (dataLength > 0)
 		{
-			char *tempBytes4 = new char[userIdLength];
-			memcpy(tempBytes4, packet + pointer, userIdLength);
-			userId = std::string(tempBytes4, userIdLength);
-			delete tempBytes4;
-			pointer += userIdLength;
+			char *da = new char[dataLength];
+			memcpy(da, packet + pointer, dataLength);
+			proof = std::string(da, dataLength);
+			delete da;
+			pointer += dataLength;
 		}
-		std::cerr << "userId: " << userId << std::endl;
+		std::cerr << "proof: " << proof << std::endl;
 
-		char *tempBytes5 = new char[4];
-		memcpy(tempBytes5, packet + pointer, 4);
-		uint32_t pathLength = Utils::getInstance().parseDataAsInt(tempBytes5);
-		delete tempBytes5;
-		std::cerr << "path length: " << pathLength << std::endl;
-		pointer += 4;
-		if (pathLength > 0)
+		if (this->chain->addBackedProof(proof, origin, signature))
 		{
-			char *tempBytes6 = new char[pathLength];
-			memcpy(tempBytes6, packet + pointer, pathLength);
-			path = std::string(tempBytes6, pathLength);
-			delete tempBytes6;
-			pointer += pathLength;
-		}
-		std::cerr << "path: " << path << std::endl;
-
-		char *tempBytes7 = new char[4];
-		memcpy(tempBytes7, packet + pointer, 4);
-		uint32_t packetIdLength = Utils::getInstance().parseDataAsInt(tempBytes7);
-		delete tempBytes7;
-		std::cerr << "packetId length: " << packetIdLength << std::endl;
-		pointer += 4;
-		if (packetIdLength > 0)
-		{
-			char *tempBytes8 = new char[packetIdLength];
-			memcpy(tempBytes8, packet + pointer, packetIdLength);
-			packetId = std::string(tempBytes8, packetIdLength);
-			delete tempBytes8;
-			pointer += packetIdLength;
-		}
-		std::cerr << "packetId: " << packetId << std::endl;
-
-		char *payloadRaw = new char[len - pointer];
-		memcpy(payloadRaw, packet + pointer, len - pointer);
-		payload = DataPack{payloadRaw, len - pointer};
-		std::cerr << "payload: " << payload.data << std::endl;
-
-		auto s = this->openSocket(origin);
-
-		if (s != NULL)
-		{
-			try
+			int index = -1;
 			{
-				auto action = this->core->getActor()->findActionAsSecure(path);
-				if (action == NULL)
-				{
-					json res;
-					res["message"] = "action not found";
-					s->writeObjResponse(packetId, 1, res);
-					delete payloadRaw;
-					return;
-				}
-				auto response = action->runAsFed([this](std::function<void(StateTrx *)> fn)
-												 { this->core->modifyState(fn); }, core->getTools(), userId, payload, signature);
-				if (response.err != "")
-				{
-					json data;
-					data["message"] = response.err;
-					s->writeObjResponse(packetId, response.resCode, data);
-					delete payloadRaw;
-					return;
-				}
-				s->writeObjResponse(packetId, 0, response.data);
+				std::lock_guard<std::mutex> lock(this->lock);
+				index = this->chain->getOrderIndexOfEvent(proof);
 			}
-			catch (const std::exception &e)
-			{
-				std::cerr << "Standard exception caught: " << e.what() << std::endl;
-				json data;
-				data["message"] = e.what();
-				s->writeObjResponse(packetId, 2, data);
-			}
-			catch (...)
-			{
-				std::cerr << "Unknown exception caught" << std::endl;
-			}
-			delete payloadRaw;
-
-			close(s->conn);
-			delete s;
+			
 		}
 	}
 }
 
 ChainSocketItem::ChainSocketItem(IChain *chain, int conn, ICore *core)
 {
-	this->fed = fed;
+	this->chain = chain;
 	this->conn = conn;
 	this->core = core;
 	this->ack = true;
@@ -485,7 +237,14 @@ ChainSocketItem::ChainSocketItem(IChain *chain, int conn, ICore *core)
 Chain::Chain(ICore *core)
 {
 	this->core = core;
-	this->sockets = {};
+	this->blocks = {};
+	this->shardPeers = {};
+	this->pendingEvents = {};
+}
+
+Event *Chain::getEventByProof(std::string proof)
+{
+	return this->proofEvents[proof];
 }
 
 void Chain::run(int port)
@@ -516,7 +275,7 @@ void Chain::run(int port)
 
 				std::thread t([this, clientSocket, origin]{
 					this->handleConnection(origin, clientSocket);
-					this->sockets.erase(origin);
+					this->shardPeers.erase(origin);
 					close(clientSocket);
 				});
 				t.detach();
@@ -526,16 +285,128 @@ void Chain::run(int port)
 				   {
 					while (true)
 					{
-						
+						if (this->pendingTrxs.size() > 0) {
+							auto now = std::chrono::system_clock::now();
+   							auto duration = now.time_since_epoch();
+    						auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+							std::string proof = std::to_string(microseconds);
+							std::lock_guard<std::mutex> lock(this->lock);
+							Event *e = new Event{this->core->getIp(), this->pendingTrxs, proof, {}};
+							this->pendingTrxs.clear();
+							this->pendingEvents.push_back(e);
+							this->proofEvents[e->proof] = e;
+							json trxsJson;
+							for (auto trx : e->trxs) {
+								json trxJson;
+								trxJson["type"] = trx.first;
+								trxJson["data"] = trx.second;
+								trxsJson.push_back(trxJson);
+							}
+							json eventJson;
+							eventJson["trxs"] = trxsJson;
+							eventJson["proof"] = e->proof;
+							std::string dataStr = eventJson.dump();
+							std::string signature = this->core->signPacket(dataStr);
+							const char* dataBytes = dataStr.c_str();
+							size_t dataLen = dataStr.size();
+							char* dataLenBytes = Utils::getInstance().convertIntToData(dataLen);
+							const char* signBytes = signature.c_str();
+							size_t signLen = signature.size();
+							char* signLenBytes = Utils::getInstance().convertIntToData(signLen);
+							size_t payloadLen = 1 + 4 + signLen + 4 + dataLen;
+							char* payload = new char[payloadLen];
+							uint32_t pointer = 1;
+							payload[0] = 0x01;
+							memcpy(payload + pointer, signLenBytes, 4);
+							pointer += 4;
+							memcpy(payload + pointer, signBytes, signLen);
+							pointer += signLen;
+							memcpy(payload + pointer, dataLenBytes, 4);
+							pointer += 4;
+							memcpy(payload + pointer, dataBytes, dataLen);
+							pointer += dataLen;
+							char* payloadLenBytes = Utils::getInstance().convertIntToData(payloadLen);
+							for (auto shardPeer : this->shardPeers) {
+								send(shardPeer.second->conn, payloadLenBytes, 4, 0);
+								send(shardPeer.second->conn, payload, payloadLen, 0);
+							}
+							delete payloadLenBytes;
+							delete payload;
+							delete signLenBytes;
+							delete dataLenBytes;
+						}
 						std::this_thread::sleep_for(std::chrono::milliseconds(100));
 					} });
 	t2.detach();
 }
 
+void Chain::submitTrx(std::string t, std::string data)
+{
+	std::lock_guard<std::mutex> lock(this->lock);
+	this->pendingTrxs.push_back({t, data});
+}
+
+void Chain::addPendingEvent(Event *e)
+{
+	std::lock_guard<std::mutex> lock(this->lock);
+	this->pendingEvents.push_back(e);
+}
+
+void Chain::broadcastInShard(char *payload, uint32_t len)
+{
+	char *payloadLenBytes = Utils::getInstance().convertIntToData(len);
+	std::lock_guard<std::mutex> lock(this->lock);
+	for (auto s : this->shardPeers)
+	{
+		send(s.second->conn, payloadLenBytes, 4, 0);
+		send(s.second->conn, payload, len, 0);
+	}
+	delete payloadLenBytes;
+}
+
+bool Chain::memorizeResponseBacked(std::string proof, std::string origin)
+{
+	std::lock_guard<std::mutex> lock(this->lock);
+	if (auto e = this->proofEvents.find(proof); e != this->proofEvents.end())
+	{
+		e->second->backedResponses.insert(origin);
+		if (e->second->backedResponses.size() == (this->shardPeers.size() - 1))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Chain::addBackedProof(std::string proof, std::string origin, std::string signedProof)
+{
+	EVP_PKEY *pkey;
+	{
+		std::lock_guard<std::mutex> lock(this->lock);
+		pkey = this->shardPeers[origin]->pkey;
+	}
+	if (Utils::getInstance().verify_signature_rsa(pkey, proof, signedProof))
+	{
+		std::lock_guard<std::mutex> lock(this->lock);
+		if (auto e = this->proofEvents.find(proof); e != this->proofEvents.end())
+		{
+			e->second->backedProofs[origin] = signedProof;
+			if ((e->second->backedProofs.size() == (this->shardPeers.size() - 2)))
+			{
+				if (auto b = e->second->backedProofs.find(e->second->origin); b == e->second->backedProofs.end())
+				{
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 void Chain::handleConnection(std::string origin, int conn)
 {
 	auto socket = new ChainSocketItem(this, conn, this->core);
-	this->sockets.insert({origin, socket});
+	this->shardPeers.insert({origin, socket});
 	char lenBuf[4];
 	char buf[1024];
 	char nextBuf[2048];
@@ -632,85 +503,4 @@ void Chain::handleConnection(std::string origin, int conn)
 			}
 		}
 	}
-}
-
-void Chain::consensus()
-{
-	int sockfd, connfd;
-	struct sockaddr_in servaddr, cli;
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sockfd == -1)
-	{
-		printf("socket creation failed...\n");
-		return;
-	}
-	else
-		printf("Socket successfully created..\n");
-	bzero(&servaddr, sizeof(servaddr));
-	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = inet_addr(origin.c_str());
-	servaddr.sin_port = htons(8081);
-	if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
-	{
-		printf("connection with the server failed...\n");
-		return;
-	}
-	else
-		printf("connected to the server..\n");
-
-	uint32_t newReqNum = this->reqCounter++;
-	std::string pid = std::to_string(newReqNum);
-
-	uint32_t packetLen = 1 + 4 + signature.size() + 4 + userId.size() + 4 + key.size() + 4 + pid.size() + payload.size();
-	int pointer = 1;
-	char *packet = new char[packetLen];
-	packet[0] = 0x03;
-	int signatureSize = signature.size();
-	char *signatureLength = Utils::getInstance().convertIntToData(signatureSize);
-	memcpy(packet + pointer, signatureLength, 4);
-	pointer += 4;
-	delete signatureLength;
-	memcpy(packet + pointer, signature.c_str(), signatureSize);
-	pointer += signatureSize;
-
-	int userIdSize = userId.size();
-	char *userIdLength = Utils::getInstance().convertIntToData(userIdSize);
-	memcpy(packet + pointer, userIdLength, 4);
-	pointer += 4;
-	delete userIdLength;
-	memcpy(packet + pointer, userId.c_str(), userIdSize);
-	pointer += userIdSize;
-
-	int keySize = key.size();
-	char *keyLength = Utils::getInstance().convertIntToData(keySize);
-	memcpy(packet + pointer, keyLength, 4);
-	pointer += 4;
-	delete keyLength;
-	memcpy(packet + pointer, key.c_str(), keySize);
-	pointer += keySize;
-
-	int pidSize = pid.size();
-	char *pidLength = Utils::getInstance().convertIntToData(pidSize);
-	memcpy(packet + pointer, pidLength, 4);
-	pointer += 4;
-	delete pidLength;
-	memcpy(packet + pointer, pid.c_str(), pidSize);
-	pointer += pidSize;
-
-	memcpy(packet + pointer, payload.c_str(), payload.size());
-
-	this->requests.insert({pid,
-						   new Request{
-							   userId,
-							   pid,
-							   key,
-							   input,
-							   callback}});
-	char *packetLenBytes = Utils::getInstance().convertIntToData(packetLen);
-	send(sockfd, packetLenBytes, 4, 0);
-	send(sockfd, packet, packetLen, 0);
-	delete packet;
-	delete packetLenBytes;
-
-	close(sockfd);
 }
