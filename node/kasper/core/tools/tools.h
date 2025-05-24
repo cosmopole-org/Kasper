@@ -7,6 +7,7 @@
 #include "../../drivers/network/itcp.h"
 #include "../../drivers/wasm/iwasm.h"
 #include "../../drivers/network/ifed.h"
+#include "../../drivers/network/ichain.h"
 
 #include "../../drivers/file/file.h"
 #include "../../drivers/storage/storage.h"
@@ -15,6 +16,7 @@
 #include "../../drivers/network/tcp.h"
 #include "../../drivers/wasm/wasm.h"
 #include "../../drivers/network/fed.h"
+#include "../../drivers/network/chain.h"
 
 #include "../core/icore.h"
 #include <map>
@@ -29,6 +31,7 @@ class Tools : public ITools
     ITcp *network;
     IWasm *wasm;
     IFed *federation;
+    IChain *chain;
 
 public:
     Tools(ICore *core, std::map<std::string, std::string> env);
@@ -39,4 +42,5 @@ public:
     ITcp *getNetwork() override;
     IWasm *getWasm() override;
     IFed *getFederation() override;
+    IChain *getChain() override;
 };

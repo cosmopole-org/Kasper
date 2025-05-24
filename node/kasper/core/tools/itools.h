@@ -7,6 +7,7 @@
 #include "../../drivers/file/ifile.h"
 #include "../../drivers/wasm/iwasm.h"
 #include "../../drivers/network/ifed.h"
+#include "../../drivers/network/ichain.h"
 #include <map>
 #include <string>
 
@@ -21,4 +22,5 @@ public:
     virtual ITcp *getNetwork() = 0;
     virtual IWasm *getWasm() = 0;
     virtual IFed *getFederation() = 0;
+    virtual IChain *getChain() = 0;
 };
