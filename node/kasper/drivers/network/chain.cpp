@@ -1,780 +1,780 @@
-#include "chain.h" // Include our custom header
+#include "chain.h"
 
-#include <iostream>
-#include <random>
-#include <algorithm>
-#include <sstream>
-#include <iomanip>
-#include <functional> // For std::bind
+#define SA struct sockaddr
 
-// POSIX Socket includes (only needed in implementation file)
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h> // For close()
-#include <cstring>  // For memset
-#include <errno.h>  // For errno
+using json = nlohmann::json;
 
-// --- Placeholder Cryptography Functions Implementations ---
-// (Same as before, these need to be replaced with a robust crypto library)
-
-// Static counter for unique keys, defined once in the .cpp file
-static int key_counter_impl = 0;
-
-Hash hash_data(const std::string &data)
+void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t len)
 {
-    size_t hash_val = std::hash<std::string>{}(data);
-    std::ostringstream oss;
-    oss << std::hex << std::setw(64) << std::setfill('0') << hash_val;
-    return oss.str();
-}
+    std::cout << "received packet length: " << len << std::endl;
 
-std::pair<PublicKey, PrivateKey> generate_key_pair()
-{
-    key_counter_impl++; // Use the static counter defined here
-    PublicKey pub = "PUB_KEY_" + std::to_string(key_counter_impl);
-    PrivateKey priv = "PRIV_KEY_" + std::to_string(key_counter_impl);
-    return {pub, priv};
-}
+    uint32_t pointer = 1;
 
-Signature sign_data(const std::string &data, const PrivateKey &private_key)
-{
-    return hash_data(data + private_key + "_signed");
-}
-
-bool verify_signature(const std::string &data, const Signature &signature, const PublicKey &public_key)
-{
-    return signature == hash_data(data + public_key.substr(0, public_key.find("_")) + "_signed");
-}
-
-std::string ChainTransaction::to_string() const
-{
-    return typ_id + "|" + payload_id + "|" + std::to_string(timestamp);
-}
-
-std::ostream &operator<<(std::ostream &os, const ChainTransaction &tx)
-{
-    os << "  Sender: " << tx.typ_id << ", Recipient: " << tx.payload_id
-       << ", Timestamp: " << tx.timestamp;
-    return os;
-}
-
-// --- Event Structure Implementations ---
-Event::Event() : self_parent_hash(""), other_parent_hash(""), creator_public_key(""), signature(""), timestamp(0), event_hash(""), round_num(-1), is_witness(false) {}
-
-Event::Event(Hash self_parent, Hash other_parent, std::vector<ChainTransaction> txs, PublicKey creator_pub_key, PrivateKey creator_priv_key)
-    : self_parent_hash(std::move(self_parent)),
-      other_parent_hash(std::move(other_parent)),
-      transactions(std::move(txs)),
-      creator_public_key(std::move(creator_pub_key)),
-      round_num(-1),
-      is_witness(false)
-{
-
-    timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch())
-                    .count();
-
-    std::string event_content_for_hash = self_parent_hash + other_parent_hash;
-    for (const auto &tx : transactions)
+    if (packet[0] == 0x01)
     {
-        event_content_for_hash += tx.to_string();
-    }
-    event_content_for_hash += creator_public_key;
-    event_content_for_hash += std::to_string(timestamp);
+        std::string signature = "";
+        std::string data = "";
 
-    event_hash = hash_data(event_content_for_hash);
-    signature = sign_data(event_content_for_hash, creator_priv_key);
-}
+        std::cout << "received consensus packet phase 1" << std::endl;
 
-bool Event::verify() const
-{
-    std::string event_content_for_hash = self_parent_hash + other_parent_hash;
-    for (const auto &tx : transactions)
-    {
-        event_content_for_hash += tx.to_string();
-    }
-    event_content_for_hash += creator_public_key;
-    event_content_for_hash += std::to_string(timestamp);
-
-    if (event_hash != hash_data(event_content_for_hash))
-    {
-        std::cerr << "Error: Event hash mismatch for event " << event_hash << std::endl;
-        return false;
-    }
-
-    if (!verify_signature(event_content_for_hash, signature, creator_public_key))
-    {
-        std::cerr << "Error: Signature verification failed for event " << event_hash << std::endl;
-        return false;
-    }
-    return true;
-}
-
-std::ostream &operator<<(std::ostream &os, const Event &event)
-{
-    os << "--- Event ---" << std::endl;
-    os << "  Hash: " << event.event_hash << std::endl;
-    os << "  Self Parent: " << event.self_parent_hash << std::endl;
-    os << "  Other Parent: " << event.other_parent_hash << std::endl;
-    os << "  Creator: " << event.creator_public_key << std::endl;
-    os << "  Timestamp: " << event.timestamp << std::endl;
-    os << "  Signature: " << event.signature << std::endl;
-    os << "  Round: " << event.round_num << (event.is_witness ? " (Witness)" : "") << std::endl;
-    os << "  ChainTransactions (" << event.transactions.size() << "):" << std::endl;
-    for (const auto &tx : event.transactions)
-    {
-        os << tx << std::endl;
-    }
-    return os;
-}
-
-// --- Serialization/Deserialization Functions Implementations ---
-std::string serialize_transaction(const ChainTransaction &tx)
-{
-    return tx.typ_id + "|" + tx.payload_id + "|" + std::to_string(tx.timestamp);
-}
-
-std::vector<std::string> split_string(const std::string &s, char delimiter)
-{
-    std::vector<std::string> tokens;
-    std::string token;
-    std::istringstream tokenStream(s);
-    while (std::getline(tokenStream, token, delimiter))
-    {
-        tokens.push_back(token);
-    }
-    return tokens;
-}
-
-std::string serialize_event(const Event &event)
-{
-    std::ostringstream oss;
-    oss << event.self_parent_hash << "|"
-        << event.other_parent_hash << "|"
-        << event.transactions.size();
-    for (const auto &tx : event.transactions)
-    {
-        oss << "|" << serialize_transaction(tx);
-    }
-    oss << "|" << event.creator_public_key
-        << "|" << event.signature
-        << "|" << event.timestamp
-        << "|" << event.event_hash
-        << "|" << event.round_num
-        << "|" << (event.is_witness ? "1" : "0");
-    return oss.str();
-}
-
-Event deserialize_event(const std::string &data)
-{
-    Event event;
-    std::vector<std::string> parts = split_string(data, '|');
-
-    if (parts.size() < 9)
-    {
-        std::cerr << "Error: Malformed event data for deserialization (too few parts): " << data << std::endl;
-        return Event();
-    }
-
-    size_t current_part_idx = 0;
-    event.self_parent_hash = parts[current_part_idx++];
-    event.other_parent_hash = parts[current_part_idx++];
-    size_t num_txs = std::stoul(parts[current_part_idx++]);
-
-    for (size_t i = 0; i < num_txs; ++i)
-    {
-        if (current_part_idx + 3 >= parts.size())
+        char *tempBytes = new char[4];
+        memcpy(tempBytes, packet + pointer, 4);
+        uint32_t signatureLength = Utils::getInstance().parseDataAsInt(tempBytes);
+        delete tempBytes;
+        std::cout << "signature length: " << signatureLength << std::endl;
+        pointer += 4;
+        if (signatureLength > 0)
         {
-            std::cerr << "Error: Not enough parts for transaction during deserialization." << std::endl;
-            return Event();
+            char *sign = new char[signatureLength];
+            memcpy(sign, packet + pointer, signatureLength);
+            signature = std::string(sign, signatureLength);
+            delete sign;
+            pointer += signatureLength;
         }
-        std::string sender = parts[current_part_idx++];
-        std::string recipient = parts[current_part_idx++];
-        long long timestamp = std::stoll(parts[current_part_idx++]);
-        event.transactions.emplace_back(ChainTransaction{sender, recipient, timestamp});
-        event.transactions.back().timestamp = timestamp;
-    }
+        std::cout << "signature: " << signature << std::endl;
 
-    if (current_part_idx + 4 >= parts.size())
-    {
-        std::cerr << "Error: Not enough parts for event metadata during deserialization." << std::endl;
-        return Event();
-    }
-    event.creator_public_key = parts[current_part_idx++];
-    event.signature = parts[current_part_idx++];
-    event.timestamp = std::stoll(parts[current_part_idx++]);
-    event.event_hash = parts[current_part_idx++];
-    event.round_num = std::stoi(parts[current_part_idx++]);
-    event.is_witness = (parts[current_part_idx++] == "1");
-
-    return event;
-}
-
-// --- Node Class Implementations ---
-Node::Node(std::string id, int p, const std::vector<std::string> &initial_peers)
-    : node_id(std::move(id)),
-      port(p),
-      last_self_event_hash("0"),
-      current_consensus_round(-1),
-      server_socket_fd(-1)
-{
-
-    auto keys = generate_key_pair();
-    public_key = keys.first;
-    private_key = keys.second;
-    std::cout << "Node '" << node_id << "' created with Public Key: " << public_key << ", listening on port " << port << std::endl;
-    network_members.insert(public_key);
-
-    for (const auto &peer : initial_peers)
-    {
-        if (peer != "127.0.0.1:" + std::to_string(port))
+        char *tempBytes2 = new char[4];
+        memcpy(tempBytes2, packet + pointer, 4);
+        uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+        delete tempBytes2;
+        std::cout << "data length: " << dataLength << std::endl;
+        pointer += 4;
+        if (dataLength > 0)
         {
-            known_peer_addresses.insert(peer);
+            char *da = new char[dataLength];
+            memcpy(da, packet + pointer, dataLength);
+            data = std::string(da, dataLength);
+            delete da;
+            pointer += dataLength;
         }
-    }
-}
+        std::cout << "data: " << data << std::endl;
 
-Node::~Node()
-{
-    if (server_socket_fd != -1)
-    {
-        close(server_socket_fd);
-    }
-    if (server_thread.joinable())
-    {
-        server_thread.join();
-    }
-}
+        json eventObj = json::parse(data);
+        json dataObj = eventObj["trxs"];
+        std::string claimedOrigin = eventObj["origin"].template get<std::string>();
 
-void Node::handle_incoming_connection(int client_socket_fd, const std::string &remote_endpoint_str)
-{
-    std::cout << "Node '" << node_id << "': Handling incoming connection from " << remote_endpoint_str << std::endl;
-
-    char buffer[4096];
-    ssize_t bytes_received = recv(client_socket_fd, buffer, sizeof(buffer) - 1, 0);
-
-    if (bytes_received > 0)
-    {
-        buffer[bytes_received] = '\0';
-        std::string received_data(buffer);
-
-        if (!received_data.empty() && received_data.back() == '\n')
+        if (claimedOrigin != origin)
         {
-            received_data.pop_back();
-        }
-
-        std::cout << "Node '" << node_id << "': Received from " << remote_endpoint_str << ": " << received_data << std::endl;
-
-        Event received_event = deserialize_event(received_data);
-        if (received_event.event_hash != "")
-        {
-            bool added_new_event = false;
-            {
-                std::lock_guard<std::mutex> lock(dag_mutex);
-                added_new_event = add_event(received_event);
-                if (added_new_event)
-                {
-                    calculate_event_properties(received_event.event_hash);
-                }
-            }
-
-            if (added_new_event)
-            {
-                std::cout << "Node '" << node_id << "': New event received, triggering instant broadcast and consensus check." << std::endl;
-                std::thread([this]()
-                            { this->start_gossip(); })
-                    .detach();
-                std::thread([this]()
-                            { this->try_advance_consensus(); })
-                    .detach();
-            }
-        }
-        else
-        {
-            std::cerr << "Node '" << node_id << "': Failed to deserialize received data: " << received_data << std::endl;
-        }
-    }
-    else if (bytes_received == 0)
-    {
-        std::cout << "Node '" << node_id << "': Peer " << remote_endpoint_str << " disconnected." << std::endl;
-    }
-    else
-    {
-        perror(("Node '" + node_id + "': Receive error from " + remote_endpoint_str).c_str());
-    }
-
-    close(client_socket_fd);
-    std::cout << "Node '" << node_id << "': Connection with " << remote_endpoint_str << " closed." << std::endl;
-}
-
-void Node::start_server()
-{
-    server_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket_fd == -1)
-    {
-        perror(("Node '" + node_id + "': Failed to create socket").c_str());
-        return;
-    }
-
-    int opt = 1;
-    if (setsockopt(server_socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-    {
-        perror(("Node '" + node_id + "': setsockopt SO_REUSEADDR failed").c_str());
-        close(server_socket_fd);
-        server_socket_fd = -1;
-        return;
-    }
-
-    sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(port);
-
-    if (bind(server_socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
-    {
-        perror(("Node '" + node_id + "': Failed to bind socket").c_str());
-        close(server_socket_fd);
-        server_socket_fd = -1;
-        return;
-    }
-
-    if (listen(server_socket_fd, 5) == -1)
-    {
-        perror(("Node '" + node_id + "': Failed to listen on socket").c_str());
-        close(server_socket_fd);
-        server_socket_fd = -1;
-        return;
-    }
-
-    server_thread = std::thread([this]()
-                                {
-        std::cout << "Node '" << node_id << "': Server thread started, listening on port " << port << std::endl;
-        while (true) {
-            sockaddr_in client_addr;
-            socklen_t client_addr_len = sizeof(client_addr);
-            int client_socket_fd = accept(server_socket_fd, (struct sockaddr*)&client_addr, &client_addr_len);
-
-            if (client_socket_fd == -1) {
-                if (errno == EINVAL || errno == EBADF) {
-                    std::cout << "Node '" << node_id << "': Server socket closed, stopping accept loop." << std::endl;
-                    break;
-                }
-                perror(("Node '" + node_id + "': Accept error").c_str());
-                continue;
-            }
-
-            char client_ip[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &(client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
-            std::string remote_endpoint_str = std::string(client_ip) + ":" + std::to_string(ntohs(client_addr.sin_port));
-
-            std::thread(&Node::handle_incoming_connection, this, client_socket_fd, remote_endpoint_str).detach();
-        }
-        std::cout << "Node '" << node_id << "': Server thread stopped." << std::endl; });
-}
-
-void Node::start_gossip()
-{
-    std::string event_data_to_send;
-    {
-        std::lock_guard<std::mutex> lock(dag_mutex);
-        if (last_self_event_hash != "0" && event_dag.count(last_self_event_hash))
-        {
-            event_data_to_send = serialize_event(event_dag.at(last_self_event_hash)) + "\n";
-        }
-        else
-        {
-            std::cout << "Node '" << node_id << "': No self event to broadcast yet." << std::endl;
             return;
         }
-    }
 
-    if (known_peer_addresses.empty())
-    {
-        std::cout << "Node '" << node_id << "': No peers to gossip with." << std::endl;
-        return;
-    }
-
-    std::cout << "Node '" << node_id << "': Initiating full broadcast gossip." << std::endl;
-
-    for (const auto &peer_address_str : known_peer_addresses)
-    {
-        size_t colon_pos = peer_address_str.find(':');
-        if (colon_pos == std::string::npos)
+        std::vector<std::pair<std::string, std::string>> trxs{};
+        for (json::iterator item = dataObj.begin(); item != dataObj.end(); ++item)
         {
-            std::cerr << "Node '" << node_id << "': Invalid peer address format: " << peer_address_str << std::endl;
-            continue;
+            trxs.push_back({item.value()["type"].template get<std::string>(), item.value()["data"].template get<std::string>()});
         }
-        std::string ip_str = peer_address_str.substr(0, colon_pos);
-        int peer_port = std::stoi(peer_address_str.substr(colon_pos + 1));
+        Event *e = new Event{claimedOrigin, trxs, eventObj["proof"].template get<std::string>(), {}};
+        this->chain->addPendingEvent(e);
+        std::string proofSign = this->core->signPacket(e->proof);
+        const char *proofSignBytes = proofSign.c_str();
+        uint32_t proofSignLen = proofSign.size();
+        char *proofSignLenBytes = Utils::getInstance().convertIntToData(proofSignLen);
+        const char *proofBytes = e->proof.c_str();
+        uint32_t proofLen = e->proof.size();
+        char *proofLenBytes = Utils::getInstance().convertIntToData(proofLen);
 
-        std::thread([this, ip_str, peer_port, peer_address_str, event_data_to_send]()
-                    {
-            int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-            if (sock_fd == -1) {
-                perror(("Node '" + node_id + "': Failed to create client socket for " + peer_address_str).c_str());
-                return;
-            }
+        uint32_t updateLen = 1 + 4 + proofSignLen + 4 + proofLen;
 
-            sockaddr_in peer_addr;
-            memset(&peer_addr, 0, sizeof(peer_addr));
-            peer_addr.sin_family = AF_INET;
-            peer_addr.sin_port = htons(peer_port);
-            if (inet_pton(AF_INET, ip_str.c_str(), &peer_addr.sin_addr) <= 0) {
-                std::cerr << "Node '" << node_id << "': Invalid address/Address not supported for " << peer_address_str << std::endl;
-                close(sock_fd);
-                return;
-            }
+        char *update = new char[updateLen];
+        uint32_t pointer = 1;
+        update[0] = 0x04;
+        memcpy(update + pointer, proofSignLenBytes, 4);
+        pointer += 4;
+        memcpy(update + pointer, proofSignBytes, proofSignLen);
+        pointer += proofSignLen;
+        memcpy(update + pointer, proofLenBytes, 4);
+        pointer += 4;
+        memcpy(update + pointer, proofBytes, proofLen);
+        pointer += proofLen;
+        e->myUpdate = std::string(update, updateLen);
 
-            if (connect(sock_fd, (struct sockaddr*)&peer_addr, sizeof(peer_addr)) == -1) {
-                close(sock_fd);
-                return;
-            }
+        delete update;
 
-            std::cout << "Node '" << node_id << "': Connected to " << peer_address_str << ". Sending event." << std::endl;
-            if (send(sock_fd, event_data_to_send.c_str(), event_data_to_send.length(), 0) == -1) {
-                perror(("Node '" + node_id + "': Send error to " + peer_address_str).c_str());
-            } else {
-                std::cout << "Node '" << node_id << "': Successfully broadcast event to " << peer_address_str << std::endl;
-            }
+        uint32_t responseLen = 1 + 4 + proofLen;
+        char *response = new char[responseLen];
+        response[0] = 0x02;
+        pointer = 1;
+        memcpy(response + pointer, proofLenBytes, 4);
+        pointer += 4;
+        memcpy(response + pointer, proofBytes, proofLen);
+        pointer += proofLen;
+        char *responseLenBytes = Utils::getInstance().convertIntToData(responseLen);
+        send(this->conn, responseLenBytes, 4, 0);
+        send(this->conn, response, responseLen, 0);
 
-            close(sock_fd); })
-            .detach();
+        delete response;
+        delete responseLenBytes;
+    }
+    else if (packet[0] == 0x02)
+    {
+        std::string proof = "";
+
+        std::cout << "received consensus packet phase 2" << std::endl;
+
+        char *tempBytes2 = new char[4];
+        memcpy(tempBytes2, packet + pointer, 4);
+        uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+        delete tempBytes2;
+        std::cout << "data length: " << dataLength << std::endl;
+        pointer += 4;
+        if (dataLength > 0)
+        {
+            char *da = new char[dataLength];
+            memcpy(da, packet + pointer, dataLength);
+            proof = std::string(da, dataLength);
+            delete da;
+            pointer += dataLength;
+        }
+        std::cout << "proof: " << proof << std::endl;
+
+        auto done = this->chain->memorizeResponseBacked(proof, origin);
+
+        if (!done)
+        {
+            return;
+        }
+
+        char *proofLenBytes = Utils::getInstance().convertIntToData(proof.size());
+        const char *proofBytes = proof.c_str();
+
+        uint32_t reqLen = 1 + 4 + proof.size();
+        char *req = new char[reqLen];
+        uint32_t pointer = 1;
+        req[0] = 0x03;
+        memcpy(req + pointer, proofLenBytes, 4);
+        pointer += 4;
+        memcpy(req + pointer, proofBytes, proof.size());
+        pointer += proof.size();
+
+        this->chain->broadcastInShard(req, reqLen);
+        delete req;
+
+        this->chain->pushNewElection();
+    }
+    else if (packet[0] == 0x03)
+    {
+        std::string proof = "";
+
+        std::cout << "received consensus packet phase 3" << std::endl;
+
+        char *tempBytes2 = new char[4];
+        memcpy(tempBytes2, packet + pointer, 4);
+        uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+        delete tempBytes2;
+        std::cout << "data length: " << dataLength << std::endl;
+        pointer += 4;
+        if (dataLength > 0)
+        {
+            char *da = new char[dataLength];
+            memcpy(da, packet + pointer, dataLength);
+            proof = std::string(da, dataLength);
+            delete da;
+            pointer += dataLength;
+        }
+        std::cout << "proof: " << proof << std::endl;
+
+        this->chain->pushNewElection();
+    }
+    else if (packet[0] == 0x04)
+    {
+        std::cout << "received consensus packet phase 4" << std::endl;
+
+        std::string signature = "";
+        std::string vote = "";
+
+        char *tempBytes = new char[4];
+        memcpy(tempBytes, packet + pointer, 4);
+        pointer += 4;
+        uint32_t signLength = Utils::getInstance().parseDataAsInt(tempBytes);
+        delete tempBytes;
+        std::cout << "signature length: " << signLength << std::endl;
+        if (signLength > 0)
+        {
+            char *da = new char[signLength];
+            memcpy(da, packet + pointer, signLength);
+            signature = std::string(da, signLength);
+            delete da;
+            pointer += signLength;
+        }
+        std::cout << "signature: " << signature << std::endl;
+
+        char *tempBytes2 = new char[4];
+        memcpy(tempBytes2, packet + pointer, 4);
+        pointer += 4;
+        uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+        delete tempBytes2;
+        std::cout << "data length: " << dataLength << std::endl;
+        if (dataLength > 0)
+        {
+            char *da = new char[dataLength];
+            memcpy(da, packet + pointer, dataLength);
+            vote = std::string(da, dataLength);
+            delete da;
+            pointer += dataLength;
+        }
+        std::cout << "vote: " << vote << std::endl;
+
+        this->chain->voteForNextEvent(origin, vote);
+    }
+    else if (packet[0] == 0x05)
+    {
+        std::cout << "received consensus packet phase 5" << std::endl;
+
+        this->chain->notifyElectorReady(origin);
     }
 }
 
-Event Node::create_event(const std::vector<ChainTransaction> &new_transactions)
+ChainSocketItem::ChainSocketItem(IChain *chain, int conn, ICore *core)
 {
-    std::lock_guard<std::mutex> lock(dag_mutex);
+    this->chain = chain;
+    this->conn = conn;
+    this->core = core;
+    this->ack = true;
+}
 
-    Hash chosen_other_parent_hash = "0";
-    long long latest_other_event_timestamp = -1;
+Chain::Chain(ICore *core)
+{
+    this->core = core;
+    this->chosenProof = "";
+}
 
-    for (const auto &pair : event_dag)
+void Chain::pushNewElection()
+{
+    std::lock_guard<std::mutex> lock(this->lock);
+    this->pendingBlockElections++;
+    if (this->readyForNewElection)
     {
-        const Event &existing_event = pair.second;
-        if (existing_event.creator_public_key != public_key)
+        this->readyForNewElection = false;
+        this->ready = true;
+        this->cond_var_.notify_one();
+    }
+}
+
+void Chain::notifyElectorReady(std::string origin)
+{
+    std::lock_guard<std::mutex> lock(this->lock);
+    this->readyElectors.insert(origin);
+    if (this->readyElectors.size() == (this->shardPeers.size() - 1))
+    {
+        this->readyElectors.clear();
+
+        this->proofEvents.erase(this->chosenProof);
+        int eventIndex = 0;
+        for (auto event : this->pendingEvents)
         {
-            if (existing_event.timestamp > latest_other_event_timestamp)
+            if (event->proof == this->chosenProof)
             {
-                latest_other_event_timestamp = existing_event.timestamp;
-                chosen_other_parent_hash = existing_event.event_hash;
+                break;
             }
+            eventIndex++;
         }
+        this->pendingEvents.erase(this->pendingEvents.begin() + eventIndex);
+        this->chosenProof = "";
+
+        this->ready = true;
+        this->cond_var_.notify_one();
     }
-
-    Event new_event(last_self_event_hash, chosen_other_parent_hash, new_transactions, public_key, private_key);
-
-    event_dag[new_event.event_hash] = new_event;
-    last_self_event_hash = new_event.event_hash;
-
-    std::cout << "Node '" << node_id << "' created new event: " << new_event.event_hash << std::endl;
-
-    calculate_event_properties(new_event.event_hash);
-
-    std::thread([this]()
-                { this->start_gossip(); })
-        .detach();
-    std::thread([this]()
-                { this->try_advance_consensus(); })
-        .detach();
-
-    return new_event;
 }
 
-bool Node::add_event(const Event &event)
+void Chain::voteForNextEvent(std::string origin, std::string eventProof)
 {
-    if (event_dag.count(event.event_hash))
+    Event *choosenEvent = NULL;
+    bool done = false;
     {
+        std::lock_guard<std::mutex> lock(this->lock);
+        this->nextEventVotes[origin] = eventProof;
+        if (this->nextEventVotes.size() == this->shardPeers.size())
+        {
+            std::unordered_map<std::string, int> votes{};
+            for (auto vote : this->nextEventVotes)
+            {
+                if (votes.find(vote.second) == votes.end())
+                {
+                    votes[vote.second] = 1;
+                }
+                else
+                {
+                    votes[vote.second] = votes[vote.second] + 1;
+                }
+            }
+            std::vector<std::pair<std::string, int>> sortedArr{};
+            std::cout << std::endl
+                      << std::endl;
+            for (auto item : votes)
+            {
+                std::cout << item.first << " " << item.second << std::endl;
+                sortedArr.push_back({item.first, item.second});
+            }
+            std::cout << std::endl
+                      << std::endl;
+            std::sort(sortedArr.begin(), sortedArr.end(), [](const std::pair<std::string, int> &a, const std::pair<std::string, int> &b)
+                      { return a.second > b.second; });
+            this->nextEventVotes.clear();
+
+            choosenEvent = this->getEventByProof(sortedArr[0].first);
+            this->chosenProof = sortedArr[0].first;
+            done = true;
+        }
+    }
+    if (done)
+    {
+        {
+            std::lock_guard<std::mutex> lock(this->lock);
+            this->nextBlockQueue.push(new Block{choosenEvent->trxs});
+        }
+        char *startNewElectionSignal = new char[1];
+        startNewElectionSignal[0] = 0x05;
+        this->broadcastInShard(startNewElectionSignal, 1);
+        delete startNewElectionSignal;
+    }
+}
+
+uint64_t Chain::getOrderIndexOfEvent(std::string proof)
+{
+    std::lock_guard<std::mutex> lock(this->lock);
+    uint64_t index = 0;
+    uint64_t count = this->pendingEvents.size();
+    for (auto i = this->pendingEvents.rbegin(); i != this->pendingEvents.rend(); ++i)
+    {
+        if ((*i)->proof == proof)
+        {
+            return count - index - 1;
+        }
+        index++;
+    }
+    return std::numeric_limits<uint64_t>::max();
+}
+
+Event *Chain::getEventByProof(std::string proof)
+{
+    return this->proofEvents[proof];
+}
+
+bool openSocket(std::string origin, IChain *chain, ICore *core)
+{
+    std::cout << "connecting to chain socket server: " << origin << std::endl;
+    int sockfd, connfd;
+    struct sockaddr_in servaddr, cli;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1)
+    {
+        printf("socket creation failed...\n");
         return false;
     }
-    if (!event.verify())
+    else
+        printf("Socket successfully created..\n");
+    bzero(&servaddr, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = inet_addr(origin.c_str());
+    servaddr.sin_port = htons(8082);
+    if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
     {
-        std::cerr << "Node '" << node_id << "': Received invalid event " << event.event_hash << std::endl;
+        printf("connection with the server failed...\n");
         return false;
     }
-    event_dag[event.event_hash] = event;
-    std::cout << "Node '" << node_id << "': Added event " << event.event_hash << " to DAG." << std::endl;
+    else
+        printf("connected to the server..\n");
+    chain->handleConnection(origin, sockfd);
     return true;
 }
 
-void Node::calculate_event_properties(const Hash &event_hash)
+void Chain::run(int port)
 {
-    if (!event_dag.count(event_hash))
-    {
-        std::cerr << "Error: Event " << event_hash << " not found in DAG to calculate properties." << std::endl;
-        return;
-    }
+    std::thread t([port, this]
+                  {
+            std::cout << "starting chain server on port " << port << "..." << std::endl;
+            int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+			sockaddr_in serverAddress;
+			serverAddress.sin_family = AF_INET;
+			serverAddress.sin_port = htons(port);
+			serverAddress.sin_addr.s_addr = INADDR_ANY;
+			bind(serverSocket, (struct sockaddr*)&serverAddress,
+				 sizeof(serverAddress));
+			listen(serverSocket, 5);
+			while (true)
+			{
+				struct sockaddr_in client_addr{};
+				socklen_t client_len = sizeof(client_addr);
 
-    Event &event = event_dag.at(event_hash);
+				int clientSocket = accept(serverSocket, (struct sockaddr*)&client_addr, &client_len);
+				std::cout << "new client connected." << std::endl;
 
-    if (event.round_num != -1)
-    {
-        return;
-    }
+				char client_ip[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
+				std::string origin = std::string(client_ip);
+				std::cout << "connection from origin: " << origin << std::endl;
 
-    int self_parent_round = -1;
-    if (event.self_parent_hash != "0" && event_dag.count(event.self_parent_hash))
-    {
-        calculate_event_properties(event.self_parent_hash);
-        self_parent_round = event_dag.at(event.self_parent_hash).round_num;
-    }
-    else if (event.self_parent_hash == "0")
-    {
-        self_parent_round = -1;
-    }
+				this->handleConnection(origin, clientSocket);
+	 		} });
+    t.detach();
 
-    int other_parent_round = -1;
-    if (event.other_parent_hash != "0" && event_dag.count(event.other_parent_hash))
-    {
-        calculate_event_properties(event.other_parent_hash);
-        other_parent_round = event_dag.at(event.other_parent_hash).round_num;
-    }
-    else if (event.other_parent_hash == "0")
-    {
-        other_parent_round = -1;
-    }
+    std::thread t2([this]
+                   {
+					while (true)
+					{
+                        bool haveTrxs = false;
+                        {
+                            std::lock_guard<std::mutex> lock(this->lock);
+	    					if (this->pendingTrxs.size() > 0) {
+                                haveTrxs = true;
+                            }
+                        }
+	    				if (haveTrxs) {
+                            std::cout << "creating new event..." << std::endl;
+                            Event *e = NULL;
+                            {
+                                std::lock_guard<std::mutex> lock(this->lock);
+                                auto now = std::chrono::system_clock::now();
+                                auto duration = now.time_since_epoch();
+                                auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+                                std::string proof = std::to_string(microseconds);
+                                e = new Event{this->core->getIp(), this->pendingTrxs, proof, {}};    
+                                this->pendingTrxs.clear();
+                                this->pendingEvents.push_back(e);
+                                this->proofEvents[e->proof] = e;
+                            }
+                            json trxsJson;
+                            for (auto trx : e->trxs) {
+                                json trxJson;
+                                trxJson["type"] = trx.first;
+                                trxJson["data"] = trx.second;
+                                trxsJson.push_back(trxJson);
+                            }
+                            json eventJson;
+                            eventJson["trxs"] = trxsJson;
+                            eventJson["proof"] = e->proof;
+                            eventJson["origin"] = this->core->getIp();
+                            std::string dataStr = eventJson.dump();
+                            std::string signature = this->core->signPacket(dataStr);
+                            const char* dataBytes = dataStr.c_str();
+                            size_t dataLen = dataStr.size();
+                            char* dataLenBytes = Utils::getInstance().convertIntToData(dataLen);
+                            const char* signBytes = signature.c_str();
+                            size_t signLen = signature.size();
+                            char* signLenBytes = Utils::getInstance().convertIntToData(signLen);
+                            size_t payloadLen = 1 + 4 + signLen + 4 + dataLen;
+                            char* payload = new char[payloadLen];
+                            uint32_t pointer = 1;
+                            payload[0] = 0x01;
+                            memcpy(payload + pointer, signLenBytes, 4);
+                            pointer += 4;
+                            memcpy(payload + pointer, signBytes, signLen);
+                            pointer += signLen;
+                            memcpy(payload + pointer, dataLenBytes, 4);
+                            pointer += 4;
+                            memcpy(payload + pointer, dataBytes, dataLen);
+                            pointer += dataLen;
 
-    event.round_num = std::max({0, self_parent_round, other_parent_round});
+                            std::string proofSign = this->core->signPacket(e->proof);
+                            const char *proofSignBytes = proofSign.c_str();
+                            uint32_t proofSignLen = proofSign.size();
+                            char *proofSignLenBytes = Utils::getInstance().convertIntToData(proofSignLen);
+                            const char *proofBytes = e->proof.c_str();
+                            uint32_t proofLen = e->proof.size();
+                            char *proofLenBytes = Utils::getInstance().convertIntToData(proofLen);
+                            uint32_t updateLen = 1 + 4 + proofSignLen + 4 + proofLen;
+                            char *update = new char[updateLen];
+                            pointer = 1;
+                            update[0] = 0x04;
+                            memcpy(update + pointer, proofSignLenBytes, 4);
+                            pointer += 4;
+                            memcpy(update + pointer, proofSignBytes, proofSignLen);
+                            pointer += proofSignLen;
+                            memcpy(update + pointer, proofLenBytes, 4);
+                            pointer += 4;
+                            memcpy(update + pointer, proofBytes, proofLen);
+                            pointer += proofLen;
+                            e->myUpdate = std::string(update, updateLen);
 
-    if (event.self_parent_hash == "0" || (event_dag.count(event.self_parent_hash) && event_dag.at(event.self_parent_hash).round_num < event.round_num))
-    {
-        event.is_witness = true;
-        std::cout << "Node '" << node_id << "': Event " << event.event_hash << " is a witness for round " << event.round_num << std::endl;
-    }
-    else
-    {
-        event.is_witness = false;
-    }
+                            delete proofSignLenBytes;
+                            delete proofLenBytes;
+                            delete update;
+        
+                            this->broadcastInShard(payload, payloadLen);
+                            delete payload;
+                            delete signLenBytes;
+                            delete dataLenBytes;
+                        }
+						std::this_thread::sleep_for(std::chrono::milliseconds(100));
+					} });
+    t2.detach();
+
+    std::thread t3([this]
+                   {
+		 while (true)
+		 {
+            std::unique_lock<std::mutex> lock(mtx);
+            this->cond_var_.wait(lock, [this]{ return this->ready; });
+            {
+                std::lock_guard<std::mutex> lock(this->lock);
+                this->ready = false;
+            }
+            if (this->pendingBlockElections > 0)
+            {
+                Event *e = this->pendingEvents[0];
+                this->voteForNextEvent(this->core->getIp(), e->proof);
+                this->broadcastInShard((char *)e->myUpdate.c_str(), e->myUpdate.size());
+                {
+                    std::lock_guard<std::mutex> lock(this->lock);
+                    this->pendingBlockElections--;
+                }
+            } else {
+                std::lock_guard<std::mutex> lock(this->lock);
+                this->readyForNewElection = true;
+            }
+		 } });
+    t3.detach();
+
+    std::thread t4([this]
+                   {
+            while (true){
+			    Block *block = this->nextBlockQueue.wait_and_pop();
+		    	{
+				    std::lock_guard<std::mutex> lock(this->lock);
+				    this->blocks.push_back(block);
+			    }
+			    for (auto trx : block->trxs)
+                {
+				    std::cout << "received transaction: " << trx.first << " " << trx.second << std::endl;
+			    }
+            } });
+    t4.detach();
+
+    std::thread t5([this]
+                   {
+                    std::cout << "trying to connect to other peers..." << std::endl;
+                    std::vector<std::string> peersArr = {
+                        "172.77.5.1",
+                        "172.77.5.2",
+                        "172.77.5.3",
+                    };
+                    bool completed = false;
+                    do {
+                        completed = true;
+                        for (auto peerAddress : peersArr) {
+                            std::cout << "socket: " << peerAddress << std::endl;
+                            if (peerAddress == this->core->getIp()) {
+                                this->shardPeers[peerAddress] = new ChainSocketItem(this, 0, this->core);
+                                continue;
+                            }
+                            if (peerAddress < this->core->getIp()) {
+                                continue;
+                            }
+                            if (this->shardPeers.find(peerAddress) != this->shardPeers.end()) {
+                                continue;
+                            }
+                            if (!openSocket(peerAddress, this, this->core)) {
+                                completed = false;
+                                continue;
+                            }
+                        }
+						std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    } while (!completed); });
+    t5.detach();
 }
 
-bool Node::can_see(const Hash &descendant_hash, const Hash &ancestor_hash) const
+void Chain::submitTrx(std::string t, std::string data)
 {
-    if (descendant_hash == ancestor_hash)
+    std::lock_guard<std::mutex> lock(this->lock);
+    this->pendingTrxs.push_back({t, data});
+}
+
+void Chain::addPendingEvent(Event *e)
+{
+    std::lock_guard<std::mutex> lock(this->lock);
+    this->pendingEvents.push_back(e);
+    this->proofEvents[e->proof] = e;
+}
+
+void Chain::broadcastInShard(char *payload, uint32_t len)
+{
+    std::cout << "broadcasting..." << std::endl;
+    char *payloadLenBytes = Utils::getInstance().convertIntToData(len);
+    std::lock_guard<std::mutex> lock(this->lock);
+    for (auto s : this->shardPeers)
     {
-        return true;
-    }
-    std::lock_guard<std::mutex> lock(dag_mutex);
-    if (!event_dag.count(descendant_hash) || !event_dag.count(ancestor_hash))
-    {
-        return false;
-    }
-
-    std::queue<Hash> q;
-    std::set<Hash> visited;
-
-    q.push(descendant_hash);
-    visited.insert(descendant_hash);
-
-    while (!q.empty())
-    {
-        Hash current_hash = q.front();
-        q.pop();
-
-        const Event &current_event = event_dag.at(current_hash);
-
-        if (current_event.self_parent_hash != "0")
+        if (s.first == this->core->getIp())
         {
-            if (current_event.self_parent_hash == ancestor_hash)
-                return true;
-            if (visited.find(current_event.self_parent_hash) == visited.end())
-            {
-                q.push(current_event.self_parent_hash);
-                visited.insert(current_event.self_parent_hash);
-            }
+            continue;
         }
-        if (current_event.other_parent_hash != "0")
+        std::cout << s.first << " " << (s.second == NULL) << std::endl
+                  << std::endl;
+        if (s.second == NULL)
         {
-            if (current_event.other_parent_hash == ancestor_hash)
-                return true;
-            if (visited.find(current_event.other_parent_hash) == visited.end())
+            continue;
+        }
+        std::cout << s.first << " " << (s.second == NULL) << std::endl
+                  << std::endl;
+        send(s.second->conn, payloadLenBytes, 4, 0);
+        send(s.second->conn, payload, len, 0);
+    }
+    delete payloadLenBytes;
+}
+
+void Chain::sendToShardMember(std::string origin, char *payload, uint32_t len)
+{
+    char *payloadLenBytes = Utils::getInstance().convertIntToData(len);
+    std::lock_guard<std::mutex> lock(this->lock);
+    auto s = this->shardPeers[origin];
+    send(s->conn, payloadLenBytes, 4, 0);
+    send(s->conn, payload, len, 0);
+    delete payloadLenBytes;
+}
+
+bool Chain::memorizeResponseBacked(std::string proof, std::string origin)
+{
+    std::lock_guard<std::mutex> lock(this->lock);
+    if (auto e = this->proofEvents.find(proof); e != this->proofEvents.end())
+    {
+        e->second->backedResponses.insert(origin);
+        if (e->second->backedResponses.size() == (this->shardPeers.size() - 1))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Chain::addBackedProof(std::string proof, std::string origin, std::string signedProof)
+{
+    EVP_PKEY *pkey;
+    {
+        std::lock_guard<std::mutex> lock(this->lock);
+        pkey = this->shardPeers[origin]->pkey;
+    }
+    if (Utils::getInstance().verify_signature_rsa(pkey, proof, signedProof))
+    {
+        std::lock_guard<std::mutex> lock(this->lock);
+        if (auto e = this->proofEvents.find(proof); e != this->proofEvents.end())
+        {
+            e->second->backedProofs[origin] = signedProof;
+            if ((e->second->backedProofs.size() == (this->shardPeers.size() - 2)))
             {
-                q.push(current_event.other_parent_hash);
-                visited.insert(current_event.other_parent_hash);
+                if (auto b = e->second->backedProofs.find(e->second->origin); b == e->second->backedProofs.end())
+                {
+                    return true;
+                }
             }
         }
     }
     return false;
 }
 
-bool Node::strongly_see(const Hash &event_x_hash, const Hash &witness_w_hash) const
+void Chain::removeConnection(std::string origin)
 {
-    std::lock_guard<std::mutex> lock(dag_mutex);
-    if (!event_dag.count(event_x_hash) || !event_dag.count(witness_w_hash))
-    {
-        return false;
-    }
-
-    if (!can_see(event_x_hash, witness_w_hash))
-    {
-        return false;
-    }
-
-    const Event &witness_w = event_dag.at(witness_w_hash);
-    int target_round = witness_w.round_num;
-
-    std::map<PublicKey, bool> members_seen_through;
-    int members_count = network_members.size();
-    int supermajority_threshold = (2 * members_count / 3) + 1;
-
-    for (const auto &pair : event_dag)
-    {
-        const Event &current_event = pair.second;
-        if (current_event.round_num == target_round && current_event.creator_public_key != witness_w.creator_public_key)
-        {
-            if (can_see(event_x_hash, current_event.event_hash) && can_see(current_event.event_hash, witness_w_hash))
-            {
-                members_seen_through[current_event.creator_public_key] = true;
-            }
-        }
-    }
-
-    return members_seen_through.size() >= supermajority_threshold;
+    this->shardPeers.erase(origin);
 }
 
-std::set<Hash> Node::find_witnesses_for_round(int round) const
+void Chain::listenToPackets(std::string origin, ChainSocketItem *socket)
 {
-    std::lock_guard<std::mutex> lock(dag_mutex);
-    std::set<Hash> witnesses;
-    std::map<PublicKey, bool> creator_has_witness_in_round;
-
-    for (const auto &pair : event_dag)
-    {
-        const Event &event = pair.second;
-        if (event.round_num == round && event.is_witness)
-        {
-            if (creator_has_witness_in_round.find(event.creator_public_key) == creator_has_witness_in_round.end())
-            {
-                witnesses.insert(event.event_hash);
-                creator_has_witness_in_round[event.creator_public_key] = true;
-            }
-        }
-    }
-    return witnesses;
-}
-
-std::set<Hash> Node::elect_famous_witnesses(int round) const
-{
-    std::set<Hash> famous_witnesses;
-    std::set<Hash> witnesses_in_round = find_witnesses_for_round(round);
-
-    if (witnesses_in_round.empty())
-    {
-        return famous_witnesses;
-    }
-
-    std::cout << "Node '" << node_id << "': (Conceptual) Electing famous witnesses for round " << round << std::endl;
-
-    if (last_self_event_hash != "0" && event_dag.count(last_self_event_hash))
-    {
-        for (const Hash &witness_hash : witnesses_in_round)
-        {
-            if (strongly_see(last_self_event_hash, witness_hash))
-            {
-                famous_witnesses.insert(witness_hash);
-                std::cout << "  Witness " << witness_hash << " (creator: " << event_dag.at(witness_hash).creator_public_key << ") is conceptually famous." << std::endl;
-            }
-        }
-    }
-
-    return famous_witnesses;
-}
-
-std::vector<ChainTransaction> Node::determine_event_order(int round, const std::set<Hash> &famous_witnesses_for_round) const
-{
-    std::lock_guard<std::mutex> lock(dag_mutex);
-    std::vector<ChainTransaction> ordered_transactions;
-
-    std::cout << "Node '" << node_id << "': (Conceptual) Determining event order for round " << round << std::endl;
-
-    std::vector<const Event *> events_to_order;
-    for (const auto &pair : event_dag)
-    {
-        if (pair.second.round_num == round)
-        {
-            events_to_order.push_back(&pair.second);
-        }
-    }
-
-    std::sort(events_to_order.begin(), events_to_order.end(), [](const Event *a, const Event *b)
-              { return a->timestamp < b->timestamp; });
-
-    for (const Event *event_ptr : events_to_order)
-    {
-        for (const auto &tx : event_ptr->transactions)
-        {
-            ordered_transactions.push_back(tx);
-        }
-    }
-
-    std::sort(ordered_transactions.begin(), ordered_transactions.end(), [](const ChainTransaction &a, const ChainTransaction &b)
-              { return a.timestamp < b.timestamp; });
-
-    std::cout << "Node '" << node_id << "': Total " << ordered_transactions.size() << " transactions ordered for round " << round << std::endl;
-    return ordered_transactions;
-}
-
-void Node::try_advance_consensus()
-{
-    std::cout << "Node '" << node_id << "': Attempting to advance consensus from round " << current_consensus_round << std::endl;
-    int next_round_to_check = current_consensus_round + 1;
-
+    std::cout << std::endl
+              << std::endl
+              << "[" << origin << "]" << std::endl
+              << std::endl;
+    char lenBuf[4];
+    char buf[1024];
+    char nextBuf[2048];
+    uint64_t readCount = 0;
+    uint64_t oldReadCount = 0;
+    bool enough = false;
+    bool beginning = true;
+    uint32_t length = 0;
+    uint32_t readLength = 0;
+    uint32_t remainedReadLength = 0;
+    char *readData;
+    int counter = 0;
     while (true)
     {
-        std::set<Hash> witnesses = find_witnesses_for_round(next_round_to_check);
-        if (witnesses.empty())
+        if (!enough)
         {
-            std::cout << "Node '" << node_id << "': No witnesses found for round " << next_round_to_check << ". Cannot advance consensus." << std::endl;
-            break;
+            readLength = recv(socket->conn, buf, sizeof(buf), 0);
+            if (readLength == 0)
+            {
+                std::cout << "socket closed" << std::endl;
+                return;
+            }
+            else if (readLength == -1)
+            {
+                std::cout << "socket error" << std::endl;
+                return;
+            }
+            oldReadCount = readCount;
+            readCount += readLength;
+            memcpy(nextBuf + remainedReadLength, buf, readLength);
+            remainedReadLength += readLength;
         }
 
-        std::set<Hash> famous_witnesses = elect_famous_witnesses(next_round_to_check);
-
-        if (!famous_witnesses.empty())
+        if (beginning)
         {
-            std::cout << "Node '" << node_id << "': Famous witnesses elected for round " << next_round_to_check << ". Proceeding to order." << std::endl;
-            std::vector<ChainTransaction> ordered_txs = determine_event_order(next_round_to_check, famous_witnesses);
-
-            std::cout << "Node '" << node_id << "': Consensus reached for round " << next_round_to_check << ". "
-                      << ordered_txs.size() << " transactions ordered." << std::endl;
-
-            current_consensus_round = next_round_to_check;
-            next_round_to_check++;
+            if (readCount >= 4)
+            {
+                memcpy(lenBuf, nextBuf, 4);
+                remainedReadLength -= 4;
+                memcpy(nextBuf, nextBuf + 4, remainedReadLength);
+                length = Utils::getInstance().parseDataAsInt(lenBuf);
+                readData = new char[length];
+                memset(readData, 0, length);
+                readCount -= 4;
+                beginning = false;
+                enough = true;
+            }
+            else
+            {
+                enough = false;
+            }
         }
         else
         {
-            std::cout << "Node '" << node_id << "': No famous witnesses elected for round " << next_round_to_check << ". Cannot advance consensus." << std::endl;
-            break;
+            if (remainedReadLength == 0)
+            {
+                enough = false;
+            }
+            else if (readCount >= length)
+            {
+                memcpy(readData + oldReadCount, nextBuf, length - oldReadCount);
+                memcpy(nextBuf, nextBuf + (readLength - (readCount - length)), readCount - length);
+                remainedReadLength = (readCount - length);
+                std::cout << "packet received" << std::endl;
+                char *packet = new char[length];
+                memcpy(packet, readData, length);
+                delete readData;
+
+                std::thread t([&socket, length, origin](char *packet)
+                              {
+								   try
+								   {
+									   socket->processPacket(origin, packet, length);
+								   }
+								   catch (const std::exception &e)
+								   {
+									   std::cout << "Standard exception caught: " << e.what() << std::endl;
+								   }
+								   catch (...)
+								   {
+									   std::cout << "Unknown exception caught" << std::endl;
+								   }
+								   delete packet; }, packet);
+                t.detach();
+                readCount -= length;
+                enough = true;
+                beginning = true;
+            }
+            else
+            {
+                memcpy(readData + oldReadCount, nextBuf, readCount - oldReadCount);
+                remainedReadLength = 0;
+                enough = true;
+            }
         }
     }
 }
 
-std::ostream &operator<<(std::ostream &os, const Node &node)
+void Chain::handleConnection(std::string origin, int conn)
 {
-    os << "Node ID: " << node.node_id << ", Public Key: " << node.public_key << ", Port: " << node.port << std::endl;
-    os << "  Known Events: " << node.event_dag.size() << std::endl;
-    os << "  Last Self Event: " << node.last_self_event_hash << std::endl;
-    os << "  Current Consensus Round: " << node.current_consensus_round << std::endl;
-    os << "  Known Peers (" << node.known_peer_addresses.size() << "): ";
-    for (const auto &peer : node.known_peer_addresses)
-    {
-        os << peer << " ";
-    }
-    os << std::endl;
-    os << "  Network Members (" << node.network_members.size() << "): ";
-    for (const auto &member_key : node.network_members)
-    {
-        os << member_key << " ";
-    }
-    os << std::endl;
-    return os;
-}
-
-// --- Main Function for Demonstration ---
-void Node::submitTrx(std::string typ, std::string payload)
-{
-    std::vector<ChainTransaction> new_txs;
-    new_txs.emplace_back(ChainTransaction{typ, payload, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()});
-    this->create_event(new_txs);
+    std::lock_guard<std::mutex> lock(this->lock);
+    auto socket = new ChainSocketItem(this, conn, this->core);
+    this->shardPeers.insert({origin, socket});
+    std::thread t([this, origin, &socket]
+                  { this->listenToPackets(origin, socket); });
+    t.detach();
 }

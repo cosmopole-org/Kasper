@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../core/core/actionio.h"
+
 struct Request
 {
 public:

@@ -29,6 +29,7 @@ namespace service_hello
         std::string username = input.data["name"].template get<std::string>();
         output.resCode = 0;
         output.data["message"] = "hello " + username + " !";
+        state.tools->getChain()->submitTrx("message", "hello " + username + " !");
         return output; });
     }
 }

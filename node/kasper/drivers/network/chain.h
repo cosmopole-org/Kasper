@@ -1,105 +1,89 @@
 #pragma once
 
-#include "ichain.h"
-#include <string>
-#include <vector>
-#include <map>
-#include <chrono>
-#include <set>
+#include <queue>
 #include <mutex>
-#include <thread> // For std::thread in Node class declaration
-#include <queue>  // For std::queue in can_see
+#include <condition_variable>
+#include <string>
+#include <future>
+#include <unordered_map>
+#include <cstring>
+#include <iostream>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include "../../utils/nlohmann/json.hpp"
+#include <any>
+#include <optional>
+#include "itcp.h"
+#include "ichain.h"
+#include "request.h"
+#include "../../utils/utils.h"
+#include "../../core/core/icore.h"
+#include "../../core/core/actionio.h"
+#include "../file/datapack.h"
+#include <thread>
+#include "queue.h"
+#include <functional>
+#include <vector>
+#include "block.h"
 
-// Forward declarations for Boost.Asio components if used, but since we're using
-// raw sockets, these are not strictly necessary in the header.
-// However, if we were to define socket-related members in Node, we'd need them.
-// For raw sockets, we just need the int server_socket_fd and std::thread.
+using json = nlohmann::json;
 
-// --- Placeholder Cryptography Types ---
-using Hash = std::string;
-using PublicKey = std::string;
-using PrivateKey = std::string;
-using Signature = std::string;
-
-// --- ChainTransaction Structure ---
-struct ChainTransaction {
-    std::string typ_id;
-    std::string payload_id;
-    long long timestamp;
-
-    std::string to_string() const;
-
-    friend std::ostream& operator<<(std::ostream& os, const ChainTransaction& tx);
-};
-
-// --- Event Structure ---
-struct Event {
-    Hash self_parent_hash;
-    Hash other_parent_hash;
-    std::vector<ChainTransaction> transactions;
-    PublicKey creator_public_key;
-    Signature signature;
-    long long timestamp;
-    Hash event_hash;
-    int round_num;
-    bool is_witness;
-
-    Event(); // Default constructor for deserialization
-    Event(Hash self_parent, Hash other_parent, std::vector<ChainTransaction> txs, PublicKey creator_pub_key, PrivateKey creator_priv_key);
-
-    bool verify() const;
-
-    friend std::ostream& operator<<(std::ostream& os, const Event& event);
-};
-
-// --- Global Helper Functions (Cryptography & Serialization) ---
-Hash hash_data(const std::string& data);
-std::pair<PublicKey, PrivateKey> generate_key_pair();
-Signature sign_data(const std::string& data, const PrivateKey& private_key);
-bool verify_signature(const std::string& data, const Signature& signature, const PublicKey& public_key);
-
-std::string serialize_transaction(const ChainTransaction& tx);
-std::vector<std::string> split_string(const std::string& s, char delimiter);
-std::string serialize_event(const Event& event);
-Event deserialize_event(const std::string& data);
-
-// --- Node Class ---
-class Node : public IChain {
+class ChainSocketItem
+{
 public:
-    PublicKey public_key;
-    PrivateKey private_key;
-    std::string node_id;
-    int port;
-    std::set<std::string> known_peer_addresses;
-    std::set<PublicKey> network_members;
+    IChain *chain;
+    int conn;
+    SafeQueue<DataPack> buffer;
+    bool ack;
+    ICore *core;
+    EVP_PKEY *pkey;
+    std::mutex lock;
+    ChainSocketItem(IChain *chain, int conn, ICore *core);
+    void writeRawUpdate(std::string targetType, std::string targetId, std::string key, char *updatePack, uint32_t len);
+    void writeObjUpdate(std::string targetType, std::string targetId, std::string key, json updatePack);
+    void writeRawResponse(std::string requestId, int resCode, char *response, uint32_t len);
+    void writeObjResponse(std::string requestId, int resCode, json response);
+    void pushBuffer();
+    std::function<void(std::string, std::any, size_t)> connectListener(std::string uid);
+    void processPacket(std::string origin, char *packet, uint32_t len);
+    ChainSocketItem *openSocket(std::string origin);
+};
 
-    std::map<Hash, Event> event_dag;
-    Hash last_self_event_hash;
-    int current_consensus_round;
+class Chain : public IChain
+{
+public:
+    ICore *core;
+    std::vector<std::pair<std::string, std::string>> pendingTrxs;
+    std::vector<Event *> pendingEvents;
+    std::vector<Block *> blocks;
+    std::unordered_map<std::string, Event *> proofEvents;
+    std::unordered_map<std::string, ChainSocketItem *> shardPeers;
+    SafeQueue<Block *> nextBlockQueue;
+    std::unordered_set<std::string> readyElectors;
+    std::unordered_map<std::string, std::string> nextEventVotes;
+    int pendingBlockElections;
+    bool ready = false;
+    bool readyForNewElection = true;
+    std::string chosenProof;
+    std::mutex lock;
+    std::condition_variable cond_var_;
+    std::mutex mtx;
 
-    // Networking components for raw sockets
-    int server_socket_fd;
-    std::thread server_thread;
-    mutable std::mutex dag_mutex;
-
-    Node(std::string id, int p, const std::vector<std::string>& initial_peers);
-    ~Node();
-
-    void handle_incoming_connection(int client_socket_fd, const std::string& remote_endpoint_str);
-    void start_server();
-    void start_gossip();
-    Event create_event(const std::vector<ChainTransaction>& new_transactions);
-    bool add_event(const Event& event);
-
-    // Consensus-related functions
-    void calculate_event_properties(const Hash& event_hash);
-    bool can_see(const Hash& descendant_hash, const Hash& ancestor_hash) const;
-    bool strongly_see(const Hash& event_x_hash, const Hash& witness_w_hash) const;
-    std::set<Hash> find_witnesses_for_round(int round) const;
-    std::set<Hash> elect_famous_witnesses(int round) const;
-    std::vector<ChainTransaction> determine_event_order(int round, const std::set<Hash>& famous_witnesses_for_round) const;
-    void try_advance_consensus();
-	void submitTrx(std::string typ, std::string payload) override;
-
-    friend std::ostream& operator<<(std::ostream& os, const Node& node);
+    Chain(ICore *core);
+    void handleConnection(std::string origin, int conn);
+    void listenToPackets(std::string origin, ChainSocketItem* socket);
+    void run(int port) override;
+    void submitTrx(std::string t, std::string data) override;
+    void addPendingEvent(Event *e) override;
+    bool addBackedProof(std::string proof, std::string origin, std::string signedProof) override;
+    void broadcastInShard(char *payload, uint32_t len) override;
+    void sendToShardMember(std::string origin, char *payload, uint32_t len) override;
+    bool memorizeResponseBacked(std::string proof, std::string origin) override;
+    Event *getEventByProof(std::string proof) override;
+    uint64_t getOrderIndexOfEvent(std::string proof) override;
+    void voteForNextEvent(std::string origin, std::string eventProof) override;
+    void pushNewElection() override;
+    void notifyElectorReady(std::string origin) override;
+    void removeConnection(std::string origin) override;
 };

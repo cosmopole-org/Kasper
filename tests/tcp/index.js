@@ -173,22 +173,25 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/create", { "username": "keyhan4" });
+    let res = await sendRequest("", "/api/hello", { "name": "keyhan" });
     console.log(res.resCode, res.obj);
 
-    privateKey = Buffer.from(
-        res.obj.user.privateKey,
-        'utf-8'
-    )
-    let userId = res.obj.user.id;
+    // let res = await sendRequest("", "/users/create", { "username": "keyhan4" });
+    // console.log(res.resCode, res.obj);
+
+    // privateKey = Buffer.from(
+    //     res.obj.user.privateKey,
+    //     'utf-8'
+    // )
+    // let userId = res.obj.user.id;
     // await sendRequest(userId, "authenticate", {});
 
-    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.1" });
-    console.log(res.resCode, res.obj);
-    let pointOneId = res.obj.point.id;
+    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.1" });
+    // console.log(res.resCode, res.obj);
+    // let pointOneId = res.obj.point.id;
 
-    res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
-    console.log(res.resCode, res.obj);
+    // res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
+    // console.log(res.resCode, res.obj);
 
     // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
     // console.log(res.resCode, res.obj);

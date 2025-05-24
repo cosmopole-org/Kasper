@@ -57,4 +57,5 @@ void Core::run()
 {
     this->tools->getNetwork()->run(8080);
     this->tools->getFederation()->run(8081);
+    this->tools->getChain()->run(8082);
 }
