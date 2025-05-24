@@ -26,6 +26,8 @@ public:
     bool stringStartsWith(const std::string &s1, const std::string &s2);
     int parseDataAsInt(char *buffer);
     char *convertIntToData(int n);
+    long parseDataAsLong(char *buffer);
+    char *convertLongToData(long n);
     std::string getKasperNodeIPAddress();
     EVP_PKEY *load_public_key_from_string(const std::string &keyStr);
     EVP_PKEY *load_private_key_from_string(const std::string &keyStr);

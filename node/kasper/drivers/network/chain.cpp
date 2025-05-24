@@ -170,8 +170,7 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
 		}
 		std::cerr << "proof: " << proof << std::endl;
 
-		auto e = this->chain->getEventByProof(proof);
-		this->chain->broadcastInShard((char *)e->myUpdate.c_str(), e->myUpdate.size());
+		this->chain->pushNewElection();
 	}
 	else if (packet[0] == 0x04)
 	{
@@ -184,10 +183,10 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
 
 		char *tempBytes = new char[4];
 		memcpy(tempBytes, packet + pointer, 4);
+		pointer += 4;
 		uint32_t signLength = Utils::getInstance().parseDataAsInt(tempBytes);
 		delete tempBytes;
 		std::cerr << "signature length: " << signLength << std::endl;
-		pointer += 4;
 		if (signLength > 0)
 		{
 			char *da = new char[signLength];
@@ -200,10 +199,10 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
 
 		char *tempBytes2 = new char[4];
 		memcpy(tempBytes2, packet + pointer, 4);
+		pointer += 4;
 		uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
 		delete tempBytes2;
 		std::cerr << "data length: " << dataLength << std::endl;
-		pointer += 4;
 		if (dataLength > 0)
 		{
 			char *da = new char[dataLength];
@@ -214,15 +213,48 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
 		}
 		std::cerr << "proof: " << proof << std::endl;
 
-		if (this->chain->addBackedProof(proof, origin, signature))
+		this->chain->pushToEventQueue(this->chain->getEventByProof(proof));
+	}
+	else if (packet[0] == 0x05)
+	{
+		std::cerr << "received consensus packet phase 5" << std::endl;
+
+		std::string signature = "";
+		std::string vote = "";
+
+		char *tempBytes = new char[4];
+		memcpy(tempBytes, packet + pointer, 4);
+		pointer += 4;
+		uint32_t signLength = Utils::getInstance().parseDataAsInt(tempBytes);
+		delete tempBytes;
+		std::cerr << "signature length: " << signLength << std::endl;
+		if (signLength > 0)
 		{
-			int index = -1;
-			{
-				std::lock_guard<std::mutex> lock(this->lock);
-				index = this->chain->getOrderIndexOfEvent(proof);
-			}
-			
+			char *da = new char[signLength];
+			memcpy(da, packet + pointer, signLength);
+			signature = std::string(da, signLength);
+			delete da;
+			pointer += signLength;
 		}
+		std::cerr << "signature: " << signature << std::endl;
+
+		char *tempBytes2 = new char[4];
+		memcpy(tempBytes2, packet + pointer, 4);
+		pointer += 4;
+		uint32_t dataLength = Utils::getInstance().parseDataAsInt(tempBytes2);
+		delete tempBytes2;
+		std::cerr << "data length: " << dataLength << std::endl;
+		if (dataLength > 0)
+		{
+			char *da = new char[dataLength];
+			memcpy(da, packet + pointer, dataLength);
+			vote = std::string(da, dataLength);
+			delete da;
+			pointer += dataLength;
+		}
+		std::cerr << "vote: " << vote << std::endl;
+
+		this->chain->voteForNextEvent(origin, vote);
 	}
 }
 
@@ -242,9 +274,84 @@ Chain::Chain(ICore *core)
 	this->pendingEvents = {};
 }
 
+void Chain::pushNewElection()
+{
+	std::lock_guard<std::mutex> lock(this->lock);
+	this->pendingBlockElections++;
+}
+
+void Chain::voteForNextEvent(std::string origin, std::string eventProof)
+{
+	Event *choosenEvent = NULL;
+	bool done = false;
+	{
+		std::lock_guard<std::mutex> lock(this->lock);
+		this->nextEventVotes[origin] = eventProof;
+		if (this->nextEventVotes.size() == this->shardPeers.size())
+		{
+			std::unordered_map<std::string, int> votes{};
+			for (auto vote : this->nextEventVotes)
+			{
+				if (votes.find(vote.second) == votes.end())
+				{
+					votes[vote.second] = 1;
+				}
+				else
+				{
+					votes[vote.second] = votes[vote.second] + 1;
+				}
+			}
+			std::vector<std::pair<std::string, int>> sortedArr{};
+			for (auto item : votes)
+			{
+				sortedArr.push_back({item.first, item.second});
+			}
+			std::sort(sortedArr.begin(), sortedArr.end(), [](const std::pair<std::string, int> &a, const std::pair<std::string, int> &b)
+					  { return a.second > b.second; });
+			this->nextEventVotes.clear();
+
+			choosenEvent = this->getEventByProof(sortedArr[0].first);
+			done = true;
+		}
+	}
+	if (done)
+	{
+		{
+			std::lock_guard<std::mutex> lock(this->lock);
+			this->nextBlockQueue.push(new Block{choosenEvent->trxs});
+		}
+		{
+			std::lock_guard<std::mutex> lock(mtx);
+			ready = true;
+		}
+		this->cond_var_.notify_one();
+	}
+}
+
+uint64_t Chain::getOrderIndexOfEvent(std::string proof)
+{
+	std::lock_guard<std::mutex> lock(this->lock);
+	uint64_t index = 0;
+	uint64_t count = this->pendingEvents.size();
+	for (auto i = this->pendingEvents.rbegin(); i != this->pendingEvents.rend(); ++i)
+	{
+		if ((*i)->proof == proof)
+		{
+			return count - index - 1;
+		}
+		index++;
+	}
+	return std::numeric_limits<uint64_t>::max();
+}
+
 Event *Chain::getEventByProof(std::string proof)
 {
 	return this->proofEvents[proof];
+}
+
+void Chain::pushToEventQueue(Event *e)
+{
+	return this->nextEventsQueue.push(e);
 }
 
 void Chain::run(int port)
@@ -338,6 +445,83 @@ void Chain::run(int port)
 						std::this_thread::sleep_for(std::chrono::milliseconds(100));
 					} });
 	t2.detach();
+
+	std::thread t3([this]
+				   {
+		 while (true)
+		 {
+			Event *e = this->nextEventsQueue.wait_and_pop();
+
+			std::string signature = this->core->signPacket(e->proof);
+			const char *proofBytes = e->proof.c_str();
+			char *proofLenBytes = Utils::getInstance().convertIntToData(e->proof.size());
+			const char *signBytes = signature.c_str();
+			char *signLenBytes = Utils::getInstance().convertIntToData(signature.size());
+			uint32_t updateLen = 1 + 4 + e->proof.size() + 4 + signature.size();
+			char *orderUpdate = new char[updateLen];
+			uint32_t pointer = 1;
+			orderUpdate[0] = 0x05;
+			memcpy(orderUpdate + pointer, proofLenBytes, 4);
+			pointer += 4;
+			memcpy(orderUpdate + pointer, proofBytes, e->proof.size());
+			pointer += e->proof.size();
+			memcpy(orderUpdate + pointer, signLenBytes, 4);
+			pointer += 4;
+			memcpy(orderUpdate + pointer, signBytes, signature.size());
+			pointer += signature.size();
+
+			this->broadcastInShard(orderUpdate, updateLen);
+
+			delete orderUpdate;
+			delete signLenBytes;
+			delete proofLenBytes;
+			
+			std::unique_lock<std::mutex> lock(mtx);
+			this->cond_var_.wait(lock, [this]{ return this->ready; });
+			{
+				std::lock_guard<std::mutex> lock(mtx);
+				ready = false;
+			}
+		 } });
+	t3.detach();
+
+	std::thread t4([this]
+				   {
+			Block *block = this->nextBlockQueue.wait_and_pop();
+			{
+				std::lock_guard<std::mutex> lock(this->lock);
+				this->blocks.push_back(block);
+			}
+			for (auto trx : block->trxs) {
+				std::cerr << "received transaction: " << trx.first << " " << trx.second << std::endl;
+			} });
+	t4.detach();
+
+	std::thread t5([this]
+				   {
+				while (true)
+				{
+					{
+						std::lock_guard<std::mutex> lock(this->lock);
+						this->pendingBlockElections--;
+					}
+					
+					auto e = this.events
+					{
+						std::lock_guard<std::mutex> lock(this->lock);
+						this->voteForNextEvent(this->core->getIp(), proof);
+					}
+					this->broadcastInShard((char *)e->myUpdate.c_str(), e->myUpdate.size());
+
+					std::unique_lock<std::mutex> lock(mtx);
+					this->cond_var_.wait(lock, [this]{ return this->ready; });
+					{
+						std::lock_guard<std::mutex> lock(mtx);
+						ready = false;
+					}
+				}
+   				   });
+	t5.detach();
 }
 
 void Chain::submitTrx(std::string t, std::string data)
@@ -361,6 +545,16 @@ void Chain::broadcastInShard(char *payload, uint32_t len)
 		send(s.second->conn, payloadLenBytes, 4, 0);
 		send(s.second->conn, payload, len, 0);
 	}
+	delete payloadLenBytes;
+}
+
+void Chain::sendToShardMember(std::string origin, char *payload, uint32_t len)
+{
+	char *payloadLenBytes = Utils::getInstance().convertIntToData(len);
+	std::lock_guard<std::mutex> lock(this->lock);
+	auto s = this->shardPeers[origin];
+	send(s->conn, payloadLenBytes, 4, 0);
+	send(s->conn, payload, len, 0);
 	delete payloadLenBytes;
 }
 

@@ -15,11 +15,11 @@ public:
 	std::string myUpdate;
 	std::unordered_map<std::string, std::string> backedProofs;
 	std::unordered_set<std::string> backedResponses;
+	std::unordered_map<std::string, uint64_t> votes;
 };
 
 class Block
 {
 public:
-	uint64_t index;
 	std::vector<std::pair<std::string, std::string>> trxs;
 };

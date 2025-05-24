@@ -128,11 +128,13 @@ std::vector<unsigned char> base64_decode(const std::string &base64_input)
 std::string Utils::sign_payload_with_rsa(EVP_PKEY *pkey,
                                          std::string data)
 {
-    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    if (!ctx) return "";
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx)
+        return "";
 
     if (EVP_SignInit(ctx, EVP_sha256()) != 1 ||
-        EVP_SignUpdate(ctx, data.c_str(), data.size()) != 1) {
+        EVP_SignUpdate(ctx, data.c_str(), data.size()) != 1)
+    {
         EVP_MD_CTX_free(ctx);
         return "";
     }
@@ -142,16 +144,18 @@ std::string Utils::sign_payload_with_rsa(EVP_PKEY *pkey,
     unsigned int sig_len = EVP_PKEY_size(pkey);
     signature.resize(sig_len);
 
-    if (EVP_SignFinal(ctx, signature.data(), &sig_len, pkey) != 1) {
+    if (EVP_SignFinal(ctx, signature.data(), &sig_len, pkey) != 1)
+    {
         EVP_MD_CTX_free(ctx);
         return "";
     }
 
     signature.resize(sig_len);
     EVP_MD_CTX_free(ctx);
-    
+
     std::string sign = "";
-    for (auto unit : signature) {
+    for (auto unit : signature)
+    {
         sign.push_back((char)unit);
     }
     return sign;
@@ -261,6 +265,18 @@ int Utils::parseDataAsInt(char *buffer)
                     (unsigned char)(buffer[3]));
 }
 
+long Utils::parseDataAsLong(char *buffer)
+{
+    return uint64_t((unsigned char)(buffer[0]) << 56 |
+                    (unsigned char)(buffer[1]) << 48 |
+                    (unsigned char)(buffer[2]) << 40 |
+                    (unsigned char)(buffer[3]) << 32 |
+                    (unsigned char)(buffer[4]) << 24 |
+                    (unsigned char)(buffer[5]) << 16 |
+                    (unsigned char)(buffer[6]) << 8 |
+                    (unsigned char)(buffer[7]));
+}
+
 char *Utils::convertIntToData(int n)
 {
     char *bytes = new char[4];
@@ -268,5 +284,19 @@ char *Utils::convertIntToData(int n)
     bytes[2] = (n >> 8) & 0xFF;
     bytes[1] = (n >> 16) & 0xFF;
     bytes[0] = (n >> 24) & 0xFF;
+    return bytes;
+}
+
+char *Utils::convertLongToData(long n)
+{
+    char *bytes = new char[4];
+    bytes[7] = n & 0xFF;
+    bytes[6] = (n >> 8) & 0xFF;
+    bytes[5] = (n >> 16) & 0xFF;
+    bytes[4] = (n >> 24) & 0xFF;
+    bytes[3] = (n >> 32) & 0xFF;
+    bytes[2] = (n >> 40) & 0xFF;
+    bytes[1] = (n >> 48) & 0xFF;
+    bytes[0] = (n >> 56) & 0xFF;
     return bytes;
 }

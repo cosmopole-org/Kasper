@@ -55,11 +55,18 @@ class Chain : public IChain
 public:
 	ICore *core;
 	std::vector<std::pair<std::string, std::string>> pendingTrxs;
-	std::vector<Event*> pendingEvents;
-	std::vector<Block> blocks;
+	std::vector<Event *> pendingEvents;
+	std::vector<Block *> blocks;
 	std::unordered_map<std::string, Event *> proofEvents;
 	std::unordered_map<std::string, ChainSocketItem *> shardPeers;
+	SafeQueue<Event *> nextEventsQueue;
+	SafeQueue<Block *> nextBlockQueue;
+	std::unordered_map<std::string, std::string> nextEventVotes;
+	int pendingBlockElections;
+	bool ready = false;
 	std::mutex lock;
+	std::condition_variable cond_var_;
+	std::mutex mtx;
 
 	Chain(ICore *core);
 	void handleConnection(std::string origin, int conn);
@@ -67,8 +74,12 @@ public:
 	void submitTrx(std::string t, std::string data) override;
 	void addPendingEvent(Event *e) override;
 	bool addBackedProof(std::string proof, std::string origin, std::string signedProof) override;
-	void broadcastInShard(char* payload, uint32_t len) override;
+	void broadcastInShard(char *payload, uint32_t len) override;
+	void sendToShardMember(std::string origin, char *payload, uint32_t len) override;
 	bool memorizeResponseBacked(std::string proof, std::string origin) override;
 	Event *getEventByProof(std::string proof) override;
-	int getOrderIndexOfEvent(std::string proof) override;
+	uint64_t getOrderIndexOfEvent(std::string proof) override;
+	void pushToEventQueue(Event *e) override;
+	void voteForNextEvent(std::string origin, std::string eventProof) override;
+	void pushNewElection() override;
 };
