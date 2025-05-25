@@ -107,6 +107,7 @@ require (
 	github.com/docker/docker v28.1.1+incompatible
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gocql/gocql v1.7.0
+	github.com/theodesp/blockingQueues v0.0.0-20171230192932-26531ad66e7c
 )
 
 require (

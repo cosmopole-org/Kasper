@@ -6,13 +6,15 @@ import (
 	"kasper/src/abstract/adapters/signaler"
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
+	"kasper/src/drivers/network/chain"
 	"kasper/src/drivers/network/tcp"
 )
 
 type Network struct {
-	core core.ICore
-	tcp  network.ITcp
-	fed  network.IFederation
+	core  core.ICore
+	tcp   network.ITcp
+	fed   network.IFederation
+	chain network.IChain
 }
 
 func (n *Network) Tcp() network.ITcp {
@@ -21,6 +23,10 @@ func (n *Network) Tcp() network.ITcp {
 
 func (n *Network) Federation() network.IFederation {
 	return n.fed
+}
+
+func (n *Network) Chain() network.IChain {
+	return n.chain
 }
 
 func NewNetwork(
@@ -33,6 +39,7 @@ func NewNetwork(
 		core: core,
 		tcp:  tcp.NewTcp(core),
 		fed:  fed,
+		chain: chain.NewChain(core),
 	}
 	return net
 }

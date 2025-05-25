@@ -4,6 +4,29 @@
 
 using json = nlohmann::json;
 
+void sendBuffer(int ClientSocket, const char *buf, int len)
+{
+    int num_left = len;
+    int num_sent;
+    const char *cp = buf;
+
+    while (num_left > 0)
+    {
+        num_sent = send(ClientSocket, cp, num_left, 0);
+
+        if (num_sent < 0)
+        {
+            std::cout << "socket send error" << std::endl;
+            break;
+        }
+
+        assert(num_sent <= num_left);
+
+        num_left -= num_sent;
+        cp += num_sent;
+    }
+}
+
 void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t len)
 {
     std::cout << "received packet length: " << len << std::endl;
@@ -15,7 +38,7 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
         std::string signature = "";
         std::string data = "";
 
-        std::cout << "received consensus packet phase 1" << std::endl;
+        std::cout << "received consensus packet phase 1 from " << origin << std::endl;
 
         char *tempBytes = new char[4];
         memcpy(tempBytes, packet + pointer, 4);
@@ -53,10 +76,14 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
         json dataObj = eventObj["trxs"];
         std::string claimedOrigin = eventObj["origin"].template get<std::string>();
 
+        std::cout << "step 1" << std::endl;
+
         if (claimedOrigin != origin)
         {
             return;
         }
+
+        std::cout << "step 2" << std::endl;
 
         std::vector<std::pair<std::string, std::string>> trxs{};
         for (json::iterator item = dataObj.begin(); item != dataObj.end(); ++item)
@@ -72,6 +99,8 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
         const char *proofBytes = e->proof.c_str();
         uint32_t proofLen = e->proof.size();
         char *proofLenBytes = Utils::getInstance().convertIntToData(proofLen);
+
+        std::cout << "step 3" << std::endl;
 
         uint32_t updateLen = 1 + 4 + proofSignLen + 4 + proofLen;
 
@@ -90,6 +119,8 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
 
         delete update;
 
+        std::cout << "step 4" << std::endl;
+
         uint32_t responseLen = 1 + 4 + proofLen;
         char *response = new char[responseLen];
         response[0] = 0x02;
@@ -98,18 +129,20 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
         pointer += 4;
         memcpy(response + pointer, proofBytes, proofLen);
         pointer += proofLen;
-        char *responseLenBytes = Utils::getInstance().convertIntToData(responseLen);
-        send(this->conn, responseLenBytes, 4, 0);
-        send(this->conn, response, responseLen, 0);
+
+        std::cout << "step 5" << std::endl;
+
+        this->chain->sendToShardMember(origin, response, responseLen);
+
+        std::cout << "step 6" << std::endl;
 
         delete response;
-        delete responseLenBytes;
     }
     else if (packet[0] == 0x02)
     {
         std::string proof = "";
 
-        std::cout << "received consensus packet phase 2" << std::endl;
+        std::cout << "received consensus packet phase 2 from " << origin << std::endl;
 
         char *tempBytes2 = new char[4];
         memcpy(tempBytes2, packet + pointer, 4);
@@ -155,7 +188,7 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
     {
         std::string proof = "";
 
-        std::cout << "received consensus packet phase 3" << std::endl;
+        std::cout << "received consensus packet phase 3 from " << origin << std::endl;
 
         char *tempBytes2 = new char[4];
         memcpy(tempBytes2, packet + pointer, 4);
@@ -177,7 +210,7 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
     }
     else if (packet[0] == 0x04)
     {
-        std::cout << "received consensus packet phase 4" << std::endl;
+        std::cout << "received consensus packet phase 4 from " << origin << std::endl;
 
         std::string signature = "";
         std::string vote = "";
@@ -218,7 +251,7 @@ void ChainSocketItem::processPacket(std::string origin, char *packet, uint32_t l
     }
     else if (packet[0] == 0x05)
     {
-        std::cout << "received consensus packet phase 5" << std::endl;
+        std::cout << "received consensus packet phase 5 from " << origin << std::endl;
 
         this->chain->notifyElectorReady(origin);
     }
@@ -318,31 +351,12 @@ void Chain::voteForNextEvent(std::string origin, std::string eventProof)
     }
     if (done)
     {
-        {
-            std::lock_guard<std::mutex> lock(this->lock);
-            this->nextBlockQueue.push(new Block{choosenEvent->trxs});
-        }
+        this->nextBlockQueue.push(new Block{choosenEvent->trxs});
         char *startNewElectionSignal = new char[1];
         startNewElectionSignal[0] = 0x05;
         this->broadcastInShard(startNewElectionSignal, 1);
         delete startNewElectionSignal;
     }
-}
-
-uint64_t Chain::getOrderIndexOfEvent(std::string proof)
-{
-    std::lock_guard<std::mutex> lock(this->lock);
-    uint64_t index = 0;
-    uint64_t count = this->pendingEvents.size();
-    for (auto i = this->pendingEvents.rbegin(); i != this->pendingEvents.rend(); ++i)
-    {
-        if ((*i)->proof == proof)
-        {
-            return count - index - 1;
-        }
-        index++;
-    }
-    return std::numeric_limits<uint64_t>::max();
 }
 
 Event *Chain::getEventByProof(std::string proof)
@@ -605,8 +619,8 @@ void Chain::broadcastInShard(char *payload, uint32_t len)
         }
         std::cout << s.first << " " << (s.second == NULL) << std::endl
                   << std::endl;
-        send(s.second->conn, payloadLenBytes, 4, 0);
-        send(s.second->conn, payload, len, 0);
+        sendBuffer(s.second->conn, payloadLenBytes, 4);
+        sendBuffer(s.second->conn, payload, len);
     }
     delete payloadLenBytes;
 }
@@ -616,8 +630,8 @@ void Chain::sendToShardMember(std::string origin, char *payload, uint32_t len)
     char *payloadLenBytes = Utils::getInstance().convertIntToData(len);
     std::lock_guard<std::mutex> lock(this->lock);
     auto s = this->shardPeers[origin];
-    send(s->conn, payloadLenBytes, 4, 0);
-    send(s->conn, payload, len, 0);
+    sendBuffer(s->conn, payloadLenBytes, 4);
+    sendBuffer(s->conn, payload, len);
     delete payloadLenBytes;
 }
 
@@ -696,8 +710,15 @@ void Chain::listenToPackets(std::string origin, ChainSocketItem *socket)
             else if (readLength == -1)
             {
                 std::cout << "socket error" << std::endl;
-                return;
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                continue;
             }
+            char *temp = new char[readLength];
+            memcpy(temp, buf, readLength);
+            std::cout << std::endl
+                      << "received from: " << std::string(temp, readLength) << std::endl
+                      << std::endl;
+            delete temp;
             oldReadCount = readCount;
             readCount += readLength;
             memcpy(nextBuf + remainedReadLength, buf, readLength);

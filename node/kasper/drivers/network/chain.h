@@ -81,7 +81,6 @@ public:
     void sendToShardMember(std::string origin, char *payload, uint32_t len) override;
     bool memorizeResponseBacked(std::string proof, std::string origin) override;
     Event *getEventByProof(std::string proof) override;
-    uint64_t getOrderIndexOfEvent(std::string proof) override;
     void voteForNextEvent(std::string origin, std::string eventProof) override;
     void pushNewElection() override;
     void notifyElectorReady(std::string origin) override;

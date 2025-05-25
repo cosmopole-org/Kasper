@@ -759,18 +759,18 @@ func (c *Core) DoElection() {
 func (c *Core) Run() {
 
 	future.Async(func() {
-		c.babbleInst.Run()
+		c.tools.Network().Chain().Run(8082)
 	}, false)
 
-	future.Async(func() {
-		for {
-			time.Sleep(time.Duration(1) * time.Second)
-			minutes := time.Now().Minute()
-			seconds := time.Now().Second()
-			if (minutes == 0) && ((seconds >= 0) && (seconds <= 2)) {
-				c.DoElection()
-				time.Sleep(2 * time.Minute)
-			}
-		}
-	}, true)
+	// future.Async(func() {
+	// 	for {
+	// 		time.Sleep(time.Duration(1) * time.Second)
+	// 		minutes := time.Now().Minute()
+	// 		seconds := time.Now().Second()
+	// 		if (minutes == 0) && ((seconds >= 0) && (seconds <= 2)) {
+	// 			c.DoElection()
+	// 			time.Sleep(2 * time.Minute)
+	// 		}
+	// 	}
+	// }, true)
 }
