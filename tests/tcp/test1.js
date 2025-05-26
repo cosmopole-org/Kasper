@@ -5,7 +5,7 @@ const { exec } = require('child_process');
 const readline = require('node:readline');
 
 const port = 8080;
-let host = '172.77.5.1';
+let host = '172.77.5.2';
 var privateKey = undefined;
 
 let callbacks = {};
@@ -173,22 +173,22 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/api/hello", { "name": "node1" });
+    let res = await sendRequest("", "/users/register", { "username": "kasperOfCosmopole4" });
     console.log(res.resCode, res.obj);
 
     // let res = await sendRequest("", "/users/create", { "username": "keyhan4" });
     // console.log(res.resCode, res.obj);
 
-    // privateKey = Buffer.from(
-    //     res.obj.user.privateKey,
-    //     'utf-8'
-    // )
-    // let userId = res.obj.user.id;
+    privateKey = Buffer.from(
+        "-----BEGIN RSA PRIVATE KEY-----\n" + res.obj.privateKey + "\n-----END RSA PRIVATE KEY-----\n",
+        'utf-8'
+    )
+    let userId = res.obj.user.id;
     // await sendRequest(userId, "authenticate", {});
 
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.1" });
-    // console.log(res.resCode, res.obj);
-    // let pointOneId = res.obj.point.id;
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "172.77.5.3" });
+    console.log(res.resCode, res.obj);
+    let pointOneId = res.obj.point.id;
 
     // res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
     // console.log(res.resCode, res.obj);

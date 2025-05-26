@@ -5,7 +5,6 @@ import (
 	"kasper/src/abstract/state"
 	inputsauth "kasper/src/shell/api/inputs/auth"
 	outputsauth "kasper/src/shell/api/outputs/auth"
-	"strings"
 )
 
 type Actions struct {
@@ -23,10 +22,5 @@ func (a *Actions) GetServerPublicKey(_ state.IState, _ inputsauth.GetServerKeyIn
 
 // GetServersMap /auths/getServersMap check [ false false false ] access [ true false false false GET ]
 func (a *Actions) GetServersMap(_ state.IState, _ inputsauth.GetServersMapInput) (any, error) {
-	m := []string{}
-	for _, peer := range a.App.Chain().Peers.Peers {
-		arr := strings.Split(peer.NetAddr, ":")
-		m = append(m, strings.Join(arr[0:len(arr)-1], ":"))
-	}
-	return outputsauth.GetServersMapOutput{Servers: m}, nil
+	return outputsauth.GetServersMapOutput{Servers: a.App.Tools().Network().Chain().Peers()}, nil
 }

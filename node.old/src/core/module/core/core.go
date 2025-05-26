@@ -29,7 +29,6 @@ import (
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/models/worker"
 	"kasper/src/abstract/state"
-	"kasper/src/babble"
 	actor "kasper/src/core/module/actor"
 	mainstate "kasper/src/core/module/actor/model/state"
 	module_trx "kasper/src/core/module/actor/model/trx"
@@ -60,8 +59,6 @@ import (
 
 	cryp "crypto"
 	"crypto/rand"
-
-	"kasper/src/proxy/inmem"
 )
 
 type Tools struct {
@@ -115,7 +112,6 @@ type Core struct {
 	gods           []string
 	chain          chan any
 	chainCallbacks map[string]*chain.ChainCallback
-	babbleInst     *babble.Babble
 	Ip             string
 	elections      []chain.Election
 	elecReg        bool
@@ -140,12 +136,12 @@ func NewCore(_ string) *Core {
 	execs := map[string]bool{}
 	execs["172.77.5.1"] = true
 	execs["172.77.5.2"] = true
+	execs["172.77.5.3"] = true
 	return &Core{
 		id:             id,
 		gods:           make([]string, 0),
 		chain:          nil,
 		chainCallbacks: map[string]*chain.ChainCallback{},
-		babbleInst:     nil,
 		Ip:             localAddr,
 		elections:      nil,
 		elecReg:        false,
@@ -184,10 +180,6 @@ func (c *Core) Tools() tools.ITools {
 
 func (c *Core) Id() string {
 	return c.id
-}
-
-func (c *Core) Chain() *babble.Babble {
-	return c.babbleInst
 }
 
 func (c *Core) Gods() []string {
@@ -353,7 +345,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 					if c.elecStarter == voter && ((time.Now().UnixMilli() - c.elecStartTime) > 8000) {
 						c.elecReg = false
 						payload := [][]byte{}
-						nodeCount := c.babbleInst.Peers.Len()
+						nodeCount := len(c.tools.Network().Chain().Peers())
 						hasher := sha256.New()
 						for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
 							r := fmt.Sprintf("%d", mathrand.Intn(nodeCount))
@@ -388,7 +380,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 						return
 					}
 					if c.elections[0].Participants[voter] {
-						for i := 0; i < min(MAX_VALIDATOR_COUNT, c.babbleInst.Peers.Len()); i++ {
+						for i := 0; i < min(MAX_VALIDATOR_COUNT, len(c.tools.Network().Chain().Peers())); i++ {
 							c.elections[i].Commits[voter] = votes[i]
 						}
 						if len(c.elections[0].Commits) == len(c.elections[0].Participants) {
@@ -417,7 +409,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 						return
 					}
 					if c.elections[0].Participants[voter] {
-						for i := 0; i < min(MAX_VALIDATOR_COUNT, c.babbleInst.Peers.Len()); i++ {
+						for i := 0; i < min(MAX_VALIDATOR_COUNT, len(c.tools.Network().Chain().Peers())); i++ {
 							c.elections[i].Reveals[voter] = votes[i]
 						}
 						if len(c.elections[0].Reveals) == len(c.elections[0].Participants) {
@@ -659,8 +651,6 @@ func (c *Core) NewHgHandler() *core.HgHandler {
 func (c *Core) Load(gods []string, args map[string]interface{}) {
 	c.gods = gods
 
-	engine := args["babbleEngine"].(*babble.Babble)
-	proxy := args["babbleProxy"].(*inmem.InmemProxy)
 	sroot := args["storageRoot"].(string)
 	bdbPath := args["baseDbPath"].(string)
 	adbPath := args["appletDbPath"].(string)
@@ -700,6 +690,15 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 		elpis:    dElpis,
 	}
 
+	c.tools.Network().Chain().RegisterPipeline(func(b [][]byte) {
+		for _, trx := range b {
+			firstIndex := strings.Index(string(trx), "::")
+			log.Println(string(trx))
+			c.OnChainPacket(string(trx[:firstIndex]), trx[firstIndex+2:])
+		}
+		c.AppPendingTrxs()
+	})
+
 	c.chain = make(chan any, 1)
 	future.Async(func() {
 		for {
@@ -731,15 +730,13 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 				serialized, err := json.Marshal(op)
 				if err == nil {
 					log.Println(string(serialized))
-					proxy.SubmitTx([]byte(typ + "::" + string(serialized)))
+					c.tools.Network().Chain().SubmitTrx("message", []byte(typ + "::" + string(serialized)))
 				} else {
 					log.Println(err)
 				}
 			}
 		}
 	}, true)
-
-	c.babbleInst = engine
 }
 
 func (c *Core) DoElection() {

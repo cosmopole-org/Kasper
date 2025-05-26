@@ -21,7 +21,6 @@ import (
 	"log"
 	"net"
 	"strconv"
-	"strings"
 	"time"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
@@ -63,10 +62,8 @@ func (fed *FedNet) SecondStageForFill(port int, storage storage.IStorage, file f
 	fed.signaler = signaler
 	fed.Gateway.InjectBridge(func(socket *Socket, ip string, pack packet.OriginPacket) {
 		hostName := ""
-		for _, peer := range fed.app.Chain().Peers.Peers {
-			arr := strings.Split(peer.NetAddr, ":")
-			addr := strings.Join(arr[0:len(arr)-1], ":")
-			if addr == ip {
+		for _, peer := range fed.app.Tools().Network().Chain().Peers(){
+			if peer == ip {
 				a, err := net.LookupAddr(ip)
 				if err != nil {
 					log.Println(err)
@@ -264,10 +261,8 @@ func (fed *FedNet) SendFedRequest(destOrg string, requestId string, userId strin
 		}
 	}
 	ok := false
-	for _, peer := range fed.app.Chain().Peers.Peers {
-		arr := strings.Split(peer.NetAddr, ":")
-		addr := strings.Join(arr[0:len(arr)-1], ":")
-		if addr == ipAddr {
+	for _, peer := range fed.app.Tools().Network().Chain().Peers() {
+		if peer == ipAddr {
 			ok = true
 			break
 		}
@@ -296,10 +291,8 @@ func (fed *FedNet) SendFedResponse(destOrg string, requestId string, resCode int
 		}
 	}
 	ok := false
-	for _, peer := range fed.app.Chain().Peers.Peers {
-		arr := strings.Split(peer.NetAddr, ":")
-		addr := strings.Join(arr[0:len(arr)-1], ":")
-		if addr == ipAddr {
+	for _, peer := range fed.app.Tools().Network().Chain().Peers() {
+		if peer == ipAddr {
 			ok = true
 			break
 		}
@@ -328,10 +321,8 @@ func (fed *FedNet) SendFedUpdate(destOrg string, key string, updatePack any, tar
 		}
 	}
 	ok := false
-	for _, peer := range fed.app.Chain().Peers.Peers {
-		arr := strings.Split(peer.NetAddr, ":")
-		addr := strings.Join(arr[0:len(arr)-1], ":")
-		if addr == ipAddr {
+	for _, peer := range fed.app.Tools().Network().Chain().Peers() {
+		if peer == ipAddr {
 			ok = true
 			break
 		}
@@ -360,10 +351,8 @@ func (fed *FedNet) SendFedRequestByCallback(destOrg string, requestId string, us
 		}
 	}
 	ok := false
-	for _, peer := range fed.app.Chain().Peers.Peers {
-		arr := strings.Split(peer.NetAddr, ":")
-		addr := strings.Join(arr[0:len(arr)-1], ":")
-		if addr == ipAddr {
+	for _, peer := range fed.app.Tools().Network().Chain().Peers() {
+		if peer == ipAddr {
 			ok = true
 			break
 		}

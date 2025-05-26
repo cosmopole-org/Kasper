@@ -50,7 +50,7 @@ RUN CGO_ENABLED=1 go build -o kasper .
 
 RUN cp kasper /bin/kasper
 RUN cp .env /bin/.env
-EXPOSE 1337 1338 80 8080
+EXPOSE 1337 1338 80 8080 8081 8082
 ENV HOME=/
 ENTRYPOINT ["kasper"]
 CMD [] 

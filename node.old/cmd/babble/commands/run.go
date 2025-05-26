@@ -1,30 +1,15 @@
 package commands
 
 import (
-	"encoding/json"
-	"log"
 	"path/filepath"
 	"strconv"
-	"time"
-
-	"kasper/src/abstract/adapters/signaler"
-	"kasper/src/abstract/models/trx"
-	"kasper/src/bots/sampleBot"
-	actor_info "kasper/src/core/module/actor/model/base"
-	actor_state "kasper/src/core/module/actor/model/state"
+	
 	module_logger "kasper/src/core/module/logger"
 	kasper "kasper/src/shell"
-	inputs_points "kasper/src/shell/api/inputs/points"
-	inputs_users "kasper/src/shell/api/inputs/users"
 	plugger_api "kasper/src/shell/api/main"
-	outputs_users "kasper/src/shell/api/outputs/users"
 	plugger_machiner "kasper/src/shell/machiner/main"
 
-	"kasper/src/babble"
-	"kasper/src/proxy/inmem"
-
 	"github.com/joho/godotenv"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -70,19 +55,6 @@ func RunNet() error {
 
 	KasperApp = app
 
-	_config.Babble.Logger().WithFields(logrus.Fields{
-		"ProxyAddr":  _config.ProxyAddr,
-		"ClientAddr": _config.ClientAddr,
-	}).Debug("Config Proxy")
-	handler := app.NewHgHandler()
-	proxy := inmem.NewInmemProxy(handler, nil)
-	_config.Babble.Proxy = proxy
-	engine := babble.NewBabble(&_config.Babble)
-	if err := engine.Init(); err != nil {
-		_config.Babble.Logger().Error("Cannot initialize engine:", err)
-		return err
-	}
-
 	federationPort, err := strconv.ParseInt(os.Getenv("FEDERATION_API_PORT"), 10, 64)
 	if err != nil {
 		panic(err)
@@ -94,8 +66,6 @@ func RunNet() error {
 		},
 		map[string]interface{}{
 			"storageRoot":  os.Getenv("STORAGE_ROOT_PATH"),
-			"babbleEngine": engine,
-			"babbleProxy":  proxy,
 			"appletDbPath": os.Getenv("APPLET_DB_PATH"),
 			"baseDbPath": os.Getenv("BASE_DB_PATH"),
 			"federationPort": int(federationPort),
@@ -113,36 +83,6 @@ func RunNet() error {
 			"tcp": int(port),
 		},
 	)
-
-	time.Sleep(time.Duration(5) * time.Second)
-
-	var sampleBotUserId string
-	app.ModifyState(false, func(trx trx.ITrx) {
-		_, res, err := app.Actor().FetchAction("/users/register").Act(actor_state.NewState(actor_info.NewInfo("", ""), trx), inputs_users.LoginInput{
-			Username: "sampleBot",
-		})
-		if err != nil {
-			log.Println(err)
-			panic(err)
-		}
-		sampleBotUserId = res.(outputs_users.LoginOutput).User.Id
-	})
-	ha := &hokmagent.HokmAgent{}
-	ha.Install(app, sampleBotUserId)
-	app.Tools().Signaler().ListenToSingle(&signaler.Listener{
-		Id: sampleBotUserId,
-		Signal: func(key string, a any) {
-			data := string(a.([]byte))
-			if key == "points/signal" {
-				var inp inputs_points.SignalInput
-				e := json.Unmarshal([]byte(data), &inp)
-				if e != nil {
-					log.Println(e)
-				}
-				ha.OnSignal(inp)
-			}
-		},
-	})
 
 	<-exit
 

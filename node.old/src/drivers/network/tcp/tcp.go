@@ -232,7 +232,7 @@ func (t *Socket) connectListener(uid string) *signaler.Listener {
 }
 
 func (t *Socket) processPacket(packet []byte) {
-	if len(packet) == len([]byte("packet_received")) && string(packet) == "packet_received" {
+	if len(packet) == 1 && packet[0] == 0x01 {
 		send := func() {
 			t.Lock.Lock()
 			defer t.Lock.Unlock()

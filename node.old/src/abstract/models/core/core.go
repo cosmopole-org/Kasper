@@ -8,7 +8,6 @@ import (
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/state"
-	"kasper/src/babble"
 	"kasper/src/hashgraph"
 	"kasper/src/proxy"
 	"log"
@@ -36,7 +35,6 @@ type ICore interface {
 	ExecBaseResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update, tag string, toUserId string)
 	OnChainPacket(typ string, trxPayload []byte)
 	AppPendingTrxs()
-	Chain() *babble.Babble
 	Run()
 	NewHgHandler() *HgHandler
 	IpAddr() string

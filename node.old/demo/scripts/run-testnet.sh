@@ -2,7 +2,7 @@
 
 set -eux
 
-N=${1:-4}
+N=${1:-3}
 FASTSYNC=${2:-false}
 WEBRTC=${3:-false}
 MPWD=$(pwd)
@@ -64,6 +64,5 @@ do
     # --suspend-limit=100 \
     
     
-    docker cp $MPWD/conf/node$i node$i:/.babble
     docker start node$i
 done

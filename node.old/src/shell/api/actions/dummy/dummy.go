@@ -17,8 +17,9 @@ func Install(a *Actions) error {
 }
 
 // Hello /api/hello check [ false false false ] access [ true false false false GET ]
-func (a *Actions) Hello(_ state.IState, _ inputs.HelloInput) (any, error) {
-	return `{ "hello": "world" }`, nil
+func (a *Actions) Hello(_ state.IState, input inputs.HelloInput) (any, error) {
+	a.App.Tools().Network().Chain().SubmitTrx("message", []byte("hello " + input.Name + " !"))
+	return map[string]any{"message": "hello " + input.Name + " !"}, nil
 }
 
 // Time /api/time check [ false false false ] access [ true false false false GET ]
