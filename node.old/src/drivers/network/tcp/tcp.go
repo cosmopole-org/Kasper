@@ -22,6 +22,7 @@ import (
 )
 
 type Socket struct {
+	Id     string
 	Lock   sync.Mutex
 	Conn   net.Conn
 	Buffer [][]byte
@@ -53,49 +54,126 @@ func (t *Tcp) Listen(port int) {
 	}, true)
 }
 
-func (t *Tcp) handleConnection(conn net.Conn) {
-	connId := crypto.SecureUniqueString()
+func (t *Tcp) listenForPackets(socket *Socket) {
 	defer func() {
-		t.sockets.Remove(connId)
-		conn.Close()
+		t.sockets.Remove(socket.Id)
+		socket.Conn.Close()
 	}()
-	socket := &Socket{Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true}
-	t.sockets.Set(connId, socket)
+	origin := strings.Split(socket.Conn.RemoteAddr().String(), ":")[0]
 	lenBuf := make([]byte, 4)
 	buf := make([]byte, 1024)
+	nextBuf := make([]byte, 2048)
 	readCount := 0
 	oldReadCount := 0
+	enough := false
+	beginning := true
+	length := 0
+	readLength := 0
+	remainedReadLength := 0
+	var readData []byte
 	for {
-		_, err := conn.Read(lenBuf)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		length := int(binary.BigEndian.Uint32(lenBuf))
-		readData := make([]byte, length)
-		for {
-			readLength, err := conn.Read(buf)
+		if !enough {
+			var err error
+			readLength, err = socket.Conn.Read(buf)
 			if err != nil {
-				fmt.Println(err)
+				log.Println(origin, err)
+				log.Println(origin, "socket had error and closed")
 				return
 			}
-			oldReadCount = readCount
-			readCount += readLength
-			if readCount >= length {
-				copy(readData[oldReadCount:], buf[:readLength-(readCount-length)])
-				copy(buf[0:readCount-length], buf[readLength-(readCount-length):readLength])
-				log.Println("packet received")
-				log.Println(string(readData))
-				future.Async(func() {
-					socket.processPacket(readData)
-				}, false)
-				readCount -= length
-				break
+			func() {
+				socket.Lock.Lock()
+				defer socket.Lock.Unlock()
+				log.Println(origin, "stat 0: reading data...")
+
+				log.Println(origin, buf[0:readLength])
+
+				readCount += readLength
+				copy(nextBuf[remainedReadLength:remainedReadLength+readLength], buf[0:readLength])
+				remainedReadLength += readLength
+
+				log.Println(origin, nextBuf[0:readLength])
+
+				log.Println(origin, "stat 1:", readLength, oldReadCount, readCount, remainedReadLength)
+			}()
+		}
+
+		if beginning {
+			if readCount >= 4 {
+				func() {
+					socket.Lock.Lock()
+					defer socket.Lock.Unlock()
+					log.Println(origin, "stating stat 2...")
+					copy(lenBuf, nextBuf[0:4])
+					log.Println(origin, "nextBuf", nextBuf[0:4])
+					log.Println(origin, "lenBuf", lenBuf[0:4])
+					remainedReadLength -= 4
+					copy(nextBuf[0:remainedReadLength], nextBuf[4:remainedReadLength+4])
+					length = int(binary.BigEndian.Uint32(lenBuf))
+					readData = make([]byte, length)
+					readCount -= 4
+					beginning = false
+					enough = true
+
+					log.Println(origin, "stat 2:", remainedReadLength, length, readCount)
+				}()
+
 			} else {
-				copy(readData[oldReadCount:readCount], buf[:readLength])
+				enough = false
+			}
+		} else {
+			if remainedReadLength == 0 {
+				enough = false
+			} else if readCount >= length {
+				func() {
+					socket.Lock.Lock()
+					defer socket.Lock.Unlock()
+					log.Println(origin, "stating stat 3...")
+					log.Println(origin, "stat 3 step 1", oldReadCount, length)
+					copy(readData[oldReadCount:length], nextBuf[0:length-oldReadCount])
+					log.Println(origin, "stat 3 step 2", readLength, readCount, length)
+					readCount -= length
+					copy(nextBuf[0:readCount], nextBuf[length-oldReadCount:(length-oldReadCount)+readCount])
+					log.Println(origin, "nextBuf", nextBuf[0:readCount])
+					log.Println(origin, "stat 3 step 3", readCount, length)
+					remainedReadLength = readCount
+					log.Println(origin, "packet received")
+					packet := make([]byte, length)
+					copy(packet, readData)
+					log.Println(origin, "stat 3 step 4")
+					oldReadCount = 0
+					enough = true
+					beginning = true
+
+					log.Println(origin, "stat 3:", remainedReadLength, oldReadCount, readCount)
+
+					future.Async(func() {
+						socket.processPacket(packet)
+					}, false)
+				}()
+			} else {
+				func() {
+					socket.Lock.Lock()
+					defer socket.Lock.Unlock()
+					log.Println(origin, "stating stat 4...")
+
+					copy(readData[oldReadCount:oldReadCount+(readCount-oldReadCount)], nextBuf[0:readCount-oldReadCount])
+					remainedReadLength = 0
+					oldReadCount = readCount
+					enough = true
+
+					log.Println(origin, "stat 4:", remainedReadLength)
+				}()
 			}
 		}
 	}
+}
+
+func (t *Tcp) handleConnection(conn net.Conn) {
+	socket := &Socket{Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true}
+	t.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
+	future.Async(func() {
+		t.listenForPackets(socket)
+	}, false)
 }
 
 func (t *Socket) writeUpdate(key string, updatePack any, writeRaw bool) {

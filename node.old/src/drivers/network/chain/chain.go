@@ -38,6 +38,8 @@ type Event struct {
 	backedResponses map[string]Guarantee
 	randomNums      map[string]int
 	backedProofs    map[string]string
+	electionReadys  map[string]bool
+	phase           int
 }
 
 type Socket struct {
@@ -54,15 +56,14 @@ type Chain struct {
 	Lock                  sync.Mutex
 	app                   core.ICore
 	sockets               *cmap.ConcurrentMap[string, *Socket]
-	proofEvents           map[string]*Event
+	events                map[string]*Event
 	pendingEvents         []*Event
-	chosenProof           string
 	pendingBlockElections int
 	readyForNewElection   bool
-	ready                 bool
 	cond_var_             chan int
 	readyElectors         map[string]bool
 	nextEventVotes        map[string]string
+	nextEventQueue        *queues.BlockingQueue
 	nextBlockQueue        *queues.BlockingQueue
 	pendingTrxs           []Transaction
 	pipeline              func([][]byte)
@@ -76,27 +77,27 @@ type Ok struct {
 func NewChain(core core.ICore) *Chain {
 	m := cmap.New[*Socket]()
 	q, _ := queues.NewLinkedBlockingQueue(1000)
+	q2, _ := queues.NewLinkedBlockingQueue(1000)
 	return &Chain{
 		app:                   core,
 		sockets:               &m,
-		proofEvents:           map[string]*Event{},
-		pendingEvents:         []*Event{},
-		chosenProof:           "",
+		events:                map[string]*Event{},
 		pendingBlockElections: 0,
 		readyForNewElection:   true,
-		ready:                 false,
 		cond_var_:             make(chan int, 10000),
 		readyElectors:         map[string]bool{},
 		nextEventVotes:        map[string]string{},
 		nextBlockQueue:        q,
+		nextEventQueue:        q2,
 		pendingTrxs:           []Transaction{},
+		pendingEvents:         []*Event{},
 	}
 }
 
 func (t *Chain) appendEvent(e *Event) {
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
-	t.proofEvents[e.Proof] = e
+	t.events[e.Proof] = e
 	t.pendingEvents = append(t.pendingEvents, e)
 }
 
@@ -171,7 +172,6 @@ func (t *Chain) listenForPackets(socket *Socket) {
 
 				log.Println(origin, buf[0:readLength])
 
-				oldReadCount = readCount
 				readCount += readLength
 				copy(nextBuf[remainedReadLength:remainedReadLength+readLength], buf[0:readLength])
 				remainedReadLength += readLength
@@ -226,13 +226,15 @@ func (t *Chain) listenForPackets(socket *Socket) {
 					copy(packet, readData)
 					lengthOfPacket := length
 					log.Println(origin, "stat 3 step 4")
-					future.Async(func() {
-						socket.processPacket(origin, packet, lengthOfPacket)
-					}, false)
+					oldReadCount = 0
 					enough = true
 					beginning = true
 
 					log.Println(origin, "stat 3:", remainedReadLength, oldReadCount, readCount)
+
+					future.Async(func() {
+						socket.processPacket(origin, packet, lengthOfPacket)
+					}, false)
 				}()
 			} else {
 				func() {
@@ -242,6 +244,7 @@ func (t *Chain) listenForPackets(socket *Socket) {
 
 					copy(readData[oldReadCount:oldReadCount+(readCount-oldReadCount)], nextBuf[0:readCount-oldReadCount])
 					remainedReadLength = 0
+					oldReadCount = readCount
 					enough = true
 
 					log.Println(origin, "stat 4:", remainedReadLength)
@@ -252,7 +255,7 @@ func (t *Chain) listenForPackets(socket *Socket) {
 }
 
 func (t *Chain) handleConnection(conn net.Conn) {
-	socket := &Socket{Buffer: [][]byte{}, Conn: conn, app: t.app, chain: t, Ack: true}
+	socket := &Socket{Id: strings.Split(conn.RemoteAddr().String(), ":")[0], Buffer: [][]byte{}, Conn: conn, app: t.app, chain: t, Ack: true}
 	t.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
 	future.Async(func() {
 		t.listenForPackets(socket)
@@ -366,6 +369,8 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		eventObj.backedProofs = map[string]string{}
 		eventObj.backedResponses = map[string]Guarantee{}
 		eventObj.randomNums = map[string]int{}
+		eventObj.electionReadys = map[string]bool{}
+		eventObj.phase = 2
 
 		log.Println("step 1")
 
@@ -475,6 +480,7 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		}
 
 		e := chainSocket.chain.GetEventByProof(okObj.Proof)
+		e.phase = 2
 		proofs, _ := json.Marshal(e.backedResponses)
 
 		proofBytes := []byte(proofs)
@@ -492,7 +498,21 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 
 		chainSocket.chain.BroadcastInShard(req)
 
-		chainSocket.chain.PushNewElection()
+		proofBytes = []byte(okObj.Proof)
+		proofLenBytes = make([]byte, 4)
+		binary.LittleEndian.PutUint32(proofLenBytes, uint32(len(proofBytes)))
+
+		reqLen = 1 + 4 + len(proofBytes)
+		req = make([]byte, reqLen)
+		pointer = 1
+		req[0] = 0x06
+		copy(req[pointer:pointer+4], proofLenBytes)
+		pointer += 4
+		copy(req[pointer:pointer+len(proofBytes)], proofBytes)
+		pointer += len(proofBytes)
+
+		chainSocket.chain.BroadcastInShard(req)
+
 	} else if packet[0] == 0x03 {
 
 		proof := ""
@@ -517,14 +537,70 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 			return
 		}
 
-		e := chainSocket.chain.GetEventByProof(m[chainSocket.app.Id()].Proof)
-		rndNums := map[string]int{}
-		for k, v := range m {
-			rndNums[k] = v.RndNum
-		}
-		e.randomNums = rndNums
+		proofVal := m[chainSocket.app.Id()].Proof
 
-		chainSocket.chain.PushNewElection()
+		func() {
+			chainSocket.Lock.Lock()
+			defer chainSocket.Lock.Unlock()
+			e := chainSocket.chain.GetEventByProof(proofVal)
+			rndNums := map[string]int{}
+			for k, v := range m {
+				rndNums[k] = v.RndNum
+			}
+			e.randomNums = rndNums
+			e.phase = 3
+		}()
+
+		proofBytes := []byte(proofVal)
+		proofLenBytes := make([]byte, 4)
+		binary.LittleEndian.PutUint32(proofLenBytes, uint32(len(proofBytes)))
+
+		reqLen := 1 + 4 + len(proofBytes)
+		req := make([]byte, reqLen)
+		pointer = 1
+		req[0] = 0x06
+		copy(req[pointer:pointer+4], proofLenBytes)
+		pointer += 4
+		copy(req[pointer:pointer+len(proofBytes)], proofBytes)
+		pointer += len(proofBytes)
+
+		chainSocket.chain.BroadcastInShard(req)
+
+	} else if packet[0] == 0x06 {
+
+		log.Println("received consensus packet phase 3.1 from ", origin)
+
+		proof := ""
+
+		tempBytes2 := make([]byte, 4)
+		copy(tempBytes2, packet[pointer:pointer+4])
+		dataLength := int(binary.LittleEndian.Uint32(tempBytes2))
+		log.Println("data length: ", dataLength)
+		pointer += 4
+		if dataLength > 0 {
+			proof = string(packet[pointer : pointer+dataLength])
+			pointer += dataLength
+		}
+		log.Println("proof: ", proof)
+
+		readyToStart := false
+		var e *Event
+		func() {
+			chainSocket.chain.Lock.Lock()
+			defer chainSocket.chain.Lock.Unlock()
+			e = chainSocket.chain.GetEventByProof(proof)
+			if e == nil {
+				e = chainSocket.chain.GetEventByProof(proof)
+			}
+			e.electionReadys[origin] = true
+			if len(e.electionReadys) == (chainSocket.chain.sockets.Count() - 1) {
+				readyToStart = true
+			}
+		}()
+
+		if readyToStart {
+			chainSocket.chain.nextEventQueue.Put(e)
+		}
 
 	} else if packet[0] == 0x04 {
 
@@ -565,44 +641,14 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 	}
 }
 
-func (c *Chain) PushNewElection() {
-	push := false
-	func() {
-		c.Lock.Lock()
-		defer c.Lock.Unlock()
-		c.pendingBlockElections++
-		if c.readyForNewElection {
-			c.readyForNewElection = false
-			c.ready = true
-			push = true
-		}
-	}()
-	if push {
-		c.cond_var_ <- 1
-	}
-}
-
 func (c *Chain) NotifyElectorReady(origin string) {
 	push := false
 	func() {
 		c.Lock.Lock()
 		defer c.Lock.Unlock()
 		c.readyElectors[origin] = true
-		if len(c.readyElectors) == (c.sockets.Count() - 1) {
+		if len(c.readyElectors) == (c.sockets.Count()) {
 			c.readyElectors = map[string]bool{}
-
-			delete(c.proofEvents, c.chosenProof)
-			eventIndex := 0
-			for _, event := range c.pendingEvents {
-				if event.Proof == c.chosenProof {
-					break
-				}
-				eventIndex++
-			}
-			c.pendingEvents = append(c.pendingEvents[:eventIndex], c.pendingEvents[eventIndex+1:]...)
-			c.chosenProof = ""
-
-			c.ready = true
 			push = true
 		}
 	}()
@@ -637,7 +683,6 @@ func (c *Chain) VoteForNextEvent(origin string, eventProof string) {
 				sortedArr = append(sortedArr, Candidate{proof, votes})
 			}
 			slices.SortStableFunc(sortedArr, func(a Candidate, b Candidate) int { return a.Votes - b.Votes })
-			c.nextEventVotes = map[string]string{}
 
 			if len(sortedArr) > 1 && (sortedArr[0].Votes == sortedArr[1].Votes) {
 				topOnes := []Candidate{}
@@ -680,24 +725,36 @@ func (c *Chain) VoteForNextEvent(origin string, eventProof string) {
 					chosenProofRes = cn.candVal.Proof
 				}
 				choosenEvent = c.GetEventByProof(chosenProofRes)
-				c.chosenProof = chosenProofRes
 			} else {
 				choosenEvent = c.GetEventByProof(sortedArr[0].Proof)
-				c.chosenProof = sortedArr[0].Proof
 			}
 			done = true
 		}
 	}()
 	if done {
+		eventIndex := 0
+		for _, event := range c.pendingEvents {
+			if event.Proof == choosenEvent.Proof {
+				break
+			}
+			eventIndex++
+		}
+		log.Println("chosen proof : ", choosenEvent.Proof)
+		c.pendingEvents = slices.Delete(c.pendingEvents, eventIndex, eventIndex+1)
+
 		c.nextBlockQueue.Put(choosenEvent)
 		startNewElectionSignal := make([]byte, 1)
 		startNewElectionSignal[0] = 0x05
+		c.nextEventVotes = map[string]string{}
+
 		c.BroadcastInShard(startNewElectionSignal)
+
+		c.NotifyElectorReady(c.app.Id())
 	}
 }
 
 func (c *Chain) GetEventByProof(proof string) *Event {
-	return c.proofEvents[proof]
+	return c.events[proof]
 }
 
 func openSocket(origin string, chain *Chain) bool {
@@ -733,19 +790,21 @@ func (c *Chain) Run(port int) {
 				func() {
 					c.Lock.Lock()
 					defer c.Lock.Unlock()
-					proof := fmt.Sprintf("%d", time.Now().UnixMilli())
+					proof := fmt.Sprintf("%s-%d", c.app.Id(), time.Now().UnixMicro())
 					e = &Event{
 						Origin:          c.app.Id(),
 						backedResponses: map[string]Guarantee{},
 						backedProofs:    map[string]string{},
 						randomNums:      map[string]int{},
+						electionReadys:  map[string]bool{},
 						Transactions:    c.pendingTrxs,
 						Proof:           proof,
 						MyUpdate:        []byte{},
+						phase:           1,
 					}
 					c.pendingTrxs = []Transaction{}
+					c.events[e.Proof] = e
 					c.pendingEvents = append(c.pendingEvents, e)
-					c.proofEvents[e.Proof] = e
 				}()
 				dataStr, _ := json.Marshal(e)
 				signature := c.app.SignPacket(dataStr)
@@ -799,28 +858,25 @@ func (c *Chain) Run(port int) {
 
 	future.Async(func() {
 		for {
-			<-c.cond_var_
-			func() {
-				c.Lock.Lock()
-				defer c.Lock.Unlock()
-				c.ready = false
-			}()
-			if c.pendingBlockElections > 0 {
-				e := c.pendingEvents[0]
-				c.VoteForNextEvent(c.app.Id(), e.Proof)
-				c.BroadcastInShard(e.MyUpdate)
-				func() {
-					c.Lock.Lock()
-					defer c.Lock.Unlock()
-					c.pendingBlockElections--
-				}()
-			} else {
-				func() {
-					c.Lock.Lock()
-					defer c.Lock.Unlock()
-					c.readyForNewElection = true
-				}()
+			eRaw, err := c.nextEventQueue.Get()
+			if err != nil {
+				log.Println(err)
+				panic(err)
 			}
+			e := eRaw.(*Event)
+			allowed := false
+			func() {
+				if c.readyForNewElection {
+					c.readyForNewElection = false
+					allowed = true
+				}
+			}()
+			if allowed {
+				c.cond_var_ <- 1
+			}
+			<-c.cond_var_
+			c.VoteForNextEvent(c.app.Id(), e.Proof)
+			c.BroadcastInShard(e.MyUpdate)
 		}
 	}, true)
 
@@ -878,11 +934,13 @@ func (c *Chain) SubmitTrx(typ string, payload []byte) {
 func (c *Chain) MemorizeResponseBacked(proof string, signature string, rndNum int, origin string) bool {
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
-	if e, ok := c.proofEvents[proof]; ok {
-		e.backedResponses[origin] = Guarantee{Proof: proof, Sign: signature}
+	if e, ok := c.events[proof]; ok {
+		e.backedResponses[origin] = Guarantee{Proof: proof, Sign: signature, RndNum: rndNum}
 		if len(e.backedResponses) == (c.sockets.Count() - 1) {
 			return true
 		}
+	} else {
+		panic("event proof not found")
 	}
 	return false
 }
@@ -897,7 +955,7 @@ func (c *Chain) AddBackedProof(proof string, origin string, signedProof string) 
 	if true {
 		c.Lock.Lock()
 		defer c.Lock.Unlock()
-		if e, ok := c.proofEvents[proof]; ok {
+		if e, ok := c.events[proof]; ok {
 			e.backedProofs[origin] = signedProof
 			if len(e.backedProofs) == (c.sockets.Count() - 2) {
 				if _, ok = e.backedProofs[e.Origin]; !ok {
