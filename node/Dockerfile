@@ -34,18 +34,23 @@ RUN cmake .. -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DWITH_SNAPPY=ON -DWITH_ZSTD=O
 WORKDIR /app/rocksdb
 RUN make install
 
-RUN apt install -y libssl-dev gdb
-
 WORKDIR /app
+
+RUN apt install -y golang
+ENV GOPROXY=https://goproxy.io,direct
+ENV DOCKER_API_VERSION=1.39
 
 RUN mkdir /app/storage
 
 COPY . .
+# COPY .babble /.babble
 
-RUN bash /app/build.sh
+# RUN go mod tidy
+RUN CGO_ENABLED=1 go build -o kasper .
 
-RUN cp genesis /bin/genesis
-EXPOSE 8080 8081
+RUN cp kasper /bin/kasper
+RUN cp .env /bin/.env
+EXPOSE 1337 1338 80 8080 8081 8082
 ENV HOME=/
-ENTRYPOINT ["bash", "run.sh"]
+ENTRYPOINT ["kasper"]
 CMD [] 
