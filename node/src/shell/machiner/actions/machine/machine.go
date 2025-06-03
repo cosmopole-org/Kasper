@@ -1,11 +1,11 @@
-package actions_plugin
+package actions_machine
 
 import (
 	"encoding/base64"
 	"errors"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
-	inputs_machiner "kasper/src/shell/machiner/inputs/plugin"
+	inputs_machiner "kasper/src/shell/machiner/inputs/machine"
 	"kasper/src/shell/machiner/model"
 	outputs_machiner "kasper/src/shell/machiner/outputs/plugin"
 	"log"

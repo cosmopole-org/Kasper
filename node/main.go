@@ -45,6 +45,11 @@ func main() {
 		panic(err)
 	}
 
+	blockchainPort, err := strconv.ParseInt(os.Getenv("BLOCKCHAIN_API_PORT"), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+
 	app.Load(
 		[]string{
 			"keyhan",
@@ -54,6 +59,7 @@ func main() {
 			"appletDbPath": os.Getenv("APPLET_DB_PATH"),
 			"baseDbPath": os.Getenv("BASE_DB_PATH"),
 			"federationPort": int(federationPort),
+			"blockchainPort": int(blockchainPort),
 			"pointLogsDb": os.Getenv("POINT_LOGS_DB"),
 		},
 	)

@@ -14,6 +14,7 @@ import (
 	"kasper/src/abstract/adapters/docker"
 	"kasper/src/abstract/adapters/elpis"
 	"kasper/src/abstract/adapters/file"
+	"kasper/src/abstract/adapters/firectl"
 	"kasper/src/abstract/adapters/network"
 	"kasper/src/abstract/adapters/security"
 	"kasper/src/abstract/adapters/signaler"
@@ -39,6 +40,7 @@ import (
 	driver_docker "kasper/src/drivers/docker"
 	driver_elpis "kasper/src/drivers/elpis"
 	driver_file "kasper/src/drivers/file"
+	driver_firectl "kasper/src/drivers/firectl"
 	driver_network "kasper/src/drivers/network"
 	driver_security "kasper/src/drivers/security"
 	driver_signaler "kasper/src/drivers/signaler"
@@ -70,6 +72,7 @@ type Tools struct {
 	wasm     wasm.IWasm
 	elpis    elpis.IElpis
 	docker   docker.IDocker
+	firectl  firectl.IFirectl
 }
 
 func (t *Tools) Security() security.ISecurity {
@@ -102,6 +105,10 @@ func (t *Tools) Elpis() elpis.IElpis {
 
 func (t *Tools) Docker() docker.IDocker {
 	return t.docker
+}
+
+func (t *Tools) Firectl() firectl.IFirectl {
+	return t.firectl
 }
 
 type Core struct {
@@ -661,6 +668,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	dWasm := driver_wasm.NewWasm(c, sroot, dstorage, adbPath, dDocker, dFile)
 	dElpis := driver_elpis.NewElpis(c, sroot, dstorage)
 	dnFederation.SecondStageForFill(fedPort, dstorage, dFile, dsignaler)
+	dFirectl := driver_firectl.NewFireCtl()
 
 	pemData := dsecurity.FetchKeyPair("server_key")[0]
 	block, _ := pem.Decode([]byte(pemData))
@@ -680,6 +688,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 		network:  dNetwork,
 		file:     dFile,
 		docker:   dDocker,
+		firectl:  dFirectl,
 		wasm:     dWasm,
 		elpis:    dElpis,
 	}
@@ -724,7 +733,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 				serialized, err := json.Marshal(op)
 				if err == nil {
 					log.Println(string(serialized))
-					c.tools.Network().Chain().SubmitTrx("message", []byte(typ + "::" + string(serialized)))
+					c.tools.Network().Chain().SubmitTrx("message", []byte(typ+"::"+string(serialized)))
 				} else {
 					log.Println(err)
 				}
