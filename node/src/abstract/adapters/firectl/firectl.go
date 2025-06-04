@@ -13,10 +13,7 @@ type VM struct {
 type ITerminalManager interface {
 	Start()
 	Stop()
-	GetOutput() string
 	SendCommand(string)
-	RegisterListener() <-chan string
-	RemoveListener(ch <-chan string)
 }
 
 type IFirectl interface {

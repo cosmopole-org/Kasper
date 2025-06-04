@@ -47,6 +47,8 @@ function readBytes() {
     }
 }
 
+let pcLogs = "";
+
 socket.on('data', (data) => {
     console.log(data.toString());
     setTimeout(() => {
@@ -67,6 +69,10 @@ function processPacket(data) {
             let payload = data.subarray(pointer);
             let obj = JSON.parse(payload.toString());
             console.log(key, obj);
+            if (key == "pc/message") {
+                pcLogs += obj.message;
+                console.log(pcLogs);
+            }
         } else if (data.at(pointer) == 0x02) {
             pointer++;
             let pidLen = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
@@ -173,7 +179,7 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/register", { "username": "kasper2" });
+    let res = await sendRequest("", "/users/register", { "username": "kasper7" });
     console.log(res.resCode, res.obj);
 
     privateKey = Buffer.from(
@@ -186,9 +192,15 @@ async function doTest() {
     await sleep(3000);
 
     console.log("sending run pc request...");
-    res = await sendRequest(userId, "/pc/runPc", { "hello": "world" });
+    res = await sendRequest(userId, "/pc/runPc", {});
     console.log(res.resCode, res.obj);
-    
+    let vmId = res.obj.vmId;
+
+    await sleep(15000);
+
+    res = await sendRequest(userId, "/pc/execCommand", { "vmId": vmId, "command": "ls" });
+    console.log(res.resCode, res.obj);
+
     // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
     // console.log(res.resCode, res.obj);
     // let pointOneId = res.obj.point.id;

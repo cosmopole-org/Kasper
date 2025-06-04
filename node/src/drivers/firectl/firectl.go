@@ -1,14 +1,11 @@
 package firectl
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"kasper/src/shell/utils/future"
 	"os"
-	"sync"
 	"time"
 
 	adapters "kasper/src/abstract/adapters/firectl"
@@ -44,33 +41,25 @@ func (w *ChannelWriteCloser) Close() error {
 
 type ChannelReader struct {
 	C    chan []byte
-	buf  *bytes.Buffer
-	done bool
+	buf  []byte
 }
 
-func (r *ChannelReader) Read(p []byte) (int, error) {
-	for r.buf == nil || r.buf.Len() == 0 {
-		chunk, ok := <-r.C
+func (cr *ChannelReader) Read(p []byte) (int, error) {
+	for len(cr.buf) == 0 {
+		line, ok := <-cr.C
 		if !ok {
-			r.done = true
-			break
+			return 0, io.EOF
 		}
-		r.buf = bytes.NewBuffer(chunk)
+		cr.buf = []byte(line)
 	}
-
-	if r.done && (r.buf == nil || r.buf.Len() == 0) {
-		return 0, io.EOF
-	}
-
-	return r.buf.Read(p)
+	n := copy(p, cr.buf)
+	cr.buf = cr.buf[n:]
+	return n, nil
 }
 
 type TerminalManager struct {
 	writer       *ChannelWriteCloser
 	reader       *ChannelReader
-	mu           sync.Mutex
-	outputBuffer []byte
-	listeners    []chan string
 	done         chan struct{}
 	logger       *log.Entry
 }
@@ -107,7 +96,6 @@ func NewTerminalManager(writer *ChannelWriteCloser, reader *ChannelReader, logge
 // Start begins reading from the terminal and notifying listeners
 func (tm *TerminalManager) Start() {
 	tm.logger.Info("Starting terminal output reader")
-	go tm.readTerminalOutput()
 }
 
 // Stop terminates terminal reading
@@ -116,96 +104,10 @@ func (tm *TerminalManager) Stop() {
 	tm.writer.Close()
 }
 
-// readTerminalOutput continuously reads from the console
-func (tm *TerminalManager) readTerminalOutput() {
-	reader := bufio.NewReader(tm.reader)
-	for {
-		select {
-		case <-tm.done:
-			tm.logger.Debug("Terminal reader exiting")
-			return
-		default:
-			buf := make([]byte, 1024)
-			n, err := reader.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					tm.logger.Errorf("Terminal read error: %v", err)
-				}
-				return
-			}
-			if n > 0 {
-				tm.processOutput(buf[:n])
-			}
-		}
-	}
-}
-
-// processOutput handles new output and notifies listeners
-func (tm *TerminalManager) processOutput(data []byte) {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
-	// Add to buffer
-	tm.outputBuffer = append(tm.outputBuffer, data...)
-
-	// Convert to string and notify listeners
-	output := string(data)
-	for _, ch := range tm.listeners {
-		select {
-		case ch <- output:
-		default:
-			tm.logger.Warn("Output listener channel full, dropping data")
-		}
-	}
-}
-
-// GetOutput returns the current output buffer
-func (tm *TerminalManager) GetOutput() string {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-	return string(tm.outputBuffer)
-}
-
-// ClearOutput clears the output buffer
-func (tm *TerminalManager) ClearOutput() {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-	tm.outputBuffer = []byte{}
-	tm.logger.Info("Terminal output cleared")
-}
-
 // SendCommand sends a command to the VM
 func (tm *TerminalManager) SendCommand(cmd string) {
 	tm.reader.C <- []byte(cmd + "\n")
-	tm.logger.WithField("command", cmd).Debug("Command sent to VM")
-}
-
-// RegisterListener adds a new output listener
-func (tm *TerminalManager) RegisterListener() <-chan string {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
-	ch := make(chan string, 100) // Larger buffer for high output volume
-	tm.listeners = append(tm.listeners, ch)
-	tm.logger.Debug("New output listener registered")
-	return ch
-}
-
-// RemoveListener removes an output listener
-func (tm *TerminalManager) RemoveListener(ch <-chan string) {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
-	for i, listener := range tm.listeners {
-		if listener == ch {
-			// Remove without preserving order
-			tm.listeners[i] = tm.listeners[len(tm.listeners)-1]
-			tm.listeners = tm.listeners[:len(tm.listeners)-1]
-			close(listener)
-			tm.logger.Debug("Output listener removed")
-			break
-		}
-	}
+	log.Println("Command sent to VM")
 }
 
 func (f *FireCtl) StopVm(id string) {
@@ -261,7 +163,7 @@ func (f *FireCtl) RunVm(id string, terminal chan string) {
 		cfg := firecracker.Config{
 			SocketPath:      socketPath,
 			KernelImagePath: kernelPath,
-			KernelArgs:      "console=ttyS0 reboot=k panic=1 pci=off root=/dev/vda ip=dhcp",
+			KernelArgs:      "console=ttyS0 reboot=k panic=1 pci=off init=/init",
 			Drives: []models.Drive{{
 				DriveID:      firecracker.String("rootfs"),
 				PathOnHost:   firecracker.String(rootfsPath),
@@ -269,10 +171,8 @@ func (f *FireCtl) RunVm(id string, terminal chan string) {
 				IsReadOnly:   firecracker.Bool(false),
 			}},
 			MachineCfg: models.MachineConfiguration{
-				VcpuCount:       firecracker.Int64(1),
-				MemSizeMib:      firecracker.Int64(512),
-				Smt:             firecracker.Bool(false),
-				TrackDirtyPages: true,
+				VcpuCount:  firecracker.Int64(1),
+				MemSizeMib: firecracker.Int64(512),
 			},
 		}
 

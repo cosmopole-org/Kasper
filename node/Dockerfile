@@ -40,7 +40,12 @@ RUN apt install -y golang
 ENV GOPROXY=https://goproxy.io,direct
 ENV DOCKER_API_VERSION=1.39
 
+RUN echo 'installing firecracker...'
+
 RUN curl -sSf https://raw.githubusercontent.com/cosmopole-org/kasper-public/main/install-fcvmm-1.sh | bash -s
+
+RUN echo 'installing firecracker... step-2-6'
+
 RUN curl -sSf https://raw.githubusercontent.com/cosmopole-org/kasper-public/main/install-fcvmm-2.sh | bash -s
 
 RUN mkdir /app/storage
