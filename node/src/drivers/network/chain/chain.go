@@ -732,15 +732,21 @@ func (c *Chain) VoteForNextEvent(origin string, eventProof string) {
 		}
 	}()
 	if done {
-		eventIndex := 0
-		for _, event := range c.pendingEvents {
-			if event.Proof == choosenEvent.Proof {
-				break
+		func() {
+			c.Lock.Lock()
+			defer c.Lock.Unlock()
+			eventIndex := 0
+			for _, event := range c.pendingEvents {
+				if event.Proof == choosenEvent.Proof {
+					break
+				}
+				eventIndex++
 			}
-			eventIndex++
-		}
-		log.Println("chosen proof : ", choosenEvent.Proof)
-		c.pendingEvents = slices.Delete(c.pendingEvents, eventIndex, eventIndex+1)
+			log.Println("chosen proof : ", choosenEvent.Proof)
+			if eventIndex < len(c.pendingEvents) {
+				c.pendingEvents = slices.Delete(c.pendingEvents, eventIndex, eventIndex+1)
+			}
+		}()
 
 		c.nextBlockQueue.Put(choosenEvent)
 		startNewElectionSignal := make([]byte, 1)

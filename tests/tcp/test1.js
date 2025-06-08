@@ -5,7 +5,7 @@ const { exec } = require('child_process');
 const readline = require('node:readline');
 
 const port = 8080;
-let host = '172.77.5.1';
+let host = '37.32.8.183';
 var privateKey = undefined;
 
 let callbacks = {};
@@ -179,7 +179,7 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/register", { "username": "kasper7" });
+    let res = await sendRequest("", "/users/register", { "username": "kasper4" });
     console.log(res.resCode, res.obj);
 
     privateKey = Buffer.from(
@@ -189,36 +189,36 @@ async function doTest() {
     let userId = res.obj.user.id;
     await sendRequest(userId, "authenticate", {});
 
-    await sleep(3000);
+    // await sleep(3000);
 
-    console.log("sending run pc request...");
-    res = await sendRequest(userId, "/pc/runPc", {});
+    // console.log("sending run pc request...");
+    // res = await sendRequest(userId, "/pc/runPc", {});
+    // console.log(res.resCode, res.obj);
+    // let vmId = res.obj.vmId;
+
+    // await sleep(15000);
+
+    // res = await sendRequest(userId, "/pc/execCommand", { "vmId": vmId, "command": "ls" });
+    // console.log(res.resCode, res.obj);
+
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
     console.log(res.resCode, res.obj);
-    let vmId = res.obj.vmId;
+    let pointOneId = res.obj.point.id;
 
-    await sleep(15000);
-
-    res = await sendRequest(userId, "/pc/execCommand", { "vmId": vmId, "command": "ls" });
+    res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
     console.log(res.resCode, res.obj);
 
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    // console.log(res.resCode, res.obj);
-    // let pointOneId = res.obj.point.id;
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    console.log(res.resCode, res.obj);
+    let pointTwoId = res.obj.point.id;
 
-    // res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
-    // console.log(res.resCode, res.obj);
+    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    console.log(res.resCode, res.obj);
+    let pointMainId = res.obj.point.id;
 
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    // console.log(res.resCode, res.obj);
-    // let pointTwoId = res.obj.point.id;
-
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    // console.log(res.resCode, res.obj);
-    // let pointMainId = res.obj.point.id;
-
-    // res = await sendRequest(userId, "/machines/create", { "username": "convnet4" });
-    // console.log(res.resCode, res.obj);
-    // let machineId = res.obj.user.id;
+    res = await sendRequest(userId, "/machines/create", { "username": "convnet4" });
+    console.log(res.resCode, res.obj);
+    let machineId = res.obj.user.id;
 
     // let keys = {
     //     "init": [pointOneId, pointTwoId],
