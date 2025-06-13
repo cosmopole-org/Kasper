@@ -28,9 +28,8 @@ type ICore interface {
 	ExecAppletResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update)
 	ExecBaseRequestOnChain(key string, payload []byte, signature string, userId string, tag string, callback func([]byte, int, error))
 	ExecBaseResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update, tag string, toUserId string)
-	OnChainPacket(typ string, trxPayload []byte)
+	OnChainPacket(typ string, trxPayload []byte) string
 	AppPendingTrxs()
-	Run()
 	IpAddr() string
 	ModifyState(bool, func(trx.ITrx))
 	ModifyStateSecurlyWithSource(readonly bool, info info.IInfo, src string, fn func(state.IState))

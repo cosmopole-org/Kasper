@@ -290,7 +290,7 @@ func (c *Core) ExecBaseResponseOnChain(callbackId string, packet []byte, signatu
 	}, false)
 }
 
-func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
+func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	switch typ {
@@ -300,24 +300,24 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 			err := json.Unmarshal(trxPayload, &packet)
 			if err != nil {
 				log.Println(err)
-				return
+				return ""
 			}
 			if packet.Key == "choose-validator" {
 				phaseRaw, ok := packet.Meta["phase"]
 				if !ok {
-					return
+					return ""
 				}
 				phase, ok2 := phaseRaw.(string)
 				if !ok2 {
-					return
+					return ""
 				}
 				voterRaw, ok := packet.Meta["voter"]
 				if !ok {
-					return
+					return ""
 				}
 				voter, ok2 := voterRaw.(string)
 				if !ok2 {
-					return
+					return ""
 				}
 				if c.elections == nil {
 					c.elections = []chain.Election{}
@@ -381,10 +381,10 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 					votes := [][]byte{}
 					e := json.Unmarshal(packet.Payload, &votes)
 					if e != nil {
-						return
+						return ""
 					}
 					if len(votes) < MAX_VALIDATOR_COUNT {
-						return
+						return ""
 					}
 					if c.elections[0].Participants[voter] {
 						for i := 0; i < min(MAX_VALIDATOR_COUNT, len(c.tools.Network().Chain().Peers())); i++ {
@@ -410,10 +410,10 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 					votes := []string{}
 					e := json.Unmarshal(packet.Payload, &votes)
 					if e != nil {
-						return
+						return ""
 					}
 					if len(votes) < MAX_VALIDATOR_COUNT {
-						return
+						return ""
 					}
 					if c.elections[0].Participants[voter] {
 						for i := 0; i < min(MAX_VALIDATOR_COUNT, len(c.tools.Network().Chain().Peers())); i++ {
@@ -467,7 +467,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 			err := json.Unmarshal(trxPayload, &packet)
 			if err != nil {
 				log.Println(err)
-				return
+				return ""
 			}
 			execs := map[string]bool{}
 			for k, v := range c.executors {
@@ -479,7 +479,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 				c.chainCallbacks[packet.RequestId] = &chain.ChainCallback{Fn: nil, Executors: execs, Responses: map[string]string{}}
 			}
 			if !c.executors[c.Ip] {
-				return
+				return ""
 			}
 			userId := ""
 			if strings.HasPrefix(packet.Author, "user::") {
@@ -487,7 +487,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 			}
 			action := c.actionStore.FetchAction(packet.Key)
 			if action == nil {
-				return
+				return ""
 			}
 			var input input.IInput
 			i, err2 := action.(iaction.ISecureAction).ParseInput("chain", packet.Payload)
@@ -496,7 +496,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 				errText := "input parsing error"
 				signature := c.SignPacket([]byte(errText))
 				c.ExecBaseResponseOnChain(packet.RequestId, []byte{}, signature, 400, errText, []update.Update{}, packet.Tag, userId)
-				return
+				return ""
 			}
 			input = i
 			action.(iaction.ISecureAction).SecurlyActChain(userId, packet.RequestId, packet.Payload, packet.Signatures[1], input, packet.Submitter, packet.Tag)
@@ -508,7 +508,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 			err := json.Unmarshal(trxPayload, &packet)
 			if err != nil {
 				log.Println(err)
-				return
+				return ""
 			}
 			execs := map[string]bool{}
 			for k, v := range c.executors {
@@ -520,14 +520,14 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 				c.chainCallbacks[packet.RequestId] = &chain.ChainCallback{Fn: nil, Executors: execs, Responses: map[string]string{}}
 			}
 			if !c.executors[c.Ip] {
-				return
+				return ""
 			}
 			userId := ""
 			if strings.HasPrefix(packet.Author, "user::") {
 				userId = packet.Author[len("user::"):]
 			}
 			c.appPendingTrxs = append(c.appPendingTrxs, &worker.Trx{CallbackId: packet.RequestId, Runtime: packet.Runtime, UserId: userId, MachineId: packet.MachineId, Key: packet.Key, Payload: string(packet.Payload)})
-			break
+			return packet.MachineId
 		}
 	case "response":
 		{
@@ -535,17 +535,17 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 			err := json.Unmarshal(trxPayload, &packet)
 			if err != nil {
 				log.Println(err)
-				return
+				return ""
 			}
 			callback, ok3 := c.chainCallbacks[packet.RequestId]
 			if ok3 {
 				if !callback.Executors[packet.Executor] {
-					return
+					return ""
 				}
 				str, _ := json.Marshal(core.ResponseHolder{Payload: packet.Payload, Effects: packet.Effects})
 				callback.Responses[packet.Executor] = string(str)
 				if len(callback.Responses) < len(callback.Executors) {
-					return
+					return ""
 				}
 				temp := ""
 				for _, res := range callback.Responses {
@@ -557,7 +557,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 					}
 				}
 				if temp == "" {
-					return
+					return ""
 				}
 				if !callback.Executors[c.Ip] {
 					kvstoreKeyword := "applet: "
@@ -632,7 +632,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 								b, e := json.Marshal(input)
 								if e != nil {
 									log.Println(e)
-									return
+									return ""
 								}
 								future.Async(func() {
 									c.tools.Wasm().RunVm(packet.ToUserId, pointIds[i], string(b))
@@ -647,6 +647,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) {
 			break
 		}
 	}
+	return ""
 }
 
 func (c *Core) Load(gods []string, args map[string]interface{}) {
@@ -693,13 +694,18 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 		elpis:    dElpis,
 	}
 
-	c.tools.Network().Chain().RegisterPipeline(func(b [][]byte) {
+	c.tools.Network().Chain().RegisterPipeline(func(b [][]byte) []string {
+		machineIds := []string{}
 		for _, trx := range b {
 			firstIndex := strings.Index(string(trx), "::")
 			log.Println(string(trx))
-			c.OnChainPacket(string(trx[:firstIndex]), trx[firstIndex+2:])
+			r := c.OnChainPacket(string(trx[:firstIndex]), trx[firstIndex+2:])
+			if r != "" {
+				machineIds = append(machineIds, r)
+			}
 		}
 		c.AppPendingTrxs()
+		return machineIds
 	})
 
 	c.chain = make(chan any, 1)
@@ -707,7 +713,8 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 		for {
 			op := <-c.chain
 			typ := ""
-			switch op.(type) {
+			machineId := ""
+			switch opData := op.(type) {
 			case chain.ChainBaseRequest:
 				{
 					typ = "baseRequest"
@@ -721,6 +728,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 			case chain.ChainAppletRequest:
 				{
 					typ = "appRequest"
+					machineId = opData.MachineId
 					break
 				}
 			case chain.ChainElectionPacket:
@@ -733,7 +741,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 				serialized, err := json.Marshal(op)
 				if err == nil {
 					log.Println(string(serialized))
-					c.tools.Network().Chain().SubmitTrx("message", []byte(typ+"::"+string(serialized)))
+					c.tools.Network().Chain().SubmitTrx("1", machineId, typ, []byte(typ+"::"+string(serialized)))
 				} else {
 					log.Println(err)
 				}
@@ -754,23 +762,4 @@ func (c *Core) DoElection() {
 			Payload: []byte("{}"),
 		}
 	}, false)
-}
-
-func (c *Core) Run() {
-
-	future.Async(func() {
-		c.tools.Network().Chain().Run(8082)
-	}, false)
-
-	// future.Async(func() {
-	// 	for {
-	// 		time.Sleep(time.Duration(1) * time.Second)
-	// 		minutes := time.Now().Minute()
-	// 		seconds := time.Now().Second()
-	// 		if (minutes == 0) && ((seconds >= 0) && (seconds <= 2)) {
-	// 			c.DoElection()
-	// 			time.Sleep(2 * time.Minute)
-	// 		}
-	// 	}
-	// }, true)
 }

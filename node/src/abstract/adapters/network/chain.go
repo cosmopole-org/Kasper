@@ -1,8 +1,8 @@
 package network
 
 type IChain interface {
-	Run(port int)
-	SubmitTrx(typ string, payload []byte)
-	RegisterPipeline(pipeline func([][]byte))
+	Listen(port int)
+	SubmitTrx(chainId string, machineId string, typ string, payload []byte)
+	RegisterPipeline(pipeline func([][]byte) []string)
 	Peers() []string
 }

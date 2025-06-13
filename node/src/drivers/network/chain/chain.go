@@ -35,6 +35,7 @@ type Event struct {
 	Proof           string
 	Origin          string
 	MyUpdate        []byte
+	Timestamp       int64
 	backedResponses map[string]Guarantee
 	randomNums      map[string]int
 	backedProofs    map[string]string
@@ -42,20 +43,24 @@ type Event struct {
 	phase           int
 }
 
+type Packet struct {
+	chainId int64
+	data    []byte
+}
+
 type Socket struct {
 	Lock   sync.Mutex
 	Id     string
 	Conn   net.Conn
-	Buffer [][]byte
+	Buffer []Packet
 	Ack    bool
 	app    core.ICore
 	chain  *Chain
 }
 
-type Chain struct {
+type SubChain struct {
 	Lock                  sync.Mutex
-	app                   core.ICore
-	sockets               *cmap.ConcurrentMap[string, *Socket]
+	id                    int64
 	events                map[string]*Event
 	pendingEvents         []*Event
 	pendingBlockElections int
@@ -65,8 +70,21 @@ type Chain struct {
 	nextEventVotes        map[string]string
 	nextEventQueue        *queues.BlockingQueue
 	nextBlockQueue        *queues.BlockingQueue
+	blocks                []*Event
 	pendingTrxs           []Transaction
-	pipeline              func([][]byte)
+	peers                 map[string]bool
+	chain                 *Chain
+	removed               bool
+	remainedCount         int
+}
+
+type Chain struct {
+	app       core.ICore
+	pipeline  func([][]byte) []string
+	sockets   *cmap.ConcurrentMap[string, *Socket]
+	SubChains *cmap.ConcurrentMap[string, *SubChain]
+	MyShards  *cmap.ConcurrentMap[string, bool]
+	sharder   *DynamicShardingSystem
 }
 
 type Ok struct {
@@ -78,9 +96,8 @@ func NewChain(core core.ICore) *Chain {
 	m := cmap.New[*Socket]()
 	q, _ := queues.NewLinkedBlockingQueue(1000)
 	q2, _ := queues.NewLinkedBlockingQueue(1000)
-	return &Chain{
-		app:                   core,
-		sockets:               &m,
+	sc := &SubChain{
+		id:                    1,
 		events:                map[string]*Event{},
 		pendingBlockElections: 0,
 		readyForNewElection:   true,
@@ -91,36 +108,64 @@ func NewChain(core core.ICore) *Chain {
 		nextEventQueue:        q2,
 		pendingTrxs:           []Transaction{},
 		pendingEvents:         []*Event{},
+		blocks:                []*Event{},
+		remainedCount:         0,
+		peers: map[string]bool{
+			"172.77.5.1": true,
+			"172.77.5.2": true,
+			"172.77.5.3": true,
+		},
 	}
+	m2 := cmap.New[*SubChain]()
+	m2.Set("1", sc)
+	m3 := cmap.New[bool]()
+	m3.Set("1", true)
+	chain := &Chain{
+		app:       core,
+		sockets:   &m,
+		SubChains: &m2,
+		MyShards:  &m3,
+	}
+	chain.sharder = NewSharder(chain)
+	return chain
 }
 
-func (t *Chain) appendEvent(e *Event) {
+func (t *SubChain) appendEvent(e *Event) {
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
 	t.events[e.Proof] = e
 	t.pendingEvents = append(t.pendingEvents, e)
+	t.remainedCount++
 }
 
-func (t *Chain) SendToShardMember(origin string, payload []byte) {
+func (t *SubChain) SendToShardMember(origin string, payload []byte) {
 	log.Println("sending packet to peer:", origin)
-	s, ok := t.sockets.Get(origin)
+	s, ok := t.chain.sockets.Get(origin)
 	if ok {
-		s.writePacket(payload)
+		s.writePacket(t.id, payload)
 	} else {
 		log.Println("peer socket not found")
 	}
 }
 
-func (t *Chain) BroadcastInShard(payload []byte) {
-	for k, v := range t.sockets.Items() {
-		if k == t.app.Id() {
+func (t *SubChain) BroadcastInShard(payload []byte) {
+	for k, _ := range t.peers {
+		if k == t.chain.app.Id() {
 			continue
 		}
-		v.writePacket(payload)
+		s, ok := t.chain.sockets.Get(k)
+		if ok {
+			s.writePacket(t.id, payload)
+		}
 	}
 }
 
 func (t *Chain) Listen(port int) {
+	for _, subchain := range t.SubChains.Items() {
+		future.Async(func() {
+			subchain.Run()
+		}, false)
+	}
 	future.Async(func() {
 		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err != nil {
@@ -146,6 +191,7 @@ func (t *Chain) listenForPackets(socket *Socket) {
 	}()
 	origin := strings.Split(socket.Conn.RemoteAddr().String(), ":")[0]
 	lenBuf := make([]byte, 4)
+	chainIdBuf := make([]byte, 8)
 	buf := make([]byte, 1024)
 	nextBuf := make([]byte, 2048)
 	readCount := 0
@@ -153,6 +199,7 @@ func (t *Chain) listenForPackets(socket *Socket) {
 	enough := false
 	beginning := true
 	length := 0
+	chainId := int64(0)
 	readLength := 0
 	remainedReadLength := 0
 	var readData []byte
@@ -183,7 +230,7 @@ func (t *Chain) listenForPackets(socket *Socket) {
 		}
 
 		if beginning {
-			if readCount >= 4 {
+			if readCount >= 12 {
 				func() {
 					socket.Lock.Lock()
 					defer socket.Lock.Unlock()
@@ -196,6 +243,15 @@ func (t *Chain) listenForPackets(socket *Socket) {
 					length = int(binary.LittleEndian.Uint32(lenBuf))
 					readData = make([]byte, length)
 					readCount -= 4
+
+					copy(chainIdBuf, nextBuf[0:8])
+					log.Println(origin, "nextBuf", nextBuf[0:8])
+					log.Println(origin, "lenBuf", chainIdBuf[0:8])
+					remainedReadLength -= 8
+					copy(nextBuf[0:remainedReadLength], nextBuf[8:remainedReadLength+8])
+					chainId = int64(binary.LittleEndian.Uint64(chainIdBuf))
+					readCount -= 8
+
 					beginning = false
 					enough = true
 
@@ -225,6 +281,7 @@ func (t *Chain) listenForPackets(socket *Socket) {
 					packet := make([]byte, length)
 					copy(packet, readData)
 					lengthOfPacket := length
+					chainIdOfPacket := chainId
 					log.Println(origin, "stat 3 step 4")
 					oldReadCount = 0
 					enough = true
@@ -233,7 +290,7 @@ func (t *Chain) listenForPackets(socket *Socket) {
 					log.Println(origin, "stat 3:", remainedReadLength, oldReadCount, readCount)
 
 					future.Async(func() {
-						socket.processPacket(origin, packet, lengthOfPacket)
+						socket.processPacket(fmt.Sprintf("%d", chainIdOfPacket), origin, packet, lengthOfPacket)
 					}, false)
 				}()
 			} else {
@@ -255,21 +312,24 @@ func (t *Chain) listenForPackets(socket *Socket) {
 }
 
 func (t *Chain) handleConnection(conn net.Conn) {
-	socket := &Socket{Id: strings.Split(conn.RemoteAddr().String(), ":")[0], Buffer: [][]byte{}, Conn: conn, app: t.app, chain: t, Ack: true}
-	t.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
+	origin := strings.Split(conn.RemoteAddr().String(), ":")[0]
+	newNode := Node{ID: origin, Power: rand.Intn(100)}
+	t.sharder.HandleNewNode(newNode)
+	socket := &Socket{Id: strings.Split(conn.RemoteAddr().String(), ":")[0], Buffer: []Packet{}, Conn: conn, app: t.app, chain: t, Ack: true}
+	t.sockets.Set(origin, socket)
 	future.Async(func() {
 		t.listenForPackets(socket)
 	}, false)
 }
 
-func (t *Socket) writePacket(packet []byte) {
+func (t *Socket) writePacket(chainId int64, packet []byte) {
 
 	log.Println("appending to buffer...")
 
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
 
-	t.Buffer = append(t.Buffer, packet)
+	t.Buffer = append(t.Buffer, Packet{chainId: chainId, data: packet})
 	t.pushBuffer()
 }
 
@@ -279,14 +339,22 @@ func (t *Socket) pushBuffer() {
 		if len(t.Buffer) > 0 {
 			t.Ack = false
 			packetLen := make([]byte, 4)
-			binary.LittleEndian.PutUint32(packetLen, uint32(len(t.Buffer[0])))
+			binary.LittleEndian.PutUint32(packetLen, uint32(len(t.Buffer[0].data)))
 			_, err := t.Conn.Write(packetLen)
 			if err != nil {
 				t.Ack = true
 				log.Println(err)
 				return
 			}
-			_, err = t.Conn.Write(t.Buffer[0])
+			chainId := make([]byte, 8)
+			binary.LittleEndian.PutUint64(chainId, uint64(t.Buffer[0].chainId))
+			_, err = t.Conn.Write(chainId)
+			if err != nil {
+				t.Ack = true
+				log.Println(err)
+				return
+			}
+			_, err = t.Conn.Write(t.Buffer[0].data)
 			if err != nil {
 				t.Ack = true
 				log.Println(err)
@@ -296,7 +364,7 @@ func (t *Socket) pushBuffer() {
 	}
 }
 
-func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLength int) {
+func (chainSocket *Socket) processPacket(chainId string, origin string, packet []byte, packetLength int) {
 
 	log.Println(origin, "received packet length: ", packetLength, len(packet))
 
@@ -314,6 +382,8 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		return
 	}
 
+	var subchain *SubChain
+
 	func() {
 		chainSocket.Lock.Lock()
 		defer chainSocket.Lock.Unlock()
@@ -327,7 +397,17 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		if err != nil {
 			log.Println(err)
 		}
+		ok := false
+		subchain, ok = chainSocket.chain.SubChains.Get(chainId)
+		if !ok {
+			subchain = nil
+		}
 	}()
+
+	if subchain == nil {
+		log.Println("subchain not found")
+		return
+	}
 
 	pointer := 1
 
@@ -381,7 +461,7 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 
 		log.Println("step 2")
 
-		chainSocket.chain.appendEvent(eventObj)
+		subchain.appendEvent(eventObj)
 		proofSign := chainSocket.chain.app.SignPacket([]byte(eventObj.Proof))
 
 		log.Println("step 3")
@@ -435,7 +515,7 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 
 		log.Println("step 6")
 
-		chainSocket.chain.SendToShardMember(origin, response)
+		subchain.SendToShardMember(origin, response)
 
 	} else if packet[0] == 0x02 {
 
@@ -473,13 +553,13 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 			return
 		}
 
-		done := chainSocket.chain.MemorizeResponseBacked(okObj.Proof, sign, okObj.RndNum, origin)
+		done := subchain.MemorizeResponseBacked(okObj.Proof, sign, okObj.RndNum, origin)
 
 		if !done {
 			return
 		}
 
-		e := chainSocket.chain.GetEventByProof(okObj.Proof)
+		e := subchain.GetEventByProof(okObj.Proof)
 		e.phase = 2
 		proofs, _ := json.Marshal(e.backedResponses)
 
@@ -496,7 +576,7 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		copy(req[pointer:pointer+len(proofBytes)], proofBytes)
 		pointer += len(proofBytes)
 
-		chainSocket.chain.BroadcastInShard(req)
+		subchain.BroadcastInShard(req)
 
 		proofBytes = []byte(okObj.Proof)
 		proofLenBytes = make([]byte, 4)
@@ -511,7 +591,7 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		copy(req[pointer:pointer+len(proofBytes)], proofBytes)
 		pointer += len(proofBytes)
 
-		chainSocket.chain.BroadcastInShard(req)
+		subchain.BroadcastInShard(req)
 
 	} else if packet[0] == 0x03 {
 
@@ -542,7 +622,7 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		func() {
 			chainSocket.Lock.Lock()
 			defer chainSocket.Lock.Unlock()
-			e := chainSocket.chain.GetEventByProof(proofVal)
+			e := subchain.GetEventByProof(proofVal)
 			rndNums := map[string]int{}
 			for k, v := range m {
 				rndNums[k] = v.RndNum
@@ -564,7 +644,7 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		copy(req[pointer:pointer+len(proofBytes)], proofBytes)
 		pointer += len(proofBytes)
 
-		chainSocket.chain.BroadcastInShard(req)
+		subchain.BroadcastInShard(req)
 
 	} else if packet[0] == 0x06 {
 
@@ -586,11 +666,11 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		readyToStart := false
 		var e *Event
 		func() {
-			chainSocket.chain.Lock.Lock()
-			defer chainSocket.chain.Lock.Unlock()
-			e = chainSocket.chain.GetEventByProof(proof)
+			subchain.Lock.Lock()
+			defer subchain.Lock.Unlock()
+			e = subchain.GetEventByProof(proof)
 			if e == nil {
-				e = chainSocket.chain.GetEventByProof(proof)
+				e = subchain.GetEventByProof(proof)
 			}
 			e.electionReadys[origin] = true
 			if len(e.electionReadys) == (chainSocket.chain.sockets.Count() - 1) {
@@ -599,7 +679,7 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 		}()
 
 		if readyToStart {
-			chainSocket.chain.nextEventQueue.Put(e)
+			subchain.nextEventQueue.Put(e)
 		}
 
 	} else if packet[0] == 0x04 {
@@ -630,24 +710,53 @@ func (chainSocket *Socket) processPacket(origin string, packet []byte, packetLen
 			pointer += dataLength
 		}
 		log.Println("vote: ", vote)
-
-		chainSocket.chain.VoteForNextEvent(origin, vote)
-
+		subchain.VoteForNextEvent(origin, vote)
 	} else if packet[0] == 0x05 {
-
 		log.Println("received consensus packet phase 5 from ", origin)
-
-		chainSocket.chain.NotifyElectorReady(origin)
+		subchain.NotifyElectorReady(origin)
+	} else if packet[0] == 0xa1 {
+		var data []byte
+		tempBytes2 := make([]byte, 4)
+		copy(tempBytes2, packet[pointer:pointer+4])
+		pointer += 4
+		dataLength := int(binary.LittleEndian.Uint32(tempBytes2))
+		log.Println("data length: ", dataLength)
+		if dataLength > 0 {
+			data = packet[pointer : pointer+dataLength]
+			pointer += dataLength
+		}
+		events := []*Event{}
+		e := json.Unmarshal(data, &events)
+		if e != nil {
+			log.Println(e)
+			return
+		}
+		for _, e := range events {
+			for _, trx := range e.Transactions {
+				if trx.Typ == "response" {
+					chainSocket.chain.pipeline([][]byte{trx.Payload})
+				}
+			}
+		}
 	}
 }
 
-func (c *Chain) NotifyElectorReady(origin string) {
+func (c *SubChain) NotifyNewTransactionLoad(machineId string) {
+	c.chain.sharder.LogLoad(c.id, machineId)
+}
+
+func (c *Chain) NotifyNewMachineCreated(machineId string) {
+	sc := SmartContract{ID: machineId, TransactionCount: rand.Int63n(5)}
+	c.sharder.AssignContract(sc)
+}
+
+func (c *SubChain) NotifyElectorReady(origin string) {
 	push := false
 	func() {
 		c.Lock.Lock()
 		defer c.Lock.Unlock()
 		c.readyElectors[origin] = true
-		if len(c.readyElectors) == (c.sockets.Count()) {
+		if len(c.readyElectors) == len(c.peers) {
 			c.readyElectors = map[string]bool{}
 			push = true
 		}
@@ -657,7 +766,7 @@ func (c *Chain) NotifyElectorReady(origin string) {
 	}
 }
 
-func (c *Chain) VoteForNextEvent(origin string, eventProof string) {
+func (c *SubChain) VoteForNextEvent(origin string, eventProof string) {
 
 	var choosenEvent *Event = nil
 	done := false
@@ -665,7 +774,7 @@ func (c *Chain) VoteForNextEvent(origin string, eventProof string) {
 		c.Lock.Lock()
 		defer c.Lock.Unlock()
 		c.nextEventVotes[origin] = eventProof
-		if len(c.nextEventVotes) == c.sockets.Count() {
+		if len(c.nextEventVotes) == len(c.peers) {
 			votes := map[string]int{}
 			for _, vote := range c.nextEventVotes {
 				if _, ok := votes[vote]; !ok {
@@ -755,11 +864,11 @@ func (c *Chain) VoteForNextEvent(origin string, eventProof string) {
 
 		c.BroadcastInShard(startNewElectionSignal)
 
-		c.NotifyElectorReady(c.app.Id())
+		c.NotifyElectorReady(c.chain.app.Id())
 	}
 }
 
-func (c *Chain) GetEventByProof(proof string) *Event {
+func (c *SubChain) GetEventByProof(proof string) *Event {
 	return c.events[proof]
 }
 
@@ -776,29 +885,41 @@ func openSocket(origin string, chain *Chain) bool {
 	return true
 }
 
-func (c *Chain) Run(port int) {
-
-	c.Listen(port)
+func (c *SubChain) Run() {
 
 	future.Async(func() {
 		for {
 			haveTrxs := false
-			func() {
+			if func() bool {
 				c.Lock.Lock()
 				defer c.Lock.Unlock()
+				if c.removed {
+					return true
+				}
 				if len(c.pendingTrxs) > 0 {
 					haveTrxs = true
 				}
-			}()
+				return false
+			}() {
+				for {
+					if c.remainedCount == 0 {
+						break
+					}
+					time.Sleep(time.Duration(100) * time.Millisecond)
+				}
+				c.chain.sharder.DoPostMerge(c.id)
+				break
+			}
 			if haveTrxs {
 				log.Println("creating new event...")
 				var e *Event = nil
 				func() {
 					c.Lock.Lock()
 					defer c.Lock.Unlock()
-					proof := fmt.Sprintf("%s-%d", c.app.Id(), time.Now().UnixMicro())
+					now := time.Now().UnixMicro()
+					proof := fmt.Sprintf("%s-%d", c.chain.app.Id(), now)
 					e = &Event{
-						Origin:          c.app.Id(),
+						Origin:          c.chain.app.Id(),
 						backedResponses: map[string]Guarantee{},
 						backedProofs:    map[string]string{},
 						randomNums:      map[string]int{},
@@ -806,14 +927,16 @@ func (c *Chain) Run(port int) {
 						Transactions:    c.pendingTrxs,
 						Proof:           proof,
 						MyUpdate:        []byte{},
+						Timestamp:       now,
 						phase:           1,
 					}
 					c.pendingTrxs = []Transaction{}
 					c.events[e.Proof] = e
 					c.pendingEvents = append(c.pendingEvents, e)
+					c.remainedCount++
 				}()
 				dataStr, _ := json.Marshal(e)
-				signature := c.app.SignPacket(dataStr)
+				signature := c.chain.app.SignPacket(dataStr)
 				dataBytes := []byte(dataStr)
 				dataLenBytes := make([]byte, 4)
 				binary.LittleEndian.PutUint32(dataLenBytes, uint32(len(dataBytes)))
@@ -834,7 +957,7 @@ func (c *Chain) Run(port int) {
 				copy(payload[pointer:pointer+uint32(len(dataBytes))], dataBytes)
 				pointer += uint32(len(dataBytes))
 
-				proofSign := c.app.SignPacket([]byte(e.Proof))
+				proofSign := c.chain.app.SignPacket([]byte(e.Proof))
 				proofSignBytes := []byte(proofSign)
 				proofSignLenBytes := make([]byte, 4)
 				binary.LittleEndian.PutUint32(proofSignLenBytes, uint32(len(proofSignBytes)))
@@ -860,7 +983,7 @@ func (c *Chain) Run(port int) {
 			}
 			time.Sleep(time.Duration(100) * time.Millisecond)
 		}
-	}, true)
+	}, false)
 
 	future.Async(func() {
 		for {
@@ -881,7 +1004,7 @@ func (c *Chain) Run(port int) {
 				c.cond_var_ <- 1
 			}
 			<-c.cond_var_
-			c.VoteForNextEvent(c.app.Id(), e.Proof)
+			c.VoteForNextEvent(c.chain.app.Id(), e.Proof)
 			c.BroadcastInShard(e.MyUpdate)
 		}
 	}, true)
@@ -890,14 +1013,36 @@ func (c *Chain) Run(port int) {
 		for {
 			blockRaw, _ := c.nextBlockQueue.Get()
 			block := blockRaw.(*Event)
+			c.blocks = append(c.blocks, block)
 			pipelinePacket := [][]byte{}
 			for _, trx := range block.Transactions {
 				log.Println("received transaction: ", trx.Typ, string(trx.Payload))
+				if trx.Typ == "logLoad" {
+					machineIds := []string{}
+					e := json.Unmarshal(trx.Payload, &machineIds)
+					if e != nil {
+						log.Println(e)
+					} else {
+						for _, macId := range machineIds {
+							c.chain.sharder.LogLoad(c.id, macId)
+						}
+					}
+				} else if trx.Typ == "newNode" {
+					openSocket(string(trx.Payload), c.chain)
+				}
 				pipelinePacket = append(pipelinePacket, trx.Payload)
 			}
-			c.pipeline(pipelinePacket)
+			machineIds := c.chain.pipeline(pipelinePacket)
+			midsBytes, _ := json.Marshal(machineIds)
+			sc, _ := c.chain.SubChains.Get("1")
+			sc.SubmitTrx("logLoad", midsBytes)
+			func() {
+				c.Lock.Lock()
+				defer c.Lock.Unlock()
+				c.remainedCount--
+			}()
 		}
-	}, true)
+	}, false)
 
 	future.Async(func() {
 		log.Println("trying to connect to other peers...")
@@ -911,17 +1056,17 @@ func (c *Chain) Run(port int) {
 			completed = true
 			for _, peerAddress := range peersArr {
 				log.Println("socket: ", peerAddress)
-				if peerAddress == c.app.Id() {
-					c.sockets.Set(peerAddress, &Socket{app: c.app, chain: c, Conn: nil, Buffer: [][]byte{}, Ack: true})
+				if peerAddress == c.chain.app.Id() {
+					c.chain.sockets.Set(peerAddress, &Socket{app: c.chain.app, chain: c.chain, Conn: nil, Buffer: []Packet{}, Ack: true})
 					continue
 				}
-				if peerAddress < c.app.Id() {
+				if peerAddress < c.chain.app.Id() {
 					continue
 				}
-				if c.sockets.Has(peerAddress) {
+				if c.chain.sockets.Has(peerAddress) {
 					continue
 				}
-				if !openSocket(peerAddress, c) {
+				if !openSocket(peerAddress, c.chain) {
 					completed = false
 					continue
 				}
@@ -931,18 +1076,41 @@ func (c *Chain) Run(port int) {
 	}, false)
 }
 
-func (c *Chain) SubmitTrx(typ string, payload []byte) {
+func (c *SubChain) SubmitTrx(typ string, payload []byte) {
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
 	c.pendingTrxs = append(c.pendingTrxs, Transaction{Typ: typ, Payload: payload})
 }
 
-func (c *Chain) MemorizeResponseBacked(proof string, signature string, rndNum int, origin string) bool {
+func (c *Chain) SubmitTrx(chainId string, machineId string, typ string, payload []byte) {
+	if machineId != "" {
+		contract, ok := c.sharder.contracts.Get(machineId)
+		if !ok {
+			log.Println("submitting to subchain failed as contract not found")
+			return
+		}
+		subchain, ok := c.SubChains.Get(fmt.Sprintf("%d", contract.ShardID))
+		if !ok {
+			log.Println("submitting to subchain failed as subchain of contract not found")
+			return
+		}
+		subchain.SubmitTrx(typ, payload)
+	} else if chainId != "" {
+		subchain, ok := c.SubChains.Get(chainId)
+		if !ok {
+			log.Println("submitting to subchain failed as subchain not found")
+			return
+		}
+		subchain.SubmitTrx(typ, payload)
+	}
+}
+
+func (c *SubChain) MemorizeResponseBacked(proof string, signature string, rndNum int, origin string) bool {
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
 	if e, ok := c.events[proof]; ok {
 		e.backedResponses[origin] = Guarantee{Proof: proof, Sign: signature, RndNum: rndNum}
-		if len(e.backedResponses) == (c.sockets.Count() - 1) {
+		if len(e.backedResponses) == (len(c.peers) - 1) {
 			return true
 		}
 	} else {
@@ -951,7 +1119,7 @@ func (c *Chain) MemorizeResponseBacked(proof string, signature string, rndNum in
 	return false
 }
 
-func (c *Chain) AddBackedProof(proof string, origin string, signedProof string) bool {
+func (c *SubChain) AddBackedProof(proof string, origin string, signedProof string) bool {
 	// EVP_PKEY *pkey;
 	// {
 	//     std::lock_guard<std::mutex> lock(this->lock);
@@ -963,7 +1131,7 @@ func (c *Chain) AddBackedProof(proof string, origin string, signedProof string) 
 		defer c.Lock.Unlock()
 		if e, ok := c.events[proof]; ok {
 			e.backedProofs[origin] = signedProof
-			if len(e.backedProofs) == (c.sockets.Count() - 2) {
+			if len(e.backedProofs) == (len(c.peers) - 2) {
 				if _, ok = e.backedProofs[e.Origin]; !ok {
 					return true
 				}
@@ -977,7 +1145,7 @@ func (c *Chain) RemoveConnection(origin string) {
 	c.sockets.Remove(origin)
 }
 
-func (c *Chain) RegisterPipeline(pipeline func([][]byte)) {
+func (c *Chain) RegisterPipeline(pipeline func([][]byte) []string) {
 	c.pipeline = pipeline
 }
 

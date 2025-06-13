@@ -151,7 +151,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 	defer wm.SaRContainer(cont.ID)
 	future.Async(func() {
 		time.Sleep(60 * time.Minute)
-		wm.SaRContainer(cn)
+		// wm.SaRContainer(cn)
 	}, false)
 
 	tarId := WriteToTar(inputFile)

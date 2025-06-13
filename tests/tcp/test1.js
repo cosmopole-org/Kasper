@@ -5,7 +5,7 @@ const { exec } = require('child_process');
 const readline = require('node:readline');
 
 const port = 8080;
-let host = '37.32.8.183';
+let host = '37.152.177.203';
 var privateKey = undefined;
 
 let callbacks = {};
@@ -21,6 +21,12 @@ socket.on('connect', () => {
 
 socket.on('error', e => {
     console.log(e);
+});
+
+socket.on('close', e => {
+    console.log(e);
+    const socket = new net.Socket();
+    socket.connect(port, host);
 });
 
 let received = Buffer.from([]);
@@ -179,7 +185,7 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/register", { "username": "kasper4" });
+    let res = await sendRequest("", "/users/register", { "username": "kasper" });
     console.log(res.resCode, res.obj);
 
     privateKey = Buffer.from(
@@ -187,9 +193,10 @@ async function doTest() {
         'utf-8'
     )
     let userId = res.obj.user.id;
+
     await sendRequest(userId, "authenticate", {});
 
-    // await sleep(3000);
+    await sleep(3000);
 
     // console.log("sending run pc request...");
     // res = await sendRequest(userId, "/pc/runPc", {});
@@ -201,24 +208,30 @@ async function doTest() {
     // res = await sendRequest(userId, "/pc/execCommand", { "vmId": vmId, "command": "ls" });
     // console.log(res.resCode, res.obj);
 
+    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    // console.log(res.resCode, res.obj);
+    // let pointOneId = res.obj.point.id;
+
+    // res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
+    // console.log(res.resCode, res.obj);
+
+    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    // console.log(res.resCode, res.obj);
+    // let pointTwoId = res.obj.point.id;
+
+    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    // console.log(res.resCode, res.obj);
+    // let pointMainId = res.obj.point.id;
+
     res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
     console.log(res.resCode, res.obj);
-    let pointOneId = res.obj.point.id;
+    let pointId = res.obj.point.id;
 
-    res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
-    console.log(res.resCode, res.obj);
-
-    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    console.log(res.resCode, res.obj);
-    let pointTwoId = res.obj.point.id;
-
-    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    console.log(res.resCode, res.obj);
-    let pointMainId = res.obj.point.id;
-
-    res = await sendRequest(userId, "/machines/create", { "username": "convnet4" });
-    console.log(res.resCode, res.obj);
-    let machineId = res.obj.user.id;
+    // res = await sendRequest(userId, "/machines/create", { "username": "deepseek" });
+    // console.log(res.resCode, res.obj);
+    // let machineId = res.obj.user.id;
+    
+    let machineId = '4@global';
 
     // let keys = {
     //     "init": [pointOneId, pointTwoId],
@@ -302,30 +315,33 @@ async function doTest() {
     //     console.log(res.resCode, res.obj);
     // }
 
-    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' '${userId}'`);
-    // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder/main.wasm");
+    // // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' '${userId}'`);
+    // // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder/main.wasm");
+    // // res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
+    // // console.log(res.resCode, res.obj);
+
+    // let runJsScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.js", { encoding: 'utf-8' }));
+    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runJsScript });
+    // console.log(res.resCode, res.obj);
+    // let runJsId = res.obj.file.id;
+
+    // let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.sh", { encoding: 'utf-8' }));
+    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runShScript });
+    // console.log(res.resCode, res.obj);
+    // let runShId = res.obj.file.id;
+
+    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder && bash build.sh '' '${userId}'`);
+    // let dockerfile2BC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder/Dockerfile");
+    // res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "deepseek" }, "byteCode": dockerfile2BC.toString('base64') });
+    // console.log(res.resCode, res.obj);
+
+    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder && bash build.sh '' '${userId}'`);
+    // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder/main.wasm");
     // res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
     // console.log(res.resCode, res.obj);
 
-    // // let runJsScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.js", { encoding: 'utf-8' }));
-    // // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runJsScript });
-    // // console.log(res.resCode, res.obj);
-    // // let runJsId = res.obj.file.id;
-
-    // // let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.sh", { encoding: 'utf-8' }));
-    // // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runShScript });
-    // // console.log(res.resCode, res.obj);
-    // // let runShId = res.obj.file.id;
-
-    // // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder && bash build.sh '' '${userId}'`);
-    // // let dockerfile2BC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder/Dockerfile");
-    // // res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "deepseek" }, "byteCode": dockerfile2BC.toString('base64') });
-    // // console.log(res.resCode, res.obj);
-
-    // // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder && bash build.sh '' '${userId}'`);
-    // // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder/main.wasm");
-    // // res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
-    // // console.log(res.resCode, res.obj);
+    res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointId, "userId": machineId });
+    console.log(res.resCode, res.obj);
 
     // res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointMainId, "userId": machineId });
     // console.log(res.resCode, res.obj);
@@ -370,55 +386,57 @@ async function doTest() {
     // });
     // console.log(res.resCode, res.obj);
 
-    // // sendRequest(userId, "/points/signal", {
-    // //     "type": "single",
-    // //     "pointId": pointId,
-    // //     "userId": machineId,
-    // //     "data": JSON.stringify({
-    // //         "action": "startChatbot",
-    // //         "srcFiles": {
-    // //             [runJsId]: "run.js",
-    // //             [runShId]: "run.sh"
-    // //         }
-    // //     })
-    // // });
+    // sendRequest(userId, "/points/signal", {
+    //     "type": "single",
+    //     "pointId": pointId,
+    //     "userId": machineId,
+    //     "data": JSON.stringify({
+    //         "action": "startChatbot",
+    //         "srcFiles": {
+    //             [runJsId]: "run.js",
+    //             [runShId]: "run.sh"
+    //         }
+    //     })
+    // });
 
-    // // console.log("starting chatserver...")
-    // // await sleep(10000);
+    // console.log("starting chatserver...")
+    // await sleep(10000);
 
-    // // console.log("sending prompt...")
+    console.log("sending prompt...")
 
-    // // res = await sendRequest(userId, "/points/signal", {
-    // //     "type": "single",
-    // //     "pointId": pointId,
-    // //     "userId": machineId,
-    // //     "data": JSON.stringify({
-    // //         "action": "chat",
-    // //         "prompt": "hello deepseek. how is weather like ?"
-    // //     })
-    // // });
+    res = await sendRequest(userId, "/points/signal", {
+        "type": "single",
+        "pointId": pointId,
+        "userId": machineId,
+        "data": JSON.stringify({
+            "action": "chat",
+            "prompt": "hello deepseek. how is weather like ?"
+        })
+    });
 
-    // // console.log(res.resCode, res.obj);
+    console.log(res.resCode, res.obj);
 
-    // // const rl = readline.createInterface({
-    // //     input: process.stdin,
-    // //     output: process.stdout,
-    // // });
-    // // const askMessage = () => {
-    // //     rl.question(`message:`, async q => {
-    // //         await sendRequest(userId, "/points/signal", {
-    // //             "type": "single",
-    // //             "pointId": pointId,
-    // //             "userId": machineId,
-    // //             "data": JSON.stringify({
-    // //                 "action": "chat",
-    // //                 "prompt": q
-    // //             })
-    // //         });
-    // //         askMessage();
-    // //     });
-    // // }
-    // // askMessage();
-    // // socket.destroy();
-    // // console.log("end.");
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+    const askMessage = () => {
+        rl.question(`message:`, async q => {
+            if (q.trim().length > 0) {
+                await sendRequest(userId, "/points/signal", {
+                    "type": "single",
+                    "pointId": pointId,
+                    "userId": machineId,
+                    "data": JSON.stringify({
+                        "action": "chat",
+                        "prompt": q
+                    })
+                });
+            }
+            askMessage();
+        });
+    }
+    askMessage();
+    // socket.destroy();
+    // console.log("end.");
 }

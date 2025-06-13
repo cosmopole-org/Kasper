@@ -49,5 +49,9 @@ func (net *Network) Run(ports map[string]int) {
 	if ok {
 		net.tcp.Listen(tcpPort)
 	}
-	net.core.Run()
+	chainPort, ok := ports["chain"]
+	if ok {
+		net.tcp.Listen(chainPort)
+	}
+	net.chain.Listen(chainPort)
 }
