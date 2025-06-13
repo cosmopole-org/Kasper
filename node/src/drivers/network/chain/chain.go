@@ -8,6 +8,7 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/shell/utils/future"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"slices"
@@ -49,13 +50,13 @@ type Packet struct {
 }
 
 type Socket struct {
-	Lock   sync.Mutex
-	Id     string
-	Conn   net.Conn
-	Buffer []Packet
-	Ack    bool
-	app    core.ICore
-	chain  *Chain
+	Lock       sync.Mutex
+	Id         string
+	Conn       net.Conn
+	Buffer     []Packet
+	Ack        bool
+	app        core.ICore
+	blockchain *Blockchain
 }
 
 type SubChain struct {
@@ -79,12 +80,20 @@ type SubChain struct {
 }
 
 type Chain struct {
-	app       core.ICore
-	pipeline  func([][]byte) []string
-	sockets   *cmap.ConcurrentMap[string, *Socket]
-	SubChains *cmap.ConcurrentMap[string, *SubChain]
-	MyShards  *cmap.ConcurrentMap[string, bool]
-	sharder   *DynamicShardingSystem
+	id         int64
+	blockchain *Blockchain
+	SubChains  *cmap.ConcurrentMap[string, *SubChain]
+	MyShards   *cmap.ConcurrentMap[string, bool]
+	sharder    *DynamicShardingSystem
+}
+
+type Blockchain struct {
+	app          core.ICore
+	sockets      *cmap.ConcurrentMap[string, *Socket]
+	chains       *cmap.ConcurrentMap[string, *Chain]
+	allSubChains *cmap.ConcurrentMap[string, *SubChain]
+	pipeline     func([][]byte) []string
+	chainCounter int64
 }
 
 type Ok struct {
@@ -92,12 +101,12 @@ type Ok struct {
 	RndNum int
 }
 
-func NewChain(core core.ICore) *Chain {
+func NewChain(core core.ICore) *Blockchain {
 	m := cmap.New[*Socket]()
 	q, _ := queues.NewLinkedBlockingQueue(1000)
 	q2, _ := queues.NewLinkedBlockingQueue(1000)
 	sc := &SubChain{
-		id:                    1,
+		id:                    2,
 		events:                map[string]*Event{},
 		pendingBlockElections: 0,
 		readyForNewElection:   true,
@@ -121,13 +130,24 @@ func NewChain(core core.ICore) *Chain {
 	m3 := cmap.New[bool]()
 	m3.Set("1", true)
 	chain := &Chain{
-		app:       core,
-		sockets:   &m,
 		SubChains: &m2,
 		MyShards:  &m3,
 	}
 	chain.sharder = NewSharder(chain)
-	return chain
+	sc.chain = chain
+	m4 := cmap.New[*Chain]()
+	m4.Set("1", chain)
+	m5 := cmap.New[*SubChain]()
+	m5.Set("1", sc)
+	blockchain := &Blockchain{
+		app:          core,
+		sockets:      &m,
+		chainCounter: math.MaxInt32,
+		chains:       &m4,
+		pipeline:     nil,
+	}
+	chain.blockchain = blockchain
+	return blockchain
 }
 
 func (t *SubChain) appendEvent(e *Event) {
@@ -140,7 +160,7 @@ func (t *SubChain) appendEvent(e *Event) {
 
 func (t *SubChain) SendToShardMember(origin string, payload []byte) {
 	log.Println("sending packet to peer:", origin)
-	s, ok := t.chain.sockets.Get(origin)
+	s, ok := t.chain.blockchain.sockets.Get(origin)
 	if ok {
 		s.writePacket(t.id, payload)
 	} else {
@@ -149,22 +169,24 @@ func (t *SubChain) SendToShardMember(origin string, payload []byte) {
 }
 
 func (t *SubChain) BroadcastInShard(payload []byte) {
-	for k, _ := range t.peers {
-		if k == t.chain.app.Id() {
+	for k := range t.peers {
+		if k == t.chain.blockchain.app.Id() {
 			continue
 		}
-		s, ok := t.chain.sockets.Get(k)
+		s, ok := t.chain.blockchain.sockets.Get(k)
 		if ok {
 			s.writePacket(t.id, payload)
 		}
 	}
 }
 
-func (t *Chain) Listen(port int) {
-	for _, subchain := range t.SubChains.Items() {
-		future.Async(func() {
-			subchain.Run()
-		}, false)
+func (b *Blockchain) Listen(port int) {
+	for _, t := range b.chains.Items() {
+		for _, subchain := range t.SubChains.Items() {
+			future.Async(func() {
+				subchain.Run()
+			}, false)
+		}
 	}
 	future.Async(func() {
 		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -179,12 +201,12 @@ func (t *Chain) Listen(port int) {
 				continue
 			}
 			log.Println("new client connected")
-			t.handleConnection(conn)
+			b.handleConnection(conn)
 		}
 	}, true)
 }
 
-func (t *Chain) listenForPackets(socket *Socket) {
+func (t *Blockchain) listenForPackets(socket *Socket) {
 	defer func() {
 		t.sockets.Remove(socket.Id)
 		socket.Conn.Close()
@@ -311,11 +333,13 @@ func (t *Chain) listenForPackets(socket *Socket) {
 	}
 }
 
-func (t *Chain) handleConnection(conn net.Conn) {
+func (t *Blockchain) handleConnection(conn net.Conn) {
 	origin := strings.Split(conn.RemoteAddr().String(), ":")[0]
 	newNode := Node{ID: origin, Power: rand.Intn(100)}
-	t.sharder.HandleNewNode(newNode)
-	socket := &Socket{Id: strings.Split(conn.RemoteAddr().String(), ":")[0], Buffer: []Packet{}, Conn: conn, app: t.app, chain: t, Ack: true}
+	for _, c := range t.chains.Items() {
+		c.sharder.HandleNewNode(newNode)
+	}
+	socket := &Socket{Id: strings.Split(conn.RemoteAddr().String(), ":")[0], Buffer: []Packet{}, Conn: conn, app: t.app, blockchain: t, Ack: true}
 	t.sockets.Set(origin, socket)
 	future.Async(func() {
 		t.listenForPackets(socket)
@@ -398,7 +422,7 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 			log.Println(err)
 		}
 		ok := false
-		subchain, ok = chainSocket.chain.SubChains.Get(chainId)
+		subchain, ok = chainSocket.blockchain.allSubChains.Get(chainId)
 		if !ok {
 			subchain = nil
 		}
@@ -462,7 +486,7 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 		log.Println("step 2")
 
 		subchain.appendEvent(eventObj)
-		proofSign := chainSocket.chain.app.SignPacket([]byte(eventObj.Proof))
+		proofSign := chainSocket.blockchain.app.SignPacket([]byte(eventObj.Proof))
 
 		log.Println("step 3")
 
@@ -492,7 +516,7 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 
 		log.Println("step 5")
 
-		okObj := Ok{Proof: eventObj.Proof, RndNum: rand.Intn(chainSocket.chain.sockets.Count())}
+		okObj := Ok{Proof: eventObj.Proof, RndNum: rand.Intn(chainSocket.blockchain.sockets.Count())}
 		okBytes, _ := json.Marshal(okObj)
 		okLenBytes := make([]byte, 4)
 		binary.LittleEndian.PutUint32(okLenBytes[:], uint32(len(okBytes)))
@@ -673,7 +697,7 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 				e = subchain.GetEventByProof(proof)
 			}
 			e.electionReadys[origin] = true
-			if len(e.electionReadys) == (chainSocket.chain.sockets.Count() - 1) {
+			if len(e.electionReadys) == (chainSocket.blockchain.sockets.Count() - 1) {
 				readyToStart = true
 			}
 		}()
@@ -734,16 +758,21 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 		for _, e := range events {
 			for _, trx := range e.Transactions {
 				if trx.Typ == "response" {
-					chainSocket.chain.pipeline([][]byte{trx.Payload})
+					chainSocket.blockchain.pipeline([][]byte{trx.Payload})
 				}
 			}
 		}
 	}
 }
 
-func (c *Chain) NotifyNewMachineCreated(machineId string) {
+func (c *Blockchain) NotifyNewMachineCreated(chainId int64, machineId string) {
+	chain, ok := c.chains.Get(fmt.Sprintf("%d", chainId))
+	if !ok {
+		log.Println("chain not found")
+		return
+	}
 	sc := SmartContract{ID: machineId, TransactionCount: rand.Int63n(5)}
-	c.sharder.AssignContract(sc)
+	chain.sharder.AssignContract(sc)
 }
 
 func (c *SubChain) NotifyElectorReady(origin string) {
@@ -860,7 +889,7 @@ func (c *SubChain) VoteForNextEvent(origin string, eventProof string) {
 
 		c.BroadcastInShard(startNewElectionSignal)
 
-		c.NotifyElectorReady(c.chain.app.Id())
+		c.NotifyElectorReady(c.chain.blockchain.app.Id())
 	}
 }
 
@@ -868,7 +897,7 @@ func (c *SubChain) GetEventByProof(proof string) *Event {
 	return c.events[proof]
 }
 
-func openSocket(origin string, chain *Chain) bool {
+func openSocket(origin string, chain *Blockchain) bool {
 
 	log.Println("connecting to chain socket server: ", origin)
 	conn, err := net.Dial("tcp", origin+":8082")
@@ -913,9 +942,9 @@ func (c *SubChain) Run() {
 					c.Lock.Lock()
 					defer c.Lock.Unlock()
 					now := time.Now().UnixMicro()
-					proof := fmt.Sprintf("%s-%d", c.chain.app.Id(), now)
+					proof := fmt.Sprintf("%s-%d", c.chain.blockchain.app.Id(), now)
 					e = &Event{
-						Origin:          c.chain.app.Id(),
+						Origin:          c.chain.blockchain.app.Id(),
 						backedResponses: map[string]Guarantee{},
 						backedProofs:    map[string]string{},
 						randomNums:      map[string]int{},
@@ -932,7 +961,7 @@ func (c *SubChain) Run() {
 					c.remainedCount++
 				}()
 				dataStr, _ := json.Marshal(e)
-				signature := c.chain.app.SignPacket(dataStr)
+				signature := c.chain.blockchain.app.SignPacket(dataStr)
 				dataBytes := []byte(dataStr)
 				dataLenBytes := make([]byte, 4)
 				binary.LittleEndian.PutUint32(dataLenBytes, uint32(len(dataBytes)))
@@ -953,7 +982,7 @@ func (c *SubChain) Run() {
 				copy(payload[pointer:pointer+uint32(len(dataBytes))], dataBytes)
 				pointer += uint32(len(dataBytes))
 
-				proofSign := c.chain.app.SignPacket([]byte(e.Proof))
+				proofSign := c.chain.blockchain.app.SignPacket([]byte(e.Proof))
 				proofSignBytes := []byte(proofSign)
 				proofSignLenBytes := make([]byte, 4)
 				binary.LittleEndian.PutUint32(proofSignLenBytes, uint32(len(proofSignBytes)))
@@ -1000,7 +1029,7 @@ func (c *SubChain) Run() {
 				c.cond_var_ <- 1
 			}
 			<-c.cond_var_
-			c.VoteForNextEvent(c.chain.app.Id(), e.Proof)
+			c.VoteForNextEvent(c.chain.blockchain.app.Id(), e.Proof)
 			c.BroadcastInShard(e.MyUpdate)
 		}
 	}, true)
@@ -1013,22 +1042,62 @@ func (c *SubChain) Run() {
 			pipelinePacket := [][]byte{}
 			for _, trx := range block.Transactions {
 				log.Println("received transaction: ", trx.Typ, string(trx.Payload))
-				if trx.Typ == "logLoad" {
-					machineIds := []string{}
-					e := json.Unmarshal(trx.Payload, &machineIds)
-					if e != nil {
-						log.Println(e)
-					} else {
-						for _, macId := range machineIds {
-							c.chain.sharder.LogLoad(c.id, macId)
+				if c.id == 1 {
+					if trx.Typ == "logLoad" {
+						machineIds := []string{}
+						e := json.Unmarshal(trx.Payload, &machineIds)
+						if e != nil {
+							log.Println(e)
+						} else {
+							for _, macId := range machineIds {
+								c.chain.sharder.LogLoad(c.id, macId)
+							}
 						}
+					} else if trx.Typ == "newNode" {
+						openSocket(string(trx.Payload), c.chain.blockchain)
+					} else if trx.Typ == "newChain" {
+						q, _ := queues.NewLinkedBlockingQueue(1000)
+						q2, _ := queues.NewLinkedBlockingQueue(1000)
+						c.chain.blockchain.chainCounter++
+						sc := &SubChain{
+							id:                    c.chain.blockchain.chainCounter,
+							events:                map[string]*Event{},
+							pendingBlockElections: 0,
+							readyForNewElection:   true,
+							cond_var_:             make(chan int, 10000),
+							readyElectors:         map[string]bool{},
+							nextEventVotes:        map[string]string{},
+							nextBlockQueue:        q,
+							nextEventQueue:        q2,
+							pendingTrxs:           []Transaction{},
+							pendingEvents:         []*Event{},
+							blocks:                []*Event{},
+							remainedCount:         0,
+							peers: map[string]bool{
+								"172.77.5.1": true,
+								"172.77.5.2": true,
+								"172.77.5.3": true,
+							},
+						}
+						m2 := cmap.New[*SubChain]()
+						m2.Set("1", sc)
+						m3 := cmap.New[bool]()
+						m3.Set("1", true)
+						chain := &Chain{
+							SubChains: &m2,
+							MyShards:  &m3,
+						}
+						chain.sharder = NewSharder(chain)
+						sc.chain = chain
+						c.chain.SubChains.Set(fmt.Sprintf("%d", sc.id), sc)
+						c.chain.blockchain.allSubChains.Set(fmt.Sprintf("%d", sc.id), sc)
+						c.chain.blockchain.chains.Set(fmt.Sprintf("%d", chain.id), chain)
+					} else {
+						pipelinePacket = append(pipelinePacket, trx.Payload)
 					}
-				} else if trx.Typ == "newNode" {
-					openSocket(string(trx.Payload), c.chain)
 				}
-				pipelinePacket = append(pipelinePacket, trx.Payload)
 			}
-			machineIds := c.chain.pipeline(pipelinePacket)
+			machineIds := c.chain.blockchain.pipeline(pipelinePacket)
 			midsBytes, _ := json.Marshal(machineIds)
 			sc, _ := c.chain.SubChains.Get("1")
 			sc.SubmitTrx("logLoad", midsBytes)
@@ -1052,17 +1121,17 @@ func (c *SubChain) Run() {
 			completed = true
 			for _, peerAddress := range peersArr {
 				log.Println("socket: ", peerAddress)
-				if peerAddress == c.chain.app.Id() {
-					c.chain.sockets.Set(peerAddress, &Socket{app: c.chain.app, chain: c.chain, Conn: nil, Buffer: []Packet{}, Ack: true})
+				if peerAddress == c.chain.blockchain.app.Id() {
+					c.chain.blockchain.sockets.Set(peerAddress, &Socket{app: c.chain.blockchain.app, blockchain: c.chain.blockchain, Conn: nil, Buffer: []Packet{}, Ack: true})
 					continue
 				}
-				if peerAddress < c.chain.app.Id() {
+				if peerAddress < c.chain.blockchain.app.Id() {
 					continue
 				}
-				if c.chain.sockets.Has(peerAddress) {
+				if c.chain.blockchain.sockets.Has(peerAddress) {
 					continue
 				}
-				if !openSocket(peerAddress, c.chain) {
+				if !openSocket(peerAddress, c.chain.blockchain) {
 					completed = false
 					continue
 				}
@@ -1078,26 +1147,38 @@ func (c *SubChain) SubmitTrx(typ string, payload []byte) {
 	c.pendingTrxs = append(c.pendingTrxs, Transaction{Typ: typ, Payload: payload})
 }
 
-func (c *Chain) SubmitTrx(chainId string, machineId string, typ string, payload []byte) {
-	if machineId != "" {
-		contract, ok := c.sharder.contracts.Get(machineId)
-		if !ok {
-			log.Println("submitting to subchain failed as contract not found")
-			return
+func (b *Blockchain) SubmitTrx(chainId string, machineId string, typ string, payload []byte) {
+	if chainId != "" {
+		if machineId != "" {
+			c, ok := b.chains.Get(chainId)
+			if !ok {
+				log.Println("submitting to subchain failed as chain not found")
+				return
+			}
+			contract, ok := c.sharder.contracts.Get(machineId)
+			if !ok {
+				log.Println("submitting to subchain failed as contract not found")
+				return
+			}
+			subchain, ok := c.SubChains.Get(fmt.Sprintf("%d", contract.ShardID))
+			if !ok {
+				log.Println("submitting to subchain failed as subchain of contract not found")
+				return
+			}
+			subchain.SubmitTrx(typ, payload)
+		} else {
+			c, ok := b.chains.Get(chainId)
+			if !ok {
+				log.Println("submitting to subchain failed as chain not found")
+				return
+			}
+			subchain, ok := c.SubChains.Get(chainId)
+			if !ok {
+				log.Println("submitting to subchain failed as subchain not found")
+				return
+			}
+			subchain.SubmitTrx(typ, payload)
 		}
-		subchain, ok := c.SubChains.Get(fmt.Sprintf("%d", contract.ShardID))
-		if !ok {
-			log.Println("submitting to subchain failed as subchain of contract not found")
-			return
-		}
-		subchain.SubmitTrx(typ, payload)
-	} else if chainId != "" {
-		subchain, ok := c.SubChains.Get(chainId)
-		if !ok {
-			log.Println("submitting to subchain failed as subchain not found")
-			return
-		}
-		subchain.SubmitTrx(typ, payload)
 	}
 }
 
@@ -1137,14 +1218,14 @@ func (c *SubChain) AddBackedProof(proof string, origin string, signedProof strin
 	return false
 }
 
-func (c *Chain) RemoveConnection(origin string) {
+func (c *Blockchain) RemoveConnection(origin string) {
 	c.sockets.Remove(origin)
 }
 
-func (c *Chain) RegisterPipeline(pipeline func([][]byte) []string) {
+func (c *Blockchain) RegisterPipeline(pipeline func([][]byte) []string) {
 	c.pipeline = pipeline
 }
 
-func (c *Chain) Peers() []string {
+func (c *Blockchain) Peers() []string {
 	return c.sockets.Keys()
 }

@@ -4,6 +4,6 @@ type IChain interface {
 	Listen(port int)
 	SubmitTrx(chainId string, machineId string, typ string, payload []byte)
 	RegisterPipeline(pipeline func([][]byte) []string)
-	NotifyNewMachineCreated(machineId string)
+	NotifyNewMachineCreated(chainId int64, machineId string)
 	Peers() []string
 }

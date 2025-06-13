@@ -84,6 +84,7 @@ func (ds *DynamicShardingSystem) HandleNewNode(newNode Node) {
 	}
 
 	newNode.ShardID = bestShard.ID
+	ds.CheckAndModifyMyShards(newNode.ID, newNode.ShardID)
 	bestShard.Nodes = append(bestShard.Nodes, newNode)
 	ds.Nodes = append(ds.Nodes, newNode)
 	fmt.Printf("New Node %s assigned to Shard %d\n", newNode.ID, bestShard.ID)
@@ -114,6 +115,11 @@ func (ds *DynamicShardingSystem) CheckAndSplitShards() {
 	}
 }
 
+func (ds *DynamicShardingSystem) CheckAndModifyMyShards(nodeId string, shardId int64) {
+	ds.chain.MyShards.Clear()
+	ds.chain.MyShards.Set(fmt.Sprintf("%d", shardId), true)
+}
+
 func (ds *DynamicShardingSystem) SplitShardSmartly(shard *Shard) {
 	sort.Slice(shard.Contracts, func(i, j int) bool {
 		return shard.Contracts[i].TransactionCount > shard.Contracts[j].TransactionCount
@@ -139,9 +145,11 @@ func (ds *DynamicShardingSystem) SplitShardSmartly(shard *Shard) {
 		if len(shardA.Nodes) <= len(shardB.Nodes) {
 			node.ShardID = shardA.ID
 			shardA.Nodes = append(shardA.Nodes, node)
+			ds.CheckAndModifyMyShards(node.ID, node.ShardID)
 		} else {
 			node.ShardID = shardB.ID
 			shardB.Nodes = append(shardB.Nodes, node)
+			ds.CheckAndModifyMyShards(node.ID, node.ShardID)
 		}
 	}
 
@@ -242,7 +250,7 @@ func (ds *DynamicShardingSystem) TryMerge(shardA, shardB *Shard) {
 			for _, e := range shardBEvents.events {
 				for _, trx := range e.Transactions {
 					if trx.Typ == "response" {
-						ds.chain.pipeline([][]byte{trx.Payload})
+						ds.chain.blockchain.pipeline([][]byte{trx.Payload})
 					}
 				}
 			}
@@ -290,6 +298,7 @@ func (ds *DynamicShardingSystem) RemoveShard(shardID int64) {
 			break
 		}
 	}
+	ds.chain.MyShards.Remove(fmt.Sprintf("%d", shardID))
 }
 
 func NewSharder(chain *Chain) *DynamicShardingSystem {
