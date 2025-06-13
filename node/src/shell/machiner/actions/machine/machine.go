@@ -36,6 +36,7 @@ func (a *Actions) Create(state state.IState, input inputs_machiner.CreateInput) 
 	user.Push(trx)
 	session.Push(trx)
 	vm.Push(trx)
+	a.App.Tools().Network().Chain().NotifyNewMachineCreated(user.Id)
 	return outputs_machiner.CreateOutput{User: user}, nil
 }
 

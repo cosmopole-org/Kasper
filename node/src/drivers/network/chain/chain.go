@@ -741,10 +741,6 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 	}
 }
 
-func (c *SubChain) NotifyNewTransactionLoad(machineId string) {
-	c.chain.sharder.LogLoad(c.id, machineId)
-}
-
 func (c *Chain) NotifyNewMachineCreated(machineId string) {
 	sc := SmartContract{ID: machineId, TransactionCount: rand.Int63n(5)}
 	c.sharder.AssignContract(sc)
