@@ -1,11 +1,11 @@
 
-	package plugger_machine
+	package plugger_pc
 
 	import (
 		"kasper/src/abstract/models/core"
 		"kasper/src/shell/utils"
 	    iaction "kasper/src/abstract/models/action"
-		actions "kasper/src/shell/machiner/actions/machine"
+		actions "kasper/src/shell/api/actions/pc"
 	)
 	
 	type Plugger struct {
@@ -14,12 +14,12 @@
 		Core core.ICore
 	}
 	
-		func (c *Plugger) Create() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.Create)
+		func (c *Plugger) RunPc() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.RunPc)
 		}
 		
-		func (c *Plugger) Deploy() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.Deploy)
+		func (c *Plugger) ExecCommand() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ExecCommand)
 		}
 		
 	func (c *Plugger) Install(a *actions.Actions) *Plugger {
@@ -31,7 +31,7 @@
 	}
 
 	func New(actions *actions.Actions, core core.ICore) *Plugger {
-		id := "machine"
+		id := "pc"
 		return &Plugger{Id: &id, Actions: actions, Core: core}
 	}
 	

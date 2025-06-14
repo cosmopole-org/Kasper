@@ -33,7 +33,7 @@ import (
 	actor "kasper/src/core/module/actor"
 	mainstate "kasper/src/core/module/actor/model/state"
 	module_trx "kasper/src/core/module/actor/model/trx"
-	mach_model "kasper/src/shell/machiner/model"
+	mach_model "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
 

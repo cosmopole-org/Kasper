@@ -5,9 +5,9 @@ import (
 	"errors"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
-	inputs_machiner "kasper/src/shell/machiner/inputs/machine"
-	"kasper/src/shell/machiner/model"
-	outputs_machiner "kasper/src/shell/machiner/outputs/plugin"
+	inputs_machiner "kasper/src/shell/api/inputs/machine"
+	"kasper/src/shell/api/model"
+	outputs_machiner "kasper/src/shell/api/outputs/plugin"
 	"log"
 
 	models "kasper/src/shell/api/model"
@@ -36,7 +36,7 @@ func (a *Actions) Create(state state.IState, input inputs_machiner.CreateInput) 
 	user.Push(trx)
 	session.Push(trx)
 	vm.Push(trx)
-	a.App.Tools().Network().Chain().NotifyNewMachineCreated(user.Id)
+	a.App.Tools().Network().Chain().NotifyNewMachineCreated(input.ChainId, user.Id)
 	return outputs_machiner.CreateOutput{User: user}, nil
 }
 

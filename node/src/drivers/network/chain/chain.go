@@ -910,6 +910,84 @@ func openSocket(origin string, chain *Blockchain) bool {
 	return true
 }
 
+func (b *Blockchain) CreateWorkChain(firstNodeOrigin string) int64 {
+	q, _ := queues.NewLinkedBlockingQueue(1000)
+	q2, _ := queues.NewLinkedBlockingQueue(1000)
+	b.chainCounter++
+	peers := map[string]bool{}
+	peers[firstNodeOrigin] = true
+	sc := &SubChain{
+		id:                    b.chainCounter,
+		events:                map[string]*Event{},
+		pendingBlockElections: 0,
+		readyForNewElection:   true,
+		cond_var_:             make(chan int, 10000),
+		readyElectors:         map[string]bool{},
+		nextEventVotes:        map[string]string{},
+		nextBlockQueue:        q,
+		nextEventQueue:        q2,
+		pendingTrxs:           []Transaction{},
+		pendingEvents:         []*Event{},
+		blocks:                []*Event{},
+		remainedCount:         0,
+		peers:                 peers,
+	}
+	m2 := cmap.New[*SubChain]()
+	m2.Set(fmt.Sprintf("%d", sc.id), sc)
+	m3 := cmap.New[bool]()
+	m3.Set(fmt.Sprintf("%d", sc.id), true)
+	chain := &Chain{
+		id:        sc.id,
+		SubChains: &m2,
+		MyShards:  &m3,
+	}
+	chain.sharder = NewSharder(chain)
+	sc.chain = chain
+	b.allSubChains.Set(fmt.Sprintf("%d", sc.id), sc)
+	b.chains.Set(fmt.Sprintf("%d", chain.id), chain)
+	return chain.id
+}
+
+func (b *Blockchain) CreateTempChain(participants []string) int64 {
+	q, _ := queues.NewLinkedBlockingQueue(1000)
+	q2, _ := queues.NewLinkedBlockingQueue(1000)
+	b.chainCounter++
+	peers := map[string]bool{}
+	for _, p := range participants {
+		peers[p] = true
+	}
+	sc := &SubChain{
+		id:                    b.chainCounter,
+		events:                map[string]*Event{},
+		pendingBlockElections: 0,
+		readyForNewElection:   true,
+		cond_var_:             make(chan int, 10000),
+		readyElectors:         map[string]bool{},
+		nextEventVotes:        map[string]string{},
+		nextBlockQueue:        q,
+		nextEventQueue:        q2,
+		pendingTrxs:           []Transaction{},
+		pendingEvents:         []*Event{},
+		blocks:                []*Event{},
+		remainedCount:         0,
+		peers:                 peers,
+	}
+	m2 := cmap.New[*SubChain]()
+	m2.Set(fmt.Sprintf("%d", sc.id), sc)
+	m3 := cmap.New[bool]()
+	m3.Set(fmt.Sprintf("%d", sc.id), true)
+	chain := &Chain{
+		id:        sc.id,
+		SubChains: &m2,
+		MyShards:  &m3,
+	}
+	chain.sharder = NewSharder(chain)
+	sc.chain = chain
+	b.allSubChains.Set(fmt.Sprintf("%d", sc.id), sc)
+	b.chains.Set(fmt.Sprintf("%d", chain.id), chain)
+	return chain.id
+}
+
 func (c *SubChain) Run() {
 
 	future.Async(func() {
@@ -1055,43 +1133,13 @@ func (c *SubChain) Run() {
 						}
 					} else if trx.Typ == "newNode" {
 						openSocket(string(trx.Payload), c.chain.blockchain)
-					} else if trx.Typ == "newChain" {
-						q, _ := queues.NewLinkedBlockingQueue(1000)
-						q2, _ := queues.NewLinkedBlockingQueue(1000)
-						c.chain.blockchain.chainCounter++
-						sc := &SubChain{
-							id:                    c.chain.blockchain.chainCounter,
-							events:                map[string]*Event{},
-							pendingBlockElections: 0,
-							readyForNewElection:   true,
-							cond_var_:             make(chan int, 10000),
-							readyElectors:         map[string]bool{},
-							nextEventVotes:        map[string]string{},
-							nextBlockQueue:        q,
-							nextEventQueue:        q2,
-							pendingTrxs:           []Transaction{},
-							pendingEvents:         []*Event{},
-							blocks:                []*Event{},
-							remainedCount:         0,
-							peers: map[string]bool{
-								"172.77.5.1": true,
-								"172.77.5.2": true,
-								"172.77.5.3": true,
-							},
+					} else if trx.Typ == "joinWorkchain" {
+						chainId := int64(binary.LittleEndian.Uint64(trx.Payload[0:8]))
+						chain, ok := c.chain.blockchain.chains.Get(fmt.Sprintf("%d", chainId))
+						if ok {
+							newNode := Node{ID: string(trx.Payload[8:]), Power: rand.Intn(100)}
+							chain.sharder.HandleNewNode(newNode)
 						}
-						m2 := cmap.New[*SubChain]()
-						m2.Set("1", sc)
-						m3 := cmap.New[bool]()
-						m3.Set("1", true)
-						chain := &Chain{
-							SubChains: &m2,
-							MyShards:  &m3,
-						}
-						chain.sharder = NewSharder(chain)
-						sc.chain = chain
-						c.chain.SubChains.Set(fmt.Sprintf("%d", sc.id), sc)
-						c.chain.blockchain.allSubChains.Set(fmt.Sprintf("%d", sc.id), sc)
-						c.chain.blockchain.chains.Set(fmt.Sprintf("%d", chain.id), chain)
 					} else {
 						pipelinePacket = append(pipelinePacket, trx.Payload)
 					}

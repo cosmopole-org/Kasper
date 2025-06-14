@@ -4,7 +4,7 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/state"
-	inputs_pc "kasper/src/shell/machiner/inputs/pc"
+	inputs_pc "kasper/src/shell/api/inputs/pc"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
 )

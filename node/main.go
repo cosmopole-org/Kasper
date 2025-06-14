@@ -4,7 +4,6 @@ import (
 	"os"
 	"strconv"
 	plugger_api "kasper/src/shell/api/main"
-	plugger_machiner "kasper/src/shell/machiner/main"
 	"github.com/joho/godotenv"
 	kasper "kasper/src/shell"
 
@@ -67,7 +66,6 @@ func main() {
 	portStr := os.Getenv("CLIENT_API_PORT")
 	port, _ := strconv.ParseInt(portStr, 10, 64)
 	plugger_api.PlugAll(app)
-	plugger_machiner.PlugAll(app)
 
 	app.Tools().Network().Run(
 		map[string]int{
