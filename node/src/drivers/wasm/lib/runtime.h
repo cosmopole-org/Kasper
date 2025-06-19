@@ -132,6 +132,7 @@ public:
     std::string id;
     std::string machineId;
     std::string pointId;
+    std::string chainTokenId;
     int index;
     Trx *trx;
     uint64_t instCounter{1};
@@ -471,6 +472,7 @@ void WasmMac::prepareLooper()
 WasmMac::WasmMac(std::string machineId, std::string pointId, std::string modPath, function<char *(char *)> cb)
 {
     this->onchain = false;
+    this->chainTokenId = "";
     this->callback = cb;
     this->machineId = machineId;
     this->pointId = pointId;
@@ -487,6 +489,7 @@ WasmMac::WasmMac(std::string machineId, std::string pointId, std::string modPath
 WasmMac::WasmMac(std::string machineId, std::string vmId, int index, std::string modPath, function<char *(char *)> cb)
 {
     this->onchain = true;
+    this->chainTokenId = "";
     this->callback = cb;
     this->machineId = machineId;
     this->id = vmId;
@@ -678,6 +681,12 @@ void WasmMac::runTask(std::string taskId)
 
 void WasmMac::executeOnChain(std::string input, void *crRaw)
 {
+    json inputJson = json::parse(input);
+    std::string tokenId = inputJson["tokenId"].template get<std::string>();
+    std::string params = inputJson["params"].template get<std::string>();
+
+    this->chainTokenId = tokenId;
+
     ConcurrentRunner *cr = (ConcurrentRunner *)crRaw;
     auto memName = WasmEdge_StringCreateByCString("memory");
     auto mallocName = WasmEdge_StringCreateByCString("malloc");
@@ -685,13 +694,13 @@ void WasmMac::executeOnChain(std::string input, void *crRaw)
     auto mod = WasmEdge_VMGetActiveModule(this->vm);
     auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
 
-    int valL = input.size();
+    int valL = params.size();
 
     WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
     WasmEdge_Value Returns[1] = {WasmEdge_ValueGenI32(0)};
     WasmEdge_VMExecute(this->vm, mallocName, Params, 1, Returns, 1);
     int valOffset = WasmEdge_ValueGetI32(Returns[0]);
-    char *rawArr = &input[0];
+    char *rawArr = &params[0];
     unsigned char *arr = new unsigned char[valL];
     for (int i = 0; i < valL; i++)
     {
@@ -1037,7 +1046,7 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
         rawInC.push_back((char)rawIn[i]);
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
-    
+
     unsigned char *rawCn = new unsigned char[cnL];
     vector<char> rawCnC{};
     WasmEdge_MemoryInstanceGetData(mem, rawCn, cnOffset, cnL);
@@ -1108,7 +1117,7 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
         rawInC.push_back((char)rawIn[i]);
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
-    
+
     unsigned char *rawKey = new unsigned char[keyL];
     vector<char> rawKeyC{};
     WasmEdge_MemoryInstanceGetData(mem, rawKey, keyOffset, keyL);
@@ -1478,6 +1487,8 @@ void ConcurrentRunner::run()
         }
         std::string opsStr = arr.dump();
 
+        auto instCount = WasmEdge_StatisticsGetInstrCount(WasmEdge_VMGetStatisticsContext(rt->vm));
+
         json j;
         j["key"] = "submitOnchainResponse";
         json j2;
@@ -1486,6 +1497,8 @@ void ConcurrentRunner::run()
         j2["resCode"] = 1;
         j2["error"] = "";
         j2["changes"] = opsStr;
+        j2["cost"] = instCount;
+        j2["tokenId"] = rt->chainTokenId;
         j["input"] = j2;
         std::string packet = j.dump();
 

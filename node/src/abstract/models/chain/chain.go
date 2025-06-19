@@ -34,6 +34,7 @@ type ChainAppletRequest struct {
 	RequestId  string
 	Runtime    string
 	Tag        string
+	TokenId    string
 }
 
 type ChainElectionPacket struct {

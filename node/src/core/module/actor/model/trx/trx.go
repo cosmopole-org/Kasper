@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
@@ -236,6 +237,9 @@ func (tw *TrxWrapper) DelJson(key string, path string) {
 func (tw *TrxWrapper) GetJson(key string, path string) (map[string]any, error) {
 	b := tw.GetBytes("json::" + key + "::" + path)
 	m := map[string]any{}
+	if len(b) == 0 {
+		return m, errors.New("json path not found")
+	}
 	e := json.Unmarshal(b, &m)
 	if e != nil {
 		return m, e

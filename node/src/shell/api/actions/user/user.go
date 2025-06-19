@@ -16,6 +16,7 @@ import (
 	inputsusers "kasper/src/shell/api/inputs/users"
 	models "kasper/src/shell/api/model"
 	outputsusers "kasper/src/shell/api/outputs/users"
+	"kasper/src/shell/utils/crypto"
 	"log"
 )
 
@@ -52,6 +53,65 @@ func Install(a *Actions) error {
 func (a *Actions) Authenticate(state state.IState, _ inputsusers.AuthenticateInput) (any, error) {
 	_, res, _ := a.App.Actor().FetchAction("/users/get").Act(mainstate.NewState(base.NewInfo("", ""), state.Trx()), inputsusers.GetInput{UserId: state.Info().UserId()})
 	return outputsusers.AuthenticateOutput{Authenticated: true, User: res.(outputsusers.GetOutput).User}, nil
+}
+
+// Transfer /users/transfer check [ true false false ] access [ true false false false POST ]
+func (a *Actions) Transfer(state state.IState, input inputsusers.TransferInput) (any, error) {
+	user := models.User{Id: state.Info().UserId()}.Pull(state.Trx())
+	if user.Balance < input.Amount {
+		return nil, errors.New("your balance is not enough")
+	}
+	toUserId := state.Trx().GetIndex("User", "username", "id", input.ToUsername)
+	if toUserId == "" {
+		return nil, errors.New("target user not found")
+	}
+	toUser := models.User{Id: toUserId}.Pull(state.Trx())
+	user.Balance -= input.Amount
+	toUser.Balance += input.Amount
+	user.Push(state.Trx())
+	toUser.Push(state.Trx())
+	return map[string]any{}, nil
+}
+
+// LockToken /users/lockToken check [ true false false ] access [ true false false false POST ]
+func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput) (any, error) {
+	user := models.User{Id: state.Info().UserId()}.Pull(state.Trx())
+	if user.Balance < input.Amount {
+		return nil, errors.New("your balance is not enough")
+	}
+	user.Balance -= input.Amount
+	user.Push(state.Trx())
+	lockId := crypto.SecureUniqueString()
+	state.Trx().PutJson("Json::User::"+state.Info().UserId(), "lockedTokens."+lockId, map[string]any{"amount": input.Amount}, true)
+	return map[string]any{"tokenId": lockId}, nil
+}
+
+// ConsumeToken /users/consumeToken check [ true false false ] access [ true false false false POST ]
+func (a *Actions) ConsumeToken(state state.IState, input inputsusers.ConsumeTokenInput) (any, error) {
+	nodeOwnerId := a.App.Tools().Network().Chain().GetOriginByOwnerId(state.Info().UserId())
+	if nodeOwnerId == "" {
+		return nil, errors.New("node owner not identified")
+	}
+	user := models.User{Id: input.TokenOwnerId}.Pull(state.Trx())
+	if user.Balance < input.Amount {
+		return nil, errors.New("your balance is not enough")
+	}
+	toUser := models.User{Id: nodeOwnerId}.Pull(state.Trx())
+	if m, e := state.Trx().GetJson("Json::User::"+state.Info().UserId(), "lockedTokens."+input.TokenId); e == nil {
+		amount := int64(m["amount"].(float64))
+		if amount >= input.Amount {
+			user.Balance += (amount - input.Amount)
+			user.Push(state.Trx())
+			toUser.Balance += input.Amount
+			toUser.Push(state.Trx())
+			state.Trx().DelJson("Json::User::"+state.Info().UserId(), "lockedTokens."+input.TokenId)
+			return map[string]any{}, nil
+		} else {
+			return nil, errors.New("invalid cost value")
+		}
+	} else {
+		return nil, e
+	}
 }
 
 // Register /users/register check [ false false false ] access [ true false false false POST ]

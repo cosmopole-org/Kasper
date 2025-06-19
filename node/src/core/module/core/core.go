@@ -114,6 +114,8 @@ func (t *Tools) Firectl() firectl.IFirectl {
 type Core struct {
 	lock           sync.Mutex
 	triggerLock    sync.Mutex
+	ownerId        string
+	ownerPrivKey   *rsa.PrivateKey
 	id             string
 	tools          tools.ITools
 	gods           []string
@@ -132,7 +134,7 @@ type Core struct {
 
 var MAX_VALIDATOR_COUNT = 5
 
-func NewCore(_ string) *Core {
+func NewCore(ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
 		panic(err)
@@ -145,6 +147,8 @@ func NewCore(_ string) *Core {
 	execs["172.77.5.2"] = true
 	execs["172.77.5.3"] = true
 	return &Core{
+		ownerId:        ownerId,
+		ownerPrivKey:   ownerPrivateKey,
 		id:             id,
 		gods:           make([]string, 0),
 		chain:          nil,
@@ -189,6 +193,10 @@ func (c *Core) Id() string {
 	return c.id
 }
 
+func (c *Core) OwnerId() string {
+	return c.ownerId
+}
+
 func (c *Core) Gods() []string {
 	return c.gods
 }
@@ -229,6 +237,15 @@ func (c *Core) SignPacket(data []byte) string {
 	return base64.StdEncoding.EncodeToString(signature)
 }
 
+func (c *Core) SignPacketAsOwner(data []byte) string {
+	hashed := sha256.Sum256(data)
+	signature, err := rsa.SignPKCS1v15(rand.Reader, c.ownerPrivKey, cryp.SHA256, hashed[:])
+	if err != nil {
+		panic(err)
+	}
+	return base64.StdEncoding.EncodeToString(signature)
+}
+
 func (c *Core) PlantChainTrigger(count int, userId string, tag string, machineId string, pointId string, attachment string) {
 	c.triggerLock.Lock()
 	defer c.triggerLock.Unlock()
@@ -250,7 +267,7 @@ func (c *Core) PlantChainTrigger(count int, userId string, tag string, machineId
 	})
 }
 
-func (c *Core) ExecAppletRequestOnChain(pointId string, machineId string, key string, payload []byte, signature string, userId string, tag string, callback func([]byte, int, error)) {
+func (c *Core) ExecAppletRequestOnChain(pointId string, machineId string, key string, payload []byte, signature string, userId string, tag string, tokenId string, callback func([]byte, int, error)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	callbackId := crypto.SecureUniqueString()
@@ -261,7 +278,7 @@ func (c *Core) ExecAppletRequestOnChain(pointId string, machineId string, key st
 		runtimeType = vm.Runtime
 	})
 	future.Async(func() {
-		c.chain <- chain.ChainAppletRequest{Tag: tag, Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload, Runtime: runtimeType}
+		c.chain <- chain.ChainAppletRequest{TokenId: tokenId, Tag: tag, Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload, Runtime: runtimeType}
 	}, false)
 }
 

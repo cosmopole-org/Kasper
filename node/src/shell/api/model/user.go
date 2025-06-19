@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/binary"
 	"kasper/src/abstract/models/trx"
 	"log"
 )
@@ -10,6 +11,7 @@ type User struct {
 	Typ       string `json:"type"`
 	Username  string `json:"username"`
 	PublicKey string `json:"publicKey"`
+	Balance   int64  `json:"balance"`
 }
 
 func (d User) Type() string {
@@ -17,10 +19,13 @@ func (d User) Type() string {
 }
 
 func (d User) Push(trx trx.ITrx) {
+	bal := make([]byte, 8)
+	binary.LittleEndian.PutUint64(bal, uint64(d.Balance))
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
 		"type":      []byte(d.Typ),
 		"username":  []byte(d.Username),
 		"publicKey": []byte(d.PublicKey),
+		"balance":   bal,
 	})
 	trx.PutIndex("User", "username", "id", d.Username, []byte(d.Id))
 }
@@ -31,6 +36,7 @@ func (d User) Pull(trx trx.ITrx) User {
 		d.Typ = string(m["type"])
 		d.Username = string(m["username"])
 		d.PublicKey = string(m["publicKey"])
+		d.Balance = int64(binary.LittleEndian.Uint64(m["balance"]))
 	}
 	return d
 }
@@ -57,6 +63,7 @@ func (d User) List(trx trx.ITrx, prefix string) ([]User, error) {
 			d.Typ = string(m["type"])
 			d.Username = string(m["username"])
 			d.PublicKey = string(m["publicKey"])
+			d.Balance = int64(binary.LittleEndian.Uint64(m["balance"]))
 			entities = append(entities, d)
 		}
 	}

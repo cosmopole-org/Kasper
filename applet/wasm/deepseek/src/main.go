@@ -482,7 +482,7 @@ func (*Db) GetByPrefix(key string) [][]byte {
 type Chain struct {
 }
 
-func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, tag string, input any) []byte {
+func (c *Chain) SubmitAppletPacketTrx(targetMachineId string, key string, userId string, signature string, tag string, input any) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
 	tagO, tagL := bytesToPointer([]byte("0" + "0" + tag))
 	keyO, keyL := bytesToPointer([]byte(key))

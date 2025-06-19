@@ -89,6 +89,7 @@ type Chain struct {
 
 type Blockchain struct {
 	app          core.ICore
+	owners       *cmap.ConcurrentMap[string, string]
 	sockets      *cmap.ConcurrentMap[string, *Socket]
 	chains       *cmap.ConcurrentMap[string, *Chain]
 	allSubChains *cmap.ConcurrentMap[string, *SubChain]
@@ -139,8 +140,10 @@ func NewChain(core core.ICore) *Blockchain {
 	m4.Set("1", chain)
 	m5 := cmap.New[*SubChain]()
 	m5.Set("1", sc)
+	m6 := cmap.New[string]()
 	blockchain := &Blockchain{
 		app:          core,
+		owners:       &m6,
 		sockets:      &m,
 		chainCounter: math.MaxInt32,
 		chains:       &m4,
@@ -158,7 +161,7 @@ func (t *SubChain) appendEvent(e *Event) {
 	t.remainedCount++
 }
 
-func (t *SubChain) SendToShardMember(origin string, payload []byte) {
+func (t *SubChain) SendToNode(origin string, payload []byte) {
 	log.Println("sending packet to peer:", origin)
 	s, ok := t.chain.blockchain.sockets.Get(origin)
 	if ok {
@@ -435,7 +438,37 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 
 	pointer := 1
 
-	if packet[0] == 0x01 {
+	if packet[0] == 0x07 {
+
+		signature := ""
+		userId := ""
+
+		tempBytes := make([]byte, 4)
+		copy(tempBytes, packet[pointer:pointer+4])
+		signatureLength := int(binary.LittleEndian.Uint32(tempBytes))
+		log.Println("signature length: ", signatureLength)
+		pointer += 4
+		if signatureLength > 0 {
+			signature = string(packet[pointer : pointer+signatureLength])
+			pointer += signatureLength
+		}
+		log.Println("signature: ", signature)
+
+		tempBytes = make([]byte, 4)
+		copy(tempBytes, packet[pointer:pointer+4])
+		dataLength := int(binary.LittleEndian.Uint32(tempBytes))
+		log.Println("data length: ", dataLength)
+		pointer += 4
+		if dataLength > 0 {
+			userId = string(packet[pointer : pointer+dataLength])
+			pointer += dataLength
+		}
+		log.Println("ownerId: ", userId)
+
+		if success, _, _ := chainSocket.app.Tools().Security().AuthWithSignature(userId, []byte(userId), signature); success {
+			chainSocket.blockchain.owners.Set(userId, origin)
+		}
+	} else if packet[0] == 0x01 {
 
 		signature := ""
 		data := ""
@@ -539,7 +572,7 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 
 		log.Println("step 6")
 
-		subchain.SendToShardMember(origin, response)
+		subchain.SendToNode(origin, response)
 
 	} else if packet[0] == 0x02 {
 
@@ -653,6 +686,7 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 			}
 			e.randomNums = rndNums
 			e.phase = 3
+			e.electionReadys[chainSocket.app.Id()] = true
 		}()
 
 		proofBytes := []byte(proofVal)
@@ -696,8 +730,10 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 			if e == nil {
 				e = subchain.GetEventByProof(proof)
 			}
-			e.electionReadys[origin] = true
-			if len(e.electionReadys) == (chainSocket.blockchain.sockets.Count() - 1) {
+			if _, ok := subchain.peers[origin]; ok {
+				e.electionReadys[origin] = true
+			}
+			if len(e.electionReadys) == len(subchain.peers) {
 				readyToStart = true
 			}
 		}()
@@ -798,7 +834,9 @@ func (c *SubChain) VoteForNextEvent(origin string, eventProof string) {
 	func() {
 		c.Lock.Lock()
 		defer c.Lock.Unlock()
-		c.nextEventVotes[origin] = eventProof
+		if _, ok := c.peers[origin]; ok {
+			c.nextEventVotes[origin] = eventProof
+		}
 		if len(c.nextEventVotes) == len(c.peers) {
 			votes := map[string]int{}
 			for _, vote := range c.nextEventVotes {
@@ -946,6 +984,37 @@ func (b *Blockchain) CreateWorkChain(firstNodeOrigin string) int64 {
 	b.allSubChains.Set(fmt.Sprintf("%d", sc.id), sc)
 	b.chains.Set(fmt.Sprintf("%d", chain.id), chain)
 	return chain.id
+}
+
+func (b *Blockchain) GetOriginByOwnerId(userId string) string {
+	origin, ok := b.owners.Get(userId)
+	if ok {
+		return origin
+	} else {
+		return ""
+	}
+}
+
+func (c *Chain) CreateShardChain(subchainId int64) {
+	q, _ := queues.NewLinkedBlockingQueue(1000)
+	q2, _ := queues.NewLinkedBlockingQueue(1000)
+	sc := &SubChain{
+		id:                    subchainId,
+		events:                map[string]*Event{},
+		pendingBlockElections: 0,
+		readyForNewElection:   true,
+		cond_var_:             make(chan int, 10000),
+		readyElectors:         map[string]bool{},
+		nextEventVotes:        map[string]string{},
+		nextBlockQueue:        q,
+		nextEventQueue:        q2,
+		pendingTrxs:           []Transaction{},
+		pendingEvents:         []*Event{},
+		blocks:                []*Event{},
+		remainedCount:         0,
+		peers:                 map[string]bool{},
+	}
+	c.blockchain.allSubChains.Set(fmt.Sprintf("%d", sc.id), sc)
 }
 
 func (b *Blockchain) CreateTempChain(participants []string) int64 {
@@ -1235,8 +1304,14 @@ func (c *SubChain) MemorizeResponseBacked(proof string, signature string, rndNum
 	defer c.Lock.Unlock()
 	if e, ok := c.events[proof]; ok {
 		e.backedResponses[origin] = Guarantee{Proof: proof, Sign: signature, RndNum: rndNum}
-		if len(e.backedResponses) == (len(c.peers) - 1) {
-			return true
+		if c.chain.MyShards.Has(c.chain.blockchain.app.Id()) {
+			if len(e.backedResponses) == (len(c.peers) - 1) {
+				return true
+			}
+		} else {
+			if len(e.backedResponses) == len(c.peers) {
+				return true
+			}
 		}
 	} else {
 		panic("event proof not found")

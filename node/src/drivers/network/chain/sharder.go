@@ -67,6 +67,7 @@ func (ds *DynamicShardingSystem) CreateNewShard() *Shard {
 	newShard := Shard{ID: int64(len(ds.Shards) + 1), Capacity: 10, Load: 0, Contracts: []SmartContract{}, Nodes: []Node{}}
 	ds.Shards = append(ds.Shards, newShard)
 	fmt.Printf("Created new Shard %d\n", newShard.ID)
+	ds.chain.CreateShardChain(newShard.ID)
 	return &newShard
 }
 
@@ -108,7 +109,7 @@ func (ds *DynamicShardingSystem) LogLoad(shardId int64, machineId string) {
 
 func (ds *DynamicShardingSystem) CheckAndSplitShards() {
 	for i := range ds.Shards {
-		if len(ds.Shards[i].Contracts) > 10 { // Threshold for splitting
+		if len(ds.Shards[i].Contracts) > 10 {
 			fmt.Printf("Shard %d overloaded! Splitting into two balanced shards...\n", ds.Shards[i].ID)
 			ds.SplitShardSmartly(&ds.Shards[i])
 		}
@@ -118,6 +119,8 @@ func (ds *DynamicShardingSystem) CheckAndSplitShards() {
 func (ds *DynamicShardingSystem) CheckAndModifyMyShards(nodeId string, shardId int64) {
 	ds.chain.MyShards.Clear()
 	ds.chain.MyShards.Set(fmt.Sprintf("%d", shardId), true)
+	shardChain, _ := ds.chain.blockchain.allSubChains.Get(fmt.Sprintf("%d", shardId))
+	shardChain.Run()
 }
 
 func (ds *DynamicShardingSystem) SplitShardSmartly(shard *Shard) {

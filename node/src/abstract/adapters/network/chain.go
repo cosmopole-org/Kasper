@@ -8,4 +8,5 @@ type IChain interface {
 	CreateTempChain(participants []string) int64
 	CreateWorkChain(firstNodeOrigin string) int64
 	Peers() []string
+	GetOriginByOwnerId(userId string) string
 }

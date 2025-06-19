@@ -25,8 +25,10 @@ import (
 	"kasper/src/core/module/actor/model/base"
 	inputs_points "kasper/src/shell/api/inputs/points"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
+	inputs_users "kasper/src/shell/api/inputs/users"
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
+	"kasper/src/shell/utils/future"
 	"log"
 	"strings"
 )
@@ -217,6 +219,16 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
+		cost, err := checkField[float64](input, "cost", 0)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tokenId, err := checkField(input, "tokenId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
 		pack, err := checkField(input, "packet", "")
 		if err != nil {
 			log.Println(err)
@@ -237,13 +249,14 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
+		trxInp := inputs_users.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost)}
+		i, _ := json.Marshal(trxInp)
+		s := wm.app.SignPacketAsOwner(i)
+		future.Async(func() {
+			wm.app.ExecBaseRequestOnChain("/users/consumeToken", i, s, wm.app.OwnerId(), "", func(b []byte, i int, err error) {})
+		}, false)
 		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), "#appletsign", int(resCode), e, []update.Update{{Val: []byte("applet: " + changes)}})
 	} else if key == "submitOnchainTrx" {
-		machineId, err := checkField(input, "machineId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
 		targetMachineId, err := checkField(input, "targetMachineId", "")
 		if err != nil {
 			log.Println(err)
@@ -256,12 +269,15 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		kParts := strings.Split(kRaw, "|")
 		dstPointId := kParts[0]
-	    srcPointId, err := checkField(input, "pointId", "")
+		srcPointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
 		}
 		k := kParts[1]
+		userId := kParts[2]
+		userSignature := kParts[3]
+		tokenId := kParts[4]
 		isFile, err := checkField(input, "isFile", false)
 		if err != nil {
 			log.Println(err)
@@ -305,7 +321,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 					PointId: dstPointId,
 				})
 			}
-			wm.app.ExecBaseRequestOnChain(k, data, "#appletsign", machineId, tag, func(b []byte, i int, err error) {
+			wm.app.ExecBaseRequestOnChain(k, data, userSignature, userId, tag, func(b []byte, i int, err error) {
 				if err != nil {
 					log.Println(err)
 					return
@@ -314,7 +330,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 				outputCnan <- 1
 			})
 		} else {
-			wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, "#appletsign", machineId, tag, func(b []byte, i int, err error) {
+			wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, userSignature, userId, tag, tokenId, func(b []byte, i int, err error) {
 				if err != nil {
 					log.Println(err)
 					return
@@ -380,10 +396,10 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		wm.app.ModifyStateSecurly(false, base.NewInfo(machineId, pointId), func(s state.IState) {
 			wm.app.Actor().FetchAction("/points/signal").Act(s, inputs_points.SignalInput{
-				Type: typ,
-				Data: data,
+				Type:    typ,
+				Data:    data,
 				PointId: pointId,
-				UserId: userId,
+				UserId:  userId,
 			})
 		})
 	}

@@ -18,6 +18,14 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Authenticate)
 		}
 		
+		func (c *Plugger) Transfer() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Transfer)
+		}
+		
+		func (c *Plugger) LockToken() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.LockToken)
+		}
+		
 		func (c *Plugger) Register() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Register)
 		}
