@@ -28,7 +28,6 @@ import (
 	inputs_users "kasper/src/shell/api/inputs/users"
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
-	"kasper/src/shell/utils/future"
 	"log"
 	"strings"
 )
@@ -213,6 +212,28 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		// log.Println("elpis vm:", text)
+	} else if key == "checkTokenValidity" {
+		tokenOwnerId, err := checkField(input, "tokenOwnerId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tokenId, err := checkField(input, "tokenId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		gasLimit := int64(0)
+		wm.app.ModifyState(true, func(trx trx.ITrx) {
+			if trx.GetString("Temp::User::"+tokenOwnerId+"::consumedTokens::"+tokenId) == "true" {
+				return
+			}
+			if m, e := trx.GetJson("Json::User::"+tokenOwnerId, "lockedTokens."+tokenId); e == nil {
+				gasLimit = int64(m["amount"].(float64))
+			}
+		})
+		jsn, _ := json.Marshal(map[string]any{"gasLimit": gasLimit})
+		return string(jsn)
 	} else if key == "submitOnchainResponse" {
 		callbackId, err := checkField(input, "callbackId", "")
 		if err != nil {
@@ -220,6 +241,11 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		cost, err := checkField[float64](input, "cost", 0)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tokenOwnerId, err := checkField(input, "tokenOwnerId", "")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
@@ -249,12 +275,13 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		trxInp := inputs_users.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost)}
+		trxInp := inputs_users.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost), TokenOwnerId: tokenOwnerId}
 		i, _ := json.Marshal(trxInp)
 		s := wm.app.SignPacketAsOwner(i)
-		future.Async(func() {
-			wm.app.ExecBaseRequestOnChain("/users/consumeToken", i, s, wm.app.OwnerId(), "", func(b []byte, i int, err error) {})
-		}, false)
+		wm.app.ModifyState(false, func(trx trx.ITrx) {
+			trx.PutString("Temp::User::"+tokenOwnerId+"::consumedTokens::"+tokenId, "true")
+		})
+		wm.app.ExecBaseRequestOnChain("/users/consumeToken", i, s, wm.app.OwnerId(), "", func(b []byte, i int, err error) {})
 		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), "#appletsign", int(resCode), e, []update.Update{{Val: []byte("applet: " + changes)}})
 	} else if key == "submitOnchainTrx" {
 		targetMachineId, err := checkField(input, "targetMachineId", "")

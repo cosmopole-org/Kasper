@@ -1,11 +1,14 @@
 package main
 
 import (
+	"crypto/x509"
+	"encoding/pem"
+	kasper "kasper/src/shell"
+	plugger_api "kasper/src/shell/api/main"
 	"os"
 	"strconv"
-	plugger_api "kasper/src/shell/api/main"
+
 	"github.com/joho/godotenv"
-	kasper "kasper/src/shell"
 
 	_ "net/http/pprof"
 )
@@ -33,9 +36,13 @@ func main() {
 		panic(err2)
 	}
 
-	app := kasper.NewApp(kasper.Config{
-		Id: os.Getenv("ORIGIN"),
-	})
+	ownerId := os.Getenv("OWNER_ID")
+	privateKeyBlock, _ := pem.Decode([]byte(os.Getenv("OWNER_PRIVATE_KEY")))
+	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyBlock.Bytes)
+	if err != nil {
+		panic(err)
+	}
+	app := kasper.NewApp(ownerId, privateKey)
 
 	KasperApp = app
 

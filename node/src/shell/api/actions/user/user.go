@@ -88,10 +88,11 @@ func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput
 
 // ConsumeToken /users/consumeToken check [ true false false ] access [ true false false false POST ]
 func (a *Actions) ConsumeToken(state state.IState, input inputsusers.ConsumeTokenInput) (any, error) {
-	nodeOwnerId := a.App.Tools().Network().Chain().GetOriginByOwnerId(state.Info().UserId())
-	if nodeOwnerId == "" {
+	userOwnsOrig := a.App.Tools().Network().Chain().UserOwnsOrigin(state.Info().UserId(), input.Orig)
+	if !userOwnsOrig {
 		return nil, errors.New("node owner not identified")
 	}
+	nodeOwnerId := state.Info().UserId()
 	user := models.User{Id: input.TokenOwnerId}.Pull(state.Trx())
 	if user.Balance < input.Amount {
 		return nil, errors.New("your balance is not enough")

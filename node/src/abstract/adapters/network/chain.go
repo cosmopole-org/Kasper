@@ -5,8 +5,9 @@ type IChain interface {
 	SubmitTrx(chainId string, machineId string, typ string, payload []byte)
 	RegisterPipeline(pipeline func([][]byte) []string)
 	NotifyNewMachineCreated(chainId int64, machineId string)
-	CreateTempChain(participants []string) int64
-	CreateWorkChain(firstNodeOrigin string) int64
+	CreateTempChain(peers map[string]int64) int64
+	CreateWorkChain(peers map[string]int64) int64
 	Peers() []string
-	GetOriginByOwnerId(userId string) string
+	UserOwnsOrigin(userId string, origin string) bool
+	GetNodeOwnerId(origin string) string
 }

@@ -73,7 +73,7 @@ type SubChain struct {
 	nextBlockQueue        *queues.BlockingQueue
 	blocks                []*Event
 	pendingTrxs           []Transaction
-	peers                 map[string]bool
+	peers                 map[string]int64
 	chain                 *Chain
 	removed               bool
 	remainedCount         int
@@ -89,7 +89,8 @@ type Chain struct {
 
 type Blockchain struct {
 	app          core.ICore
-	owners       *cmap.ConcurrentMap[string, string]
+	owners       *cmap.ConcurrentMap[string, *cmap.ConcurrentMap[string, bool]]
+	origToOwner  *cmap.ConcurrentMap[string, string]
 	sockets      *cmap.ConcurrentMap[string, *Socket]
 	chains       *cmap.ConcurrentMap[string, *Chain]
 	allSubChains *cmap.ConcurrentMap[string, *SubChain]
@@ -120,10 +121,10 @@ func NewChain(core core.ICore) *Blockchain {
 		pendingEvents:         []*Event{},
 		blocks:                []*Event{},
 		remainedCount:         0,
-		peers: map[string]bool{
-			"172.77.5.1": true,
-			"172.77.5.2": true,
-			"172.77.5.3": true,
+		peers: map[string]int64{
+			"172.77.5.1": 1,
+			"172.77.5.2": 1,
+			"172.77.5.3": 1,
 		},
 	}
 	m2 := cmap.New[*SubChain]()
@@ -140,10 +141,12 @@ func NewChain(core core.ICore) *Blockchain {
 	m4.Set("1", chain)
 	m5 := cmap.New[*SubChain]()
 	m5.Set("1", sc)
-	m6 := cmap.New[string]()
+	m6 := cmap.New[*cmap.ConcurrentMap[string, bool]]()
+	m7 := cmap.New[string]()
 	blockchain := &Blockchain{
 		app:          core,
 		owners:       &m6,
+		origToOwner:  &m7,
 		sockets:      &m,
 		chainCounter: math.MaxInt32,
 		chains:       &m4,
@@ -466,7 +469,13 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 		log.Println("ownerId: ", userId)
 
 		if success, _, _ := chainSocket.app.Tools().Security().AuthWithSignature(userId, []byte(userId), signature); success {
-			chainSocket.blockchain.owners.Set(userId, origin)
+			if !chainSocket.blockchain.owners.Has(userId) {
+				m := cmap.New[bool]()
+				chainSocket.blockchain.owners.Set(userId, &m)
+			}
+			owner, _ := chainSocket.blockchain.owners.Get(userId)
+			owner.Set(origin, true)
+			chainSocket.blockchain.origToOwner.Set(origin, userId)
 		}
 	} else if packet[0] == 0x01 {
 
@@ -801,6 +810,17 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 	}
 }
 
+func (c *Blockchain) SetNodeStake(ownerId string, chainId int64, amount int64) {
+	chain, ok := c.allSubChains.Get(fmt.Sprintf("%d", chainId))
+	if !ok {
+		log.Println("chain not found")
+		return
+	}
+	if _, ok := chain.peers[ownerId]; ok {
+		chain.peers[ownerId] = amount
+	}
+}
+
 func (c *Blockchain) NotifyNewMachineCreated(chainId int64, machineId string) {
 	chain, ok := c.chains.Get(fmt.Sprintf("%d", chainId))
 	if !ok {
@@ -838,23 +858,31 @@ func (c *SubChain) VoteForNextEvent(origin string, eventProof string) {
 			c.nextEventVotes[origin] = eventProof
 		}
 		if len(c.nextEventVotes) == len(c.peers) {
-			votes := map[string]int{}
-			for _, vote := range c.nextEventVotes {
+			votes := map[string]int64{}
+			for origin, vote := range c.nextEventVotes {
 				if _, ok := votes[vote]; !ok {
-					votes[vote] = 1
+					votes[vote] = c.peers[origin]
 				} else {
-					votes[vote] = votes[vote] + 1
+					votes[vote] = votes[vote] + c.peers[origin]
 				}
 			}
 			type Candidate struct {
 				Proof string
-				Votes int
+				Votes int64
 			}
 			sortedArr := []Candidate{}
 			for proof, votes := range votes {
 				sortedArr = append(sortedArr, Candidate{proof, votes})
 			}
-			slices.SortStableFunc(sortedArr, func(a Candidate, b Candidate) int { return a.Votes - b.Votes })
+			slices.SortStableFunc(sortedArr, func(a Candidate, b Candidate) int {
+				if a.Votes > b.Votes {
+					return 1
+				} else if a.Votes < b.Votes {
+					return -1
+				} else {
+					return 0
+				}
+			})
 
 			if len(sortedArr) > 1 && (sortedArr[0].Votes == sortedArr[1].Votes) {
 				topOnes := []Candidate{}
@@ -948,12 +976,11 @@ func openSocket(origin string, chain *Blockchain) bool {
 	return true
 }
 
-func (b *Blockchain) CreateWorkChain(firstNodeOrigin string) int64 {
+func (b *Blockchain) CreateWorkChain(peers map[string]int64) int64 {
+
 	q, _ := queues.NewLinkedBlockingQueue(1000)
 	q2, _ := queues.NewLinkedBlockingQueue(1000)
 	b.chainCounter++
-	peers := map[string]bool{}
-	peers[firstNodeOrigin] = true
 	sc := &SubChain{
 		id:                    b.chainCounter,
 		events:                map[string]*Event{},
@@ -986,10 +1013,19 @@ func (b *Blockchain) CreateWorkChain(firstNodeOrigin string) int64 {
 	return chain.id
 }
 
-func (b *Blockchain) GetOriginByOwnerId(userId string) string {
-	origin, ok := b.owners.Get(userId)
+func (b *Blockchain) UserOwnsOrigin(userId string, origin string) bool {
+	ownerOrigins, ok := b.owners.Get(userId)
 	if ok {
-		return origin
+		return ownerOrigins.Has(origin)
+	} else {
+		return false
+	}
+}
+
+func (b *Blockchain) GetNodeOwnerId(origin string) string {
+	userId, ok := b.origToOwner.Get(origin)
+	if ok {
+		return userId
 	} else {
 		return ""
 	}
@@ -1012,19 +1048,15 @@ func (c *Chain) CreateShardChain(subchainId int64) {
 		pendingEvents:         []*Event{},
 		blocks:                []*Event{},
 		remainedCount:         0,
-		peers:                 map[string]bool{},
+		peers:                 map[string]int64{},
 	}
 	c.blockchain.allSubChains.Set(fmt.Sprintf("%d", sc.id), sc)
 }
 
-func (b *Blockchain) CreateTempChain(participants []string) int64 {
+func (b *Blockchain) CreateTempChain(peers map[string]int64) int64 {
 	q, _ := queues.NewLinkedBlockingQueue(1000)
 	q2, _ := queues.NewLinkedBlockingQueue(1000)
 	b.chainCounter++
-	peers := map[string]bool{}
-	for _, p := range participants {
-		peers[p] = true
-	}
 	sc := &SubChain{
 		id:                    b.chainCounter,
 		events:                map[string]*Event{},
