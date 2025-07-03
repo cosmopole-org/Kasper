@@ -9,8 +9,6 @@ import (
 	"strconv"
 
 	"github.com/joho/godotenv"
-
-	_ "net/http/pprof"
 )
 
 import "C"

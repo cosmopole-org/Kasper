@@ -5,9 +5,9 @@ import (
 )
 
 type File struct {
-	Id      string `json:"id" gorm:"primaryKey;column:id"`
-	PointId string `json:"pointId" gorm:"column:topic_id"`
-	OwnerId string `json:"senderId" gorm:"column:sender_id"`
+	Id      string `json:"id"`
+	PointId string `json:"pointId"`
+	OwnerId string `json:"senderId"`
 }
 
 func (d File) Type() string {

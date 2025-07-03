@@ -32,7 +32,7 @@ using ROCKSDB_NAMESPACE::TransactionDBOptions;
 using ROCKSDB_NAMESPACE::TransactionOptions;
 using ROCKSDB_NAMESPACE::WriteOptions;
 
-#include "nlohmann/json.hpp"
+#include "../../lib/nlohmann/json.hpp"
 using json = nlohmann::json;
 
 using namespace std;

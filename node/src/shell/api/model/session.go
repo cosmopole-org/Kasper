@@ -3,8 +3,8 @@ package model
 import "kasper/src/abstract/models/trx"
 
 type Session struct {
-	Id     string `json:"id" gorm:"primaryKey;column:id"`
-	UserId string `json:"userId" gorm:"column:user_id"`
+	Id     string `json:"id"`
+	UserId string `json:"userId"`
 }
 
 func (d Session) Type() string {
