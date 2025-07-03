@@ -9,8 +9,6 @@ import (
 	"kasper/src/shell/api/model"
 	outputs_machiner "kasper/src/shell/api/outputs/plugin"
 	"log"
-
-	models "kasper/src/shell/api/model"
 )
 
 const pluginsTemplateName = "/machines/"
@@ -23,31 +21,50 @@ func Install(a *Actions) error {
 	return nil
 }
 
-// Create /machines/create check [ true false false ] access [ true false false false POST ]
-func (a *Actions) Create(state state.IState, input inputs_machiner.CreateInput) (any, error) {
+// CreateApp /apps/create check [ true false false ] access [ true false false false POST ]
+func (a *Actions) CreateApp(state state.IState, input inputs_machiner.CreateAppInput) (any, error) {
+	trx := state.Trx()
+	app := model.App{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), OwnerId: state.Info().UserId()}
+	app.Push(trx)
+	a.App.Tools().Network().Chain().NotifyNewMachineCreated(input.ChainId, app.Id)
+	return map[string]any{"app": app}, nil
+}
+
+// CreateFunction /functions/create check [ true false false ] access [ true false false false POST ]
+func (a *Actions) CreateFunction(state state.IState, input inputs_machiner.CreateFuncInput) (any, error) {
 	var (
-		user    models.User
-		session models.Session
+		user    model.User
+		session model.Session
 	)
 	trx := state.Trx()
-	user = models.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
-	session = models.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
-	vm := model.Vm{MachineId: user.Id, OwnerId: state.Info().UserId()}
+	if !trx.HasObj("App", input.AppId) {
+		return nil, errors.New("app not found")
+	}
+	app := model.App{Id: input.AppId}.Pull(trx)
+	if app.OwnerId != state.Info().UserId() {
+		return nil, errors.New("you are not owner of app")
+	}
+	user = model.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
+	session = model.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
+	vm := model.Vm{MachineId: user.Id, AppId: app.Id}
 	user.Push(trx)
 	session.Push(trx)
 	vm.Push(trx)
-	a.App.Tools().Network().Chain().NotifyNewMachineCreated(input.ChainId, user.Id)
 	return outputs_machiner.CreateOutput{User: user}, nil
 }
 
-// Deploy /machines/deploy check [ true false false ] access [ true false false false POST ]
+// Deploy /functions/deploy check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("Vm", input.MachineId) {
 		return nil, errors.New("vm not found")
 	}
 	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
-	if vm.OwnerId != state.Info().UserId() {
+	if !trx.HasObj("App", vm.AppId) {
+		return nil, errors.New("app not found")
+	}
+	app := model.App{Id: vm.AppId}.Pull(trx)
+	if app.OwnerId != state.Info().UserId() {
 		return nil, errors.New("access to vm denied")
 	}
 	data, err := base64.StdEncoding.DecodeString(input.ByteCode)

@@ -26,6 +26,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.LockToken)
 		}
 		
+		func (c *Plugger) ConsumeToken() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ConsumeToken)
+		}
+		
 		func (c *Plugger) Register() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Register)
 		}

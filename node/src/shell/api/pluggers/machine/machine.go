@@ -14,8 +14,12 @@
 		Core core.ICore
 	}
 	
-		func (c *Plugger) Create() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.Create)
+		func (c *Plugger) CreateApp() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.CreateApp)
+		}
+		
+		func (c *Plugger) CreateFunction() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.CreateFunction)
 		}
 		
 		func (c *Plugger) Deploy() iaction.IAction {
