@@ -10,4 +10,5 @@ type IChain interface {
 	Peers() []string
 	UserOwnsOrigin(userId string, origin string) bool
 	GetNodeOwnerId(origin string) string
+	GetValidatorsOfMachineShard(machineId string) []string
 }

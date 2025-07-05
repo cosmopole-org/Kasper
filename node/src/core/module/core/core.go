@@ -33,9 +33,12 @@ import (
 	actor "kasper/src/core/module/actor"
 	mainstate "kasper/src/core/module/actor/model/state"
 	module_trx "kasper/src/core/module/actor/model/trx"
+	inputs_users "kasper/src/shell/api/inputs/users"
 	mach_model "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
+	"math"
+	"slices"
 
 	driver_docker "kasper/src/drivers/docker"
 	driver_elpis "kasper/src/drivers/elpis"
@@ -576,6 +579,53 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 				if temp == "" {
 					return ""
 				}
+
+				kvTokenKeyword := "consumeToken: "
+				for _, ef := range packet.Effects.DbUpdates {
+					if (len(ef.Val) > len(kvTokenKeyword)) && (string(ef.Val[0:len(kvTokenKeyword)]) == kvTokenKeyword) {
+						tokenData := inputs_users.ConsumeTokenInput{}
+						e := json.Unmarshal([]byte(string(ef.Val[len(kvTokenKeyword):])), &tokenData)
+						if e != nil {
+							log.Println(e)
+							break
+						}
+						c.ModifyState(false, func(trx trx.ITrx) {
+							user := mach_model.User{Id: tokenData.TokenOwnerId}.Pull(trx)
+							if user.Balance < tokenData.Amount {
+								log.Println(errors.New("your balance is not enough"))
+								return
+							}
+							if m, e := trx.GetJson("Json::User::"+tokenData.TokenOwnerId, "lockedTokens."+tokenData.TokenId); e == nil {
+								amount := int64(m["amount"].(float64))
+								validators := []string{}
+								json.Unmarshal([]byte(m["validators"].(string)), &validators)
+								if !slices.Contains(validators, packet.Executor) {
+									log.Println(errors.New("you are not validator"))
+									return
+								}
+								if amount >= tokenData.Amount {
+									for _, orig := range validators {
+										nodeOwnerId := c.tools.Network().Chain().GetNodeOwnerId(orig)
+										toUser := mach_model.User{Id: nodeOwnerId}.Pull(trx)
+										toUser.Balance += int64(math.Floor(float64(tokenData.Amount) / float64(len(validators))))
+										toUser.Push(trx)
+										trx.DelJson("Json::User::"+tokenData.TokenOwnerId, "lockedTokens."+tokenData.TokenId)
+									}
+									user.Balance += (amount - tokenData.Amount)
+									user.Push(trx)
+								} else {
+									log.Println(errors.New("invalid cost value"))
+									return
+								}
+							} else {
+								log.Println(e)
+								return
+							}
+						})
+						break
+					}
+				}
+
 				if !callback.Executors[c.Ip] {
 					kvstoreKeyword := "applet: "
 					c.ModifyState(false, func(trx trx.ITrx) {

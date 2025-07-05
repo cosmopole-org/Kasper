@@ -944,6 +944,7 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     j2["packet"] = input;
     j2["isFile"] = isFile;
     j2["isBase"] = isBase;
+    j2["isRequesterOnchain"] = rt->onchain;
     j["input"] = j2;
     std::string packet = j.dump();
 

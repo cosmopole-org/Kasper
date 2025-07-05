@@ -277,14 +277,22 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		trxInp := inputs_users.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost), TokenOwnerId: tokenOwnerId}
 		i, _ := json.Marshal(trxInp)
-		s := wm.app.SignPacketAsOwner(i)
 		wm.app.ModifyState(false, func(trx trx.ITrx) {
 			trx.PutString("Temp::User::"+tokenOwnerId+"::consumedTokens::"+tokenId, "true")
 		})
-		wm.app.ExecBaseRequestOnChain("/users/consumeToken", i, s, wm.app.OwnerId(), "", func(b []byte, i int, err error) {})
-		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), "#appletsign", int(resCode), e, []update.Update{{Val: []byte("applet: " + changes)}})
+		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), "#appletsign", int(resCode), e, []update.Update{{Val: []byte("consumeToken: " + string(i))}, {Val: []byte("applet: " + changes)}})
 	} else if key == "submitOnchainTrx" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
 		targetMachineId, err := checkField(input, "targetMachineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		isRequesterOnchain, err := checkField(input, "isRequesterOnchain", false)
 		if err != nil {
 			log.Println(err)
 			return err.Error()
@@ -339,6 +347,11 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			data = []byte(pack)
 		}
 
+		if userId == "" && userSignature == "" {
+			userId = machineId
+			userSignature = "#appletsign"
+		}
+
 		result := []byte("{}")
 		outputCnan := make(chan int)
 		if isBase {
@@ -354,7 +367,9 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 					return
 				}
 				result = b
-				outputCnan <- 1
+				if isRequesterOnchain {
+					outputCnan <- 1
+				}
 			})
 		} else {
 			wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, userSignature, userId, tag, tokenId, func(b []byte, i int, err error) {
@@ -363,11 +378,19 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 					return
 				}
 				result = b
-				outputCnan <- 1
+				if isRequesterOnchain {
+					outputCnan <- 1
+				}
 			})
 		}
-		<-outputCnan
-		return string(result)
+		if isRequesterOnchain {
+			<-outputCnan
+		}
+		if isRequesterOnchain {
+			return string(result)
+		} else {
+			return "{}"
+		}
 	} else if key == "plantTrigger" {
 		count, err := checkField(input, "count", float64(0))
 		if err != nil {

@@ -1,11 +1,13 @@
 package model
 
 import (
+	"encoding/binary"
 	"kasper/src/abstract/models/trx"
 )
 
 type App struct {
 	Id      string `json:"id"`
+	ChainId int64  `json:"chainId"`
 	OwnerId string `json:"ownerId"`
 }
 
@@ -14,9 +16,12 @@ func (m App) Type() string {
 }
 
 func (d App) Push(trx trx.ITrx) {
+	cidBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(cidBytes, uint64(d.ChainId))
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
 		"id":      []byte(d.Id),
 		"ownerId": []byte(d.OwnerId),
+		"chainId": cidBytes,
 	})
 }
 
@@ -25,6 +30,7 @@ func (d App) Pull(trx trx.ITrx) App {
 	if len(m) > 0 {
 		d.Id = string(m["id"])
 		d.OwnerId = string(m["ownerId"])
+		d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
 	}
 	return d
 }

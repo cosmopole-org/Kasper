@@ -79,40 +79,19 @@ func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput
 	if user.Balance < input.Amount {
 		return nil, errors.New("your balance is not enough")
 	}
+	validators := a.App.Tools().Network().Chain().GetValidatorsOfMachineShard(input.ExecMachineId)
+	str, err := json.Marshal(validators)
+	if err != nil {
+		return nil, err
+	}
+	if input.Amount < int64(len(validators)) {
+		return nil, errors.New("amount to be locked can not be less than validators count")
+	}
 	user.Balance -= input.Amount
 	user.Push(state.Trx())
 	lockId := crypto.SecureUniqueString()
-	state.Trx().PutJson("Json::User::"+state.Info().UserId(), "lockedTokens."+lockId, map[string]any{"amount": input.Amount}, true)
+	state.Trx().PutJson("Json::User::"+state.Info().UserId(), "lockedTokens."+lockId, map[string]any{"amount": input.Amount, "validators": string(str)}, true)
 	return map[string]any{"tokenId": lockId}, nil
-}
-
-// ConsumeToken /users/consumeToken check [ true false false ] access [ true false false false POST ]
-func (a *Actions) ConsumeToken(state state.IState, input inputsusers.ConsumeTokenInput) (any, error) {
-	userOwnsOrig := a.App.Tools().Network().Chain().UserOwnsOrigin(state.Info().UserId(), input.Orig)
-	if !userOwnsOrig {
-		return nil, errors.New("node owner not identified")
-	}
-	nodeOwnerId := state.Info().UserId()
-	user := models.User{Id: input.TokenOwnerId}.Pull(state.Trx())
-	if user.Balance < input.Amount {
-		return nil, errors.New("your balance is not enough")
-	}
-	toUser := models.User{Id: nodeOwnerId}.Pull(state.Trx())
-	if m, e := state.Trx().GetJson("Json::User::"+state.Info().UserId(), "lockedTokens."+input.TokenId); e == nil {
-		amount := int64(m["amount"].(float64))
-		if amount >= input.Amount {
-			user.Balance += (amount - input.Amount)
-			user.Push(state.Trx())
-			toUser.Balance += input.Amount
-			toUser.Push(state.Trx())
-			state.Trx().DelJson("Json::User::"+state.Info().UserId(), "lockedTokens."+input.TokenId)
-			return map[string]any{}, nil
-		} else {
-			return nil, errors.New("invalid cost value")
-		}
-	} else {
-		return nil, e
-	}
 }
 
 // Register /users/register check [ false false false ] access [ true false false false POST ]

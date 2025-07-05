@@ -24,7 +24,7 @@ func Install(a *Actions) error {
 // CreateApp /apps/create check [ true false false ] access [ true false false false POST ]
 func (a *Actions) CreateApp(state state.IState, input inputs_machiner.CreateAppInput) (any, error) {
 	trx := state.Trx()
-	app := model.App{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), OwnerId: state.Info().UserId()}
+	app := model.App{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), OwnerId: state.Info().UserId(), ChainId: input.ChainId}
 	app.Push(trx)
 	a.App.Tools().Network().Chain().NotifyNewMachineCreated(input.ChainId, app.Id)
 	return map[string]any{"app": app}, nil
