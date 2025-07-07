@@ -1155,6 +1155,7 @@ func (c *SubChain) Run() {
 						c.events[e.Proof] = e
 					}()
 					c.nextBlockQueue.Put(e)
+					continue
 				} else {
 					func() {
 						c.Lock.Lock()
