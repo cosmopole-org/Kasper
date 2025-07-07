@@ -110,7 +110,7 @@ func NewChain(core core.ICore) *Blockchain {
 	q, _ := queues.NewLinkedBlockingQueue(1000)
 	q2, _ := queues.NewLinkedBlockingQueue(1000)
 	sc := &SubChain{
-		id:                    2,
+		id:                    1,
 		events:                map[string]*Event{},
 		pendingBlockElections: 0,
 		readyForNewElection:   true,
@@ -151,6 +151,7 @@ func NewChain(core core.ICore) *Blockchain {
 		chainCounter: math.MaxInt32,
 		chains:       &m4,
 		pipeline:     nil,
+		allSubChains: &m5,
 	}
 	chain.blockchain = blockchain
 	return blockchain
@@ -1132,28 +1133,52 @@ func (c *SubChain) Run() {
 			if haveTrxs {
 				log.Println("creating new event...")
 				var e *Event = nil
-				func() {
-					c.Lock.Lock()
-					defer c.Lock.Unlock()
-					now := time.Now().UnixMicro()
-					proof := fmt.Sprintf("%s-%d", c.chain.blockchain.app.Id(), now)
-					e = &Event{
-						Origin:          c.chain.blockchain.app.Id(),
-						backedResponses: map[string]Guarantee{},
-						backedProofs:    map[string]string{},
-						randomNums:      map[string]int{},
-						electionReadys:  map[string]bool{},
-						Transactions:    c.pendingTrxs,
-						Proof:           proof,
-						MyUpdate:        []byte{},
-						Timestamp:       now,
-						phase:           1,
-					}
-					c.pendingTrxs = []Transaction{}
-					c.events[e.Proof] = e
-					c.pendingEvents = append(c.pendingEvents, e)
-					c.remainedCount++
-				}()
+				if len(c.peers) == 1 {
+					func() {
+						c.Lock.Lock()
+						defer c.Lock.Unlock()
+						now := time.Now().UnixMicro()
+						proof := fmt.Sprintf("%s-%d", c.chain.blockchain.app.Id(), now)
+						e = &Event{
+							Origin:          c.chain.blockchain.app.Id(),
+							backedResponses: map[string]Guarantee{},
+							backedProofs:    map[string]string{},
+							randomNums:      map[string]int{},
+							electionReadys:  map[string]bool{},
+							Transactions:    c.pendingTrxs,
+							Proof:           proof,
+							MyUpdate:        []byte{},
+							Timestamp:       now,
+							phase:           6,
+						}
+						c.pendingTrxs = []Transaction{}
+						c.events[e.Proof] = e
+					}()
+					c.nextBlockQueue.Put(e)
+				} else {
+					func() {
+						c.Lock.Lock()
+						defer c.Lock.Unlock()
+						now := time.Now().UnixMicro()
+						proof := fmt.Sprintf("%s-%d", c.chain.blockchain.app.Id(), now)
+						e = &Event{
+							Origin:          c.chain.blockchain.app.Id(),
+							backedResponses: map[string]Guarantee{},
+							backedProofs:    map[string]string{},
+							randomNums:      map[string]int{},
+							electionReadys:  map[string]bool{},
+							Transactions:    c.pendingTrxs,
+							Proof:           proof,
+							MyUpdate:        []byte{},
+							Timestamp:       now,
+							phase:           1,
+						}
+						c.pendingTrxs = []Transaction{}
+						c.events[e.Proof] = e
+						c.pendingEvents = append(c.pendingEvents, e)
+						c.remainedCount++
+					}()
+				}
 				dataStr, _ := json.Marshal(e)
 				signature := c.chain.blockchain.app.SignPacket(dataStr)
 				dataBytes := []byte(dataStr)

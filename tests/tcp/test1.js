@@ -5,7 +5,7 @@ const { exec } = require('child_process');
 const readline = require('node:readline');
 
 const port = 8080;
-let host = '172.77.5.1';
+let host = '165.232.32.106';
 let privateKey = undefined;
 
 let callbacks = {};
