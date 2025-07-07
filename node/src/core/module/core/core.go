@@ -147,8 +147,6 @@ func NewCore(ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
 	id := localAddr
 	execs := map[string]bool{}
 	execs["172.77.5.1"] = true
-	execs["172.77.5.2"] = true
-	execs["172.77.5.3"] = true
 	return &Core{
 		ownerId:        ownerId,
 		ownerPrivKey:   ownerPrivateKey,
