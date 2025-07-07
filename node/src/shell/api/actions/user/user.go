@@ -159,7 +159,7 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	if trx.HasIndex("User", "username", "id", input.Username+"@"+state.Source()) {
 		return nil, errors.New("username already exists")
 	}
-	user = models.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Typ: "human", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
+	user = models.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Typ: "human", Balance: 1000000000000000, PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
 	session = models.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
 	user.Push(trx)
 	session.Push(trx)
