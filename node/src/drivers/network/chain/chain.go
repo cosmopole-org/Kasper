@@ -1260,6 +1260,7 @@ func (c *SubChain) Run() {
 			block := blockRaw.(*Event)
 			c.blocks = append(c.blocks, block)
 			pipelinePacket := [][]byte{}
+			foundFunctionalTrx := false
 			for _, trx := range block.Transactions {
 				log.Println("received transaction: ", trx.Typ, string(trx.Payload))
 				if c.id == 1 {
@@ -1283,14 +1284,17 @@ func (c *SubChain) Run() {
 							chain.sharder.HandleNewNode(newNode)
 						}
 					} else {
+						foundFunctionalTrx = true
 						pipelinePacket = append(pipelinePacket, trx.Payload)
 					}
 				}
 			}
-			machineIds := c.chain.blockchain.pipeline(pipelinePacket)
-			midsBytes, _ := json.Marshal(machineIds)
-			sc, _ := c.chain.SubChains.Get("1")
-			sc.SubmitTrx("logLoad", midsBytes)
+			if foundFunctionalTrx {
+				machineIds := c.chain.blockchain.pipeline(pipelinePacket)
+				midsBytes, _ := json.Marshal(machineIds)
+				sc, _ := c.chain.SubChains.Get("1")
+				sc.SubmitTrx("logLoad", midsBytes)
+			}
 			func() {
 				c.Lock.Lock()
 				defer c.Lock.Unlock()
