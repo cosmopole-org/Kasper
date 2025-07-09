@@ -1,7 +1,8 @@
 package inputs_users
 
 type LoginInput struct {
-	Username  string `json:"username" validate:"required"`
+	Username   string `json:"username" validate:"required"`
+	EmailToken string `json:"emailToken" validate:"required"`
 }
 
 func (d LoginInput) GetData() any {

@@ -26,8 +26,8 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.LockToken)
 		}
 		
-		func (c *Plugger) Register() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.Register)
+		func (c *Plugger) Login() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Login)
 		}
 		
 		func (c *Plugger) Create() iaction.IAction {
@@ -36,6 +36,10 @@
 		
 		func (c *Plugger) Get() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Get)
+		}
+		
+		func (c *Plugger) List() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.List)
 		}
 		
 	func (c *Plugger) Install(a *actions.Actions) *Plugger {

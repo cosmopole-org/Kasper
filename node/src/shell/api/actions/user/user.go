@@ -1,12 +1,14 @@
 package actions_user
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"io"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
@@ -18,6 +20,9 @@ import (
 	outputsusers "kasper/src/shell/api/outputs/users"
 	"kasper/src/shell/utils/crypto"
 	"log"
+	"net"
+	"net/http"
+	"time"
 )
 
 type Actions struct {
@@ -94,10 +99,49 @@ func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput
 	return map[string]any{"tokenId": lockId}, nil
 }
 
-// Register /users/register check [ false false false ] access [ true false false false POST ]
-func (a *Actions) Register(state state.IState, input inputsusers.LoginInput) (any, error) {
+var (
+	zeroDialer net.Dialer
+)
+
+var netClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return zeroDialer.DialContext(ctx, "tcp4", addr)
+		},
+	},
+	Timeout: time.Duration(1000) * time.Second,
+}
+
+// Login /users/login check [ false false false ] access [ true false false false POST ]
+func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, error) {
+	var resp, err = netClient.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + (input.EmailToken))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err2 := io.ReadAll(resp.Body)
+	if err2 != nil {
+		return nil, err2
+	}
+	result := make(map[string]interface{})
+	err3 := json.Unmarshal(body, &result)
+	if err3 != nil {
+		return nil, err3
+	}
+	email := ""
+	if result["email"] != nil {
+		email = result["email"].(string)
+	} else {
+		return nil, errors.New("access denied")
+	}
 	trx := state.Trx()
-	log.Println("hi")
+	userId := trx.GetLink("UserEmailToId::" + email)
+	if userId != "" {
+		user := models.User{Id: userId}.Pull(trx)
+		session := models.Session{Id: trx.GetIndex("Session", "userId", "id", user.Id)}.Pull(trx)
+		privKey := trx.GetLink("UserPrivateKey::" + user.Id)
+		return outputsusers.LoginOutput{User: user, Session: session, PrivateKey: privKey}, nil
+	}
 	if !trx.HasIndex("User", "username", "id", input.Username+"@"+a.App.Id()) {
 		key, err := rsa.GenerateKey(rand.Reader, 4096)
 		if err != nil {
@@ -141,11 +185,10 @@ func (a *Actions) Register(state state.IState, input inputsusers.LoginInput) (an
 			log.Println(e)
 			return nil, e
 		}
+		trx.PutLink("UserPrivateKey::"+response.User.Id, privKey)
 		return outputsusers.LoginOutput{User: response.User, Session: response.Session, PrivateKey: privKey}, nil
 	} else {
-		user := models.User{Id: trx.GetIndex("User", "username", "id", input.Username+"@"+a.App.Id())}.Pull(trx)
-		session := models.Session{Id: trx.GetIndex("Session", "userId", "id", user.Id)}.Pull(trx)
-		return outputsusers.LoginOutput{User: user, Session: session, PrivateKey: ""}, nil
+		return nil, errors.New("username already exist")
 	}
 }
 
