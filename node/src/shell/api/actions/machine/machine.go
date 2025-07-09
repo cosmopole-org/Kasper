@@ -46,7 +46,7 @@ func (a *Actions) CreateFunction(state state.IState, input inputs_machiner.Creat
 	}
 	user = model.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
 	session = model.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
-	vm := model.Vm{MachineId: user.Id, AppId: app.Id}
+	vm := model.Vm{MachineId: user.Id, AppId: app.Id, Path: input.Path}
 	user.Push(trx)
 	session.Push(trx)
 	vm.Push(trx)
@@ -107,4 +107,26 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 		}
 	}
 	return outputs_machiner.PlugInput{}, nil
+}
+
+// ListApps /apps/list check [ true false false ] access [ true false false false GET ]
+func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) (any, error) {
+	trx := state.Trx()
+	apps, err := model.App{}.All(trx, input.Offset, input.Count)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"apps": apps}, nil
+}
+
+// ListMachs /functions/list check [ true false false ] access [ true false false false GET ]
+func (a *Actions) ListMachs(state state.IState, input inputs_machiner.ListInput) (any, error) {
+	trx := state.Trx()
+	functions, err := model.User{}.All(trx, input.Offset, input.Count, map[string]string{"type": "machine"})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"functions": functions}, nil
 }

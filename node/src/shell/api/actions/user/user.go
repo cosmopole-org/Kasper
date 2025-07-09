@@ -175,3 +175,14 @@ func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, erro
 	user := models.User{Id: input.UserId}.Pull(trx)
 	return outputsusers.GetOutput{User: user}, nil
 }
+
+// List /users/list check [ true false false ] access [ true false false false GET ]
+func (a *Actions) List(state state.IState, input inputsusers.ListInput) (any, error) {
+	trx := state.Trx()
+	users, err := models.User{}.All(trx, input.Offset, input.Count, map[string]string{"type": "human"})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"users": users}, nil
+}

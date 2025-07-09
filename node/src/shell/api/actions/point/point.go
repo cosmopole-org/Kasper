@@ -125,7 +125,7 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 		return nil, errors.New("you are not admin")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
-	trx.DelKey("obj::Point::" + point.Id+"::|")
+	trx.DelKey("obj::Point::" + point.Id + "::|")
 	a.App.Tools().Signaler().LeaveGroup(point.Id, state.Info().UserId())
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/delete", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
@@ -208,4 +208,15 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 // History /points/history check [ true true true ] access [ true false false false POST ]
 func (a *Actions) History(state state.IState, input inputs_points.HistoryInput) (any, error) {
 	return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().ReadPointLogs(state.Info().PointId())}, nil
+}
+
+// List /points/list check [ true false false ] access [ true false false false GET ]
+func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, error) {
+	trx := state.Trx()
+	points, err := model.Point{}.All(trx, input.Offset, input.Count, map[string]string{"isPublic": string([]byte{0x01})})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"points": points}, nil
 }

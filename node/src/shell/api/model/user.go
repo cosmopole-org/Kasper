@@ -50,7 +50,28 @@ func (d User) List(trx trx.ITrx, prefix string) ([]User, error) {
 	for i := 0; i < len(list); i++ {
 		list[i] = list[i][len(prefix):]
 	}
-	objs, err := trx.GetObjList("User", list)
+	objs, err := trx.GetObjList("User", list, map[string]string{})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	entities := []User{}
+	for id, m := range objs {
+		if len(m) > 0 {
+			d := User{}
+			d.Id = id
+			d.Typ = string(m["type"])
+			d.Username = string(m["username"])
+			d.PublicKey = string(m["publicKey"])
+			d.Balance = int64(binary.LittleEndian.Uint64(m["balance"]))
+			entities = append(entities, d)
+		}
+	}
+	return entities, nil
+}
+
+func (d User) All(trx trx.ITrx, offset int64, count int64, query map[string]string) ([]User, error) {
+	objs, err := trx.GetObjList("User", []string{"*"}, query, offset, count)
 	if err != nil {
 		log.Println(err)
 		return nil, err

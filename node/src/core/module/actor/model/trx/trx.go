@@ -12,6 +12,7 @@ import (
 	"kasper/src/abstract/models/update"
 	"log"
 	"sort"
+	"strings"
 
 	"github.com/dgraph-io/badger"
 )
@@ -71,7 +72,7 @@ func (tw *TrxWrapper) GetIndex(typ string, fromColumn string, toColumn string, f
 }
 
 func (tw *TrxWrapper) PutIndex(typ string, fromColumn string, toColumn string, fromColumnVal string, toColumnVal []byte) {
-	tw.dbTrx.Set([]byte("index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal), toColumnVal)
+	tw.dbTrx.Set([]byte("index::"+typ+"::"+fromColumn+"::"+toColumn+"::"+fromColumnVal), toColumnVal)
 	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal, Val: toColumnVal})
 }
 
@@ -96,7 +97,7 @@ func (tw *TrxWrapper) GetLink(key string) string {
 
 func (tw *TrxWrapper) PutLink(key string, value string) {
 	tw.dbTrx.Set([]byte("link::"+key), []byte(value))
-	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "link::"+key, Val: []byte(value)})
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "link::" + key, Val: []byte(value)})
 }
 
 func (tw *TrxWrapper) PutBytes(key string, value []byte) {
@@ -181,7 +182,7 @@ func (tw *TrxWrapper) PutObj(typ string, key string, keys map[string][]byte) {
 	keys["|"] = []byte{0x01}
 	for k, v := range keys {
 		tw.dbTrx.Set([]byte(prefix+k), v)
-		tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: prefix+k, Val: v})
+		tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: prefix + k, Val: v})
 	}
 }
 
@@ -196,7 +197,7 @@ func (tw *TrxWrapper) indexJson(key string, path string, obj map[string]any, mer
 		}
 	}
 	keys := make([]string, 0, len(obj))
-    for k, v := range obj {
+	for k, v := range obj {
 		keys = append(keys, k)
 		old[k] = v
 	}
@@ -247,12 +248,145 @@ func (tw *TrxWrapper) GetJson(key string, path string) (map[string]any, error) {
 	return m, nil
 }
 
-func (tw *TrxWrapper) GetObjList(typ string, objIds []string) (map[string]map[string][]byte, error) {
-	m := map[string]map[string][]byte{}
-	for _, id := range objIds {
-		m[id] = tw.GetObj(typ, id)
+func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[string]string, meta ...int64) (map[string]map[string][]byte, error) {
+	if (len(objIds) == 1) && (objIds[0] == "*") {
+		objs := map[string]map[string][]byte{}
+		prefix := []byte("obj::" + typ + "::")
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		opts.Prefix = prefix
+		it := tw.dbTrx.NewIterator(opts)
+		defer it.Close()
+		if len(meta) == 0 {
+			temp := map[string][]byte{}
+			tempId := ""
+			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+				item := it.Item()
+				itemKey := item.Key()
+				id := strings.Split(string(itemKey[:len(prefix)]), "::")[2]
+				var itemVal []byte
+				err := item.Value(func(v []byte) error {
+					itemVal = v
+					return nil
+				})
+				if _, ok := objs[id]; !ok {
+					matched := false
+					if len(queryMap) > 0 {
+						for k, v := range queryMap {
+							if (temp[k] == nil) || (v != string(temp[k])) {
+								matched = false
+							}
+						}	
+					} else {
+						matched = true
+					}
+					if !matched {
+						objs[tempId] = temp
+					}
+					temp = map[string][]byte{}
+					tempId = id
+				}
+				temp[string(itemKey[len(prefix):])] = itemVal
+				if err != nil {
+					return nil, err
+				}
+			}
+			objs[tempId] = temp
+		} else if len(meta) == 1 {
+			index := int64(0)
+			offset := meta[0]
+			temp := map[string][]byte{}
+			tempId := ""
+			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+				if index < offset {
+					index++
+					continue
+				}
+				item := it.Item()
+				itemKey := item.Key()
+				id := strings.Split(string(itemKey[:len(prefix)]), "::")[2]
+				var itemVal []byte
+				err := item.Value(func(v []byte) error {
+					itemVal = v
+					return nil
+				})
+				if _, ok := objs[id]; !ok {
+					matched := false
+					if len(queryMap) > 0 {
+						for k, v := range queryMap {
+							if (temp[k] == nil) || (v != string(temp[k])) {
+								matched = false
+							}
+						}	
+					} else {
+						matched = true
+					}
+					if !matched {
+						objs[tempId] = temp
+					}
+					temp = map[string][]byte{}
+					tempId = id
+				}
+				temp[string(itemKey[len(prefix):])] = itemVal
+				if err != nil {
+					return nil, err
+				}
+			}
+			objs[tempId] = temp
+		} else if len(meta) == 2 {
+			index := int64(0)
+			offset := meta[0]
+			count := meta[1]
+			temp := map[string][]byte{}
+			tempId := ""
+			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+				if index < offset {
+					index++
+					continue
+				}
+				if index > (offset + count) {
+					break
+				}
+				item := it.Item()
+				itemKey := item.Key()
+				id := strings.Split(string(itemKey[:len(prefix)]), "::")[2]
+				var itemVal []byte
+				err := item.Value(func(v []byte) error {
+					itemVal = v
+					return nil
+				})
+				if _, ok := objs[id]; !ok {
+					matched := false
+					if len(queryMap) > 0 {
+						for k, v := range queryMap {
+							if (temp[k] == nil) || (v != string(temp[k])) {
+								matched = false
+							}
+						}	
+					} else {
+						matched = true
+					}
+					if !matched {
+						objs[tempId] = temp
+					}
+					temp = map[string][]byte{}
+					tempId = id
+				}
+				temp[string(itemKey[len(prefix):])] = itemVal
+				if err != nil {
+					return nil, err
+				}
+			}
+			objs[tempId] = temp
+		}
+		return objs, nil
+	} else {
+		m := map[string]map[string][]byte{}
+		for _, id := range objIds {
+			m[id] = tw.GetObj(typ, id)
+		}
+		return m, nil
 	}
-	return m, nil
 }
 
 func (tw *TrxWrapper) GetLinksList(p string, offset int, count int) ([]string, error) {

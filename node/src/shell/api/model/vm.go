@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/binary"
 	"kasper/src/abstract/models/trx"
+	"log"
 )
 
 type App struct {
@@ -35,10 +36,30 @@ func (d App) Pull(trx trx.ITrx) App {
 	return d
 }
 
+func (d App) All(trx trx.ITrx, offset int64, count int64) ([]App, error) {
+	objs, err := trx.GetObjList("App", []string{"*"}, map[string]string{}, offset, count)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	entities := []App{}
+	for id, m := range objs {
+		if len(m) > 0 {
+			d := App{}
+			d.Id = id
+			d.OwnerId = string(m["ownerId"])
+			d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
+			entities = append(entities, d)
+		}
+	}
+	return entities, nil
+}
+
 type Vm struct {
 	MachineId string `json:"id"`
 	AppId     string `json:"appId"`
 	Runtime   string `json:"runtime"`
+	Path      string `json:"path"`
 }
 
 func (m Vm) Type() string {
@@ -50,6 +71,7 @@ func (d Vm) Push(trx trx.ITrx) {
 		"machineId": []byte(d.MachineId),
 		"appId":     []byte(d.AppId),
 		"runtime":   []byte(d.Runtime),
+		"path":      []byte(d.Path),
 	})
 }
 
@@ -59,6 +81,27 @@ func (d Vm) Pull(trx trx.ITrx) Vm {
 		d.MachineId = string(m["machineId"])
 		d.AppId = string(m["appId"])
 		d.Runtime = string(m["runtime"])
+		d.Path = string(m["path"])
 	}
 	return d
+}
+
+func (d Vm) All(trx trx.ITrx, offset int64, count int64) ([]Vm, error) {
+	objs, err := trx.GetObjList("Vm", []string{"*"}, map[string]string{}, offset, count)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	entities := []Vm{}
+	for id, m := range objs {
+		if len(m) > 0 {
+			d := Vm{}
+			d.MachineId = id
+			d.AppId = string(m["appId"])
+			d.Runtime = string(m["runtime"])
+			d.Path = string(m["path"])
+			entities = append(entities, d)
+		}
+	}
+	return entities, nil
 }

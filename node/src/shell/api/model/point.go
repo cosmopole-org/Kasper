@@ -57,7 +57,26 @@ func (d Point) List(trx trx.ITrx, prefix string, positional ...int) ([]Point, er
 	for i := 0; i < len(list); i++ {
 		list[i] = list[i][len(prefix):]
 	}
-	objs, err := trx.GetObjList("Point", list)
+	objs, err := trx.GetObjList("Point", list, map[string]string{})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	entities := []Point{}
+	for id, m := range objs {
+		if len(m) > 0 {
+			d := Point{}
+			d.Id = id
+			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
+			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
+			entities = append(entities, d)
+		}
+	}
+	return entities, nil
+}
+
+func (d Point) All(trx trx.ITrx, offset int64, count int64, query map[string]string) ([]Point, error) {
+	objs, err := trx.GetObjList("Point", []string{"*"}, query, offset, count)
 	if err != nil {
 		log.Println(err)
 		return nil, err

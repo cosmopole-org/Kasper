@@ -3,6 +3,7 @@ package inputs_machiner
 type CreateFuncInput struct {
 	Username  string `json:"username" validate:"required"`
 	AppId     string `json:"appId" validate:"required"`
+	Path      string `json:"path" validate:"required"`
 	PublicKey string `json:"publicKey"`
 }
 

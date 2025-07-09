@@ -185,7 +185,7 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/register", { "username": "kasper" });
+    let res = await sendRequest("", "/users/register", { "username": "kasperius3" });
     console.log(res.resCode, res.obj);
 
     privateKey = Buffer.from(
@@ -227,11 +227,15 @@ async function doTest() {
     console.log(res.resCode, res.obj);
     let pointId = res.obj.point.id;
 
-    // res = await sendRequest(userId, "/machines/create", { "username": "deepseek" });
-    // console.log(res.resCode, res.obj);
-    // let machineId = res.obj.user.id;
-    
-    let machineId = '4@global';
+    res = await sendRequest(userId, "/apps/create", { "chainId": 1 });
+    console.log(res.resCode, res.obj);
+    let appId = res.obj.app.id;
+
+    res = await sendRequest(userId, "/functions/create", { "username": "deepseek3", "appId": appId });
+    console.log(res.resCode, res.obj);
+    let machineId = res.obj.user.id;
+
+    // let machineId = '4@global';
 
     // let keys = {
     //     "init": [pointOneId, pointTwoId],
@@ -311,13 +315,13 @@ async function doTest() {
     // for (let key in keys) {
     //     await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/ai_${key}/builder && bash build.sh '' '${userId}'`);
     //     let dockerfileBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_" + key + "/builder/Dockerfile");
-    //     res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "ai_" + key }, "byteCode": dockerfileBC.toString('base64') });
+    //     res = await sendRequest(userId, "/functions/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "ai_" + key }, "byteCode": dockerfileBC.toString('base64') });
     //     console.log(res.resCode, res.obj);
     // }
 
     // // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' '${userId}'`);
     // // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder/main.wasm");
-    // // res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
+    // // res = await sendRequest(userId, "/functions/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
     // // console.log(res.resCode, res.obj);
 
     // let runJsScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.js", { encoding: 'utf-8' }));
@@ -332,12 +336,12 @@ async function doTest() {
 
     // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder && bash build.sh '' '${userId}'`);
     // let dockerfile2BC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder/Dockerfile");
-    // res = await sendRequest(userId, "/machines/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "deepseek" }, "byteCode": dockerfile2BC.toString('base64') });
+    // res = await sendRequest(userId, "/functions/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "deepseek" }, "byteCode": dockerfile2BC.toString('base64') });
     // console.log(res.resCode, res.obj);
 
     // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder && bash build.sh '' '${userId}'`);
     // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder/main.wasm");
-    // res = await sendRequest(userId, "/machines/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
+    // res = await sendRequest(userId, "/functions/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
     // console.log(res.resCode, res.obj);
 
     res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointId, "userId": machineId });

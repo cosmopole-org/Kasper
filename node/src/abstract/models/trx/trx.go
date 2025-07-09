@@ -19,7 +19,7 @@ type ITrx interface {
 	HasIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) bool
 	GetColumn(typ string, objId string, columnName string) []byte
 	GetLinksList(p string, offset int, count int) ([]string, error)
-	GetObjList(typ string, objIds []string) (map[string]map[string][]byte, error)
+	GetObjList(typ string, objIds []string, query map[string]string, meta... int64) (map[string]map[string][]byte, error)
 	GetLink(key string) string
 	PutLink(key string, value string)
 	PutBytes(key string, value []byte)
