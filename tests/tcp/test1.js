@@ -185,7 +185,7 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/register", { "username": "kasperius3" });
+    let res = await sendRequest("", "/users/login", { "username": "kasper" });
     console.log(res.resCode, res.obj);
 
     privateKey = Buffer.from(

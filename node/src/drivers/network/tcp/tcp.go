@@ -109,6 +109,9 @@ func (t *Tcp) listenForPackets(socket *Socket) {
 					remainedReadLength -= 4
 					copy(nextBuf[0:remainedReadLength], nextBuf[4:remainedReadLength+4])
 					length = int(binary.BigEndian.Uint32(lenBuf))
+					if length > 20000000 {
+						return
+					}
 					readData = make([]byte, length)
 					readCount -= 4
 					beginning = false
@@ -326,6 +329,9 @@ func (t *Socket) processPacket(packet []byte) {
 	pointer := 0
 	signatureLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	log.Println("signature length:", signatureLength)
+	if signatureLength > 20000000 {
+		return
+	}
 	pointer += 4
 	signature := string(packet[pointer : pointer+signatureLength])
 	pointer += signatureLength
@@ -333,18 +339,27 @@ func (t *Socket) processPacket(packet []byte) {
 	userIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
 	log.Println("userId length:", userIdLength)
+	if userIdLength > 20000000 {
+		return
+	}
 	userId := string(packet[pointer : pointer+userIdLength])
 	pointer += userIdLength
 	log.Println("userId:", userId)
 	pathLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
 	log.Println("path length:", pathLength)
+	if pathLength > 20000000 {
+		return
+	}
 	path := string(packet[pointer : pointer+pathLength])
 	pointer += pathLength
 	log.Println("path:", path)
 	packetIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
 	log.Println("packetId length:", packetIdLength)
+	if packetIdLength > 20000000 {
+		return
+	}
 	packetId := string(packet[pointer : pointer+packetIdLength])
 	pointer += packetIdLength
 	log.Println("packetId:", packetId)
@@ -392,7 +407,6 @@ func (t *Socket) processPacket(packet []byte) {
 	}
 	statusCode, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, packetId, payload, signature, input, strings.Split(t.Conn.RemoteAddr().String(), ":")[0])
 	log.Println(result)
-	log.Println("hello 2.........")
 	if err != nil {
 		httpStatusCode := 3
 		if statusCode == -1 {
