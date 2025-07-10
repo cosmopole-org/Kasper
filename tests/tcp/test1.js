@@ -185,7 +185,7 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/login", { "username": "kasper" });
+    let res = await sendRequest("", "/users/login", { "username": "kasper", "emailToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjhlOGZjOGU1NTZmN2E3NmQwOGQzNTgyOWQ2ZjkwYWUyZTEyY2ZkMGQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTQ5OTY0MzYxOTkxMTQyNjA4MzEiLCJlbWFpbCI6InRoZXByb2dyYW1tZXJtYWNoaW5lQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoiMzNvYUw2YlFnbmVwd05UTkx0QUpSQSIsIm5hbWUiOiJLZXloYW4gTW9oYW1tYWRpIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0xhUGR5SW51TWE1dVN5YXlDbkwtRHpGVHI3cllDWEg2Uk1UQ2NmWXpZY2N5NHV5QT1zOTYtYyIsImdpdmVuX25hbWUiOiJLZXloYW4iLCJmYW1pbHlfbmFtZSI6Ik1vaGFtbWFkaSIsImlhdCI6MTc1MjE0MTI1NiwiZXhwIjoxNzUyMTQ0ODU2fQ.QTvahz-eEG8wrgcNuYb7RjgXOWojunH8zAGYjjAyPDnPPv8PDr-FABCSq5r6ZZ58hhUDCIZHIjP1nEpOIXHj2BZV6BR8OWs6LzK69hxuhT0YXCAWsUW5_4-5mZYmAs5HjJawQzRdgmQq6C8anMmCswZF9D5gF5fDFKFjGGLt3Edti-ZkvHD_7CMg6S3X5LJOHYvOPCAdBUCLJPc7fk_4AOMkxtxBdj1nW9ykerETWurDiSYJ6mVgUGy5OtKDUP1-J4CRVZ6HgRHVWQFePUExfMLmztl_0O-atmWuaGCxoxlOqOFTp0MFWkI2wuxRzI_gcdCckuJx-k6YQ-KycYdwRQ" });
     console.log(res.resCode, res.obj);
 
     privateKey = Buffer.from(
@@ -231,7 +231,7 @@ async function doTest() {
     console.log(res.resCode, res.obj);
     let appId = res.obj.app.id;
 
-    res = await sendRequest(userId, "/functions/create", { "username": "deepseek3", "appId": appId });
+    res = await sendRequest(userId, "/functions/create", { "username": "deepseek3", "appId": appId, "path": "/ai/chat" });
     console.log(res.resCode, res.obj);
     let machineId = res.obj.user.id;
 
