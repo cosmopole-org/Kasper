@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"kasper/src/payment"
 	kasper "kasper/src/shell"
 	plugger_api "kasper/src/shell/api/main"
 	"os"
@@ -77,6 +78,14 @@ func main() {
 			"tcp": int(port),
 		},
 	)
+
+	privateKeyBlock2, _ := pem.Decode([]byte(os.Getenv("GOD_PRIVATE_KEY")))
+	privateKey2, err := x509.ParsePKCS1PrivateKey(privateKeyBlock2.Bytes)
+	if err != nil {
+		panic(err)
+	}
+
+	payment.NewPaymentServer(app, privateKey2)
 
 	<-exit
 }

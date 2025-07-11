@@ -247,6 +247,12 @@ github.com/pkg/errors
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
+# github.com/stripe/stripe-go/v82 v82.3.0
+## explicit; go 1.18
+github.com/stripe/stripe-go/v82
+github.com/stripe/stripe-go/v82/checkout/session
+github.com/stripe/stripe-go/v82/form
+github.com/stripe/stripe-go/v82/webhook
 # github.com/theodesp/blockingQueues v0.0.0-20171230192932-26531ad66e7c
 ## explicit
 github.com/theodesp/blockingQueues

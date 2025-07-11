@@ -78,6 +78,22 @@ func (a *Actions) Transfer(state state.IState, input inputsusers.TransferInput) 
 	return map[string]any{}, nil
 }
 
+// Mint /users/mint check [ true false false ] access [ true false false false POST ]
+func (a *Actions) Mint(state state.IState, input inputsusers.MintInput) (any, error) {
+	if state.Info().UserId() != "1@global" {
+		return nil, errors.New("access denied")
+	}
+	username := models.User{Id: state.Trx().GetLink("UserEmailToId::" + input.ToUserEmail)}.Pull(state.Trx()).Username
+	toUserId := state.Trx().GetIndex("User", "username", "id", username)
+	if toUserId == "" {
+		return nil, errors.New("target user not found")
+	}
+	toUser := models.User{Id: toUserId}.Pull(state.Trx())
+	toUser.Balance += input.Amount
+	toUser.Push(state.Trx())
+	return map[string]any{}, nil
+}
+
 // LockToken /users/lockToken check [ true false false ] access [ true false false false POST ]
 func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput) (any, error) {
 	user := models.User{Id: state.Info().UserId()}.Pull(state.Trx())
@@ -186,7 +202,8 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 			return nil, e
 		}
 		trx.PutLink("UserPrivateKey::"+response.User.Id, privKey)
-		trx.PutLink("UserEmailToId::" + email, response.User.Id)
+		trx.PutLink("UserEmailToId::"+email, response.User.Id)
+		log.Println()
 		return outputsusers.LoginOutput{User: response.User, Session: response.Session, PrivateKey: privKey}, nil
 	} else {
 		return nil, errors.New("username already exist")
