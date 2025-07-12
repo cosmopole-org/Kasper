@@ -14,17 +14,20 @@ let callbacks = {};
 const options = {
     host: host,
     port: port,
-    rejectUnauthorized: false,
+    servername: host,
+    rejectUnauthorized: true,
 };
-    
+
 let pcLogs = "";
 
+let socket;
+
 function connectoToTlsServer() {
-    const socket = tls.connect(options, () => {
-        if (client.authorized) {
+    socket = tls.connect(options, () => {
+        if (socket.authorized) {
             console.log('✔ TLS connection authorized');
         } else {
-            console.log('⚠ TLS connection not authorized:', client.authorizationError);
+            console.log('⚠ TLS connection not authorized:', socket.authorizationError);
         }
 
         doTest();
@@ -42,7 +45,7 @@ function connectoToTlsServer() {
     let received = Buffer.from([]);
     let observePhase = true;
     let nextLength = 0;
-    
+
     function readBytes() {
         if (observePhase) {
             if (received.length >= 4) {
@@ -62,7 +65,7 @@ function connectoToTlsServer() {
             }
         }
     }
-    
+
     socket.on('data', (data) => {
         console.log(data.toString());
         setTimeout(() => {
