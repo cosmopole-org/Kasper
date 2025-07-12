@@ -51,7 +51,7 @@ func (net *Network) Run(ports map[string]int) {
 	manager := autocert.Manager{
         Cache:      autocert.DirCache("certs"),
         Prompt:     autocert.AcceptTOS,
-        HostPolicy: autocert.HostWhitelist("yourdomain.com"),
+        HostPolicy: autocert.HostWhitelist("api.decillionai.com"),
     }
 
     config := &tls.Config{
