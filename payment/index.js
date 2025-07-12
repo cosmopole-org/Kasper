@@ -209,17 +209,21 @@ async function runServer() {
   app.use(express.static('public'))
 
   app.post('/create-checkout-session', async (req, res) => {
-    let userId = req.body.userId;
-    let payload = req.body.payload;
-    let diff = Date.now() - Buffer.from(payload).readBigInt64LE();
-    if (!(diff > 0 && diff < 60000)) {
+    if (!req.body?.userId || !req.body?.payload || !req.body?.signature) {
       res.send(JSON.stringify({ success: false, errCode: 1 }));
       return;
     }
+    let userId = req.body.userId;
+    let payload = req.body.payload;
     let signature = req.body.signature;
+    let diff = Date.now() - Buffer.from(payload).readBigInt64LE();
+    if (!(diff > 0 && diff < 60000)) {
+      res.send(JSON.stringify({ success: false, errCode: 2 }));
+      return;
+    }
     let emailRes = await sendRequest("1@global", "/users/checkSign", { userId: userId, payload: payload, signature: signature });
     if (!emailRes.valid) {
-      res.send(JSON.stringify({ success: false, errCode: 2 }));
+      res.send(JSON.stringify({ success: false, errCode: 3 }));
       return;
     }
     let email = emailRes.email;
