@@ -13,6 +13,7 @@ const stripe = require('stripe')(process.env.SECRET_KEY);
 const express = require('express');
 const net = require('net');
 const crypto = require('crypto');
+const tls = require('tls');
 
 const port = 8079;
 let host = 'api.decillionai.com';
