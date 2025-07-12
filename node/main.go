@@ -59,15 +59,15 @@ func main() {
 			"keyhan",
 		},
 		map[string]interface{}{
-			"storageRoot":  os.Getenv("STORAGE_ROOT_PATH"),
-			"appletDbPath": os.Getenv("APPLET_DB_PATH"),
-			"baseDbPath": os.Getenv("BASE_DB_PATH"),
+			"storageRoot":    os.Getenv("STORAGE_ROOT_PATH"),
+			"appletDbPath":   os.Getenv("APPLET_DB_PATH"),
+			"baseDbPath":     os.Getenv("BASE_DB_PATH"),
 			"federationPort": int(federationPort),
 			"blockchainPort": int(blockchainPort),
-			"pointLogsDb": os.Getenv("POINT_LOGS_DB"),
+			"pointLogsDb":    os.Getenv("POINT_LOGS_DB"),
 		},
 	)
-	
+
 	portStr := os.Getenv("CLIENT_API_PORT")
 	port, _ := strconv.ParseInt(portStr, 10, 64)
 	plugger_api.PlugAll(app)

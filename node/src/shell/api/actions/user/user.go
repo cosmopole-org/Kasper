@@ -11,7 +11,6 @@ import (
 	"io"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
-	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/state"
 	"kasper/src/core/module/actor/model/base"
 	mainstate "kasper/src/core/module/actor/model/state"
@@ -30,27 +29,6 @@ type Actions struct {
 }
 
 func Install(a *Actions) error {
-	a.App.ModifyState(false, func(trx trx.ITrx) {
-		for _, godUsername := range a.App.Gods() {
-			var user = models.User{}
-			userId := ""
-			userStr := trx.GetIndex("User", "username", "id", godUsername+"@"+a.App.Id())
-			if userStr == "" {
-				var (
-					user    models.User
-					session models.Session
-				)
-				user = models.User{Id: a.App.Tools().Storage().GenId(trx, a.App.Id()), Typ: "human", PublicKey: "", Username: godUsername + "@" + a.App.Id()}
-				session = models.Session{Id: a.App.Tools().Storage().GenId(trx, a.App.Id()), UserId: user.Id}
-				user.Push(trx)
-				session.Push(trx)
-				userId = user.Id
-			} else {
-				userId = user.Id
-			}
-			trx.PutLink("god::"+userId, "true")
-		}
-	})
 	return nil
 }
 

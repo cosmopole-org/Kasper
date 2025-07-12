@@ -2,10 +2,10 @@
 // Don’t submit any personally identifiable information in requests made with this key.
 // Sign in to see your own test API key embedded in code samples.
 
-const endpointSecret = 'whsec_...';
-const GOD_USER_PRIVATEKEY = "";
+const endpointSecret = process.env.ENDPOINT_SECRET;
+const GOD_USER_PRIVATEKEY = process.env.GOD_USER_PRIVATEKEY;
 
-const stripe = require('stripe')('sk_test_BQokikJOvBiI2HlWgH4olfQ2');
+const stripe = require('stripe')(process.env.SECRET_KEY);
 // Replace this endpoint secret with your endpoint's unique secret
 // If you are testing with the CLI, find the secret by running 'stripe listen'
 // If you are using an endpoint defined with the API or dashboard, look in your webhook settings
@@ -14,7 +14,7 @@ const express = require('express');
 const net = require('net');
 const crypto = require('crypto');
 
-const port = 8080;
+const port = 80;
 let host = '165.232.32.106';
 let privateKey = undefined;
 
@@ -198,8 +198,13 @@ async function sleep(ms) {
     const session = await stripe.checkout.sessions.create({
       line_items: [
         {
-          // Provide the exact Price ID (for example, price_1234) of the product you want to sell
-          price: '{{PRICE_ID}}',
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "One Year Plan",
+            },
+            unit_amount: 5000,
+          },
           quantity: 1,
         },
       ],
