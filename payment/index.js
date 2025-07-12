@@ -241,7 +241,7 @@ async function runServer() {
     });
 
     res.json({
-      sessionId: session.id,
+      sessionURL: session.url,
     });
     // res.redirect(303, session.url);
   });
