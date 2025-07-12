@@ -722,7 +722,6 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	bdbPath := args["baseDbPath"].(string)
 	adbPath := args["appletDbPath"].(string)
 	ldbPath := args["pointLogsDb"].(string)
-	fedPort := args["federationPort"].(int)
 
 	dnFederation := driver_network_fed.FirstStageBackFill(c)
 	dstorage := driver_storage.NewStorage(c, sroot, bdbPath, ldbPath)
@@ -733,7 +732,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	dDocker := driver_docker.NewDocker(c, sroot, dstorage, dFile)
 	dWasm := driver_wasm.NewWasm(c, sroot, dstorage, adbPath, dDocker, dFile)
 	dElpis := driver_elpis.NewElpis(c, sroot, dstorage)
-	dnFederation.SecondStageForFill(fedPort, dstorage, dFile, dsignaler)
+	dnFederation.SecondStageForFill(dstorage, dFile, dsignaler)
 	dFirectl := driver_firectl.NewFireCtl()
 
 	pemData := dsecurity.FetchKeyPair("server_key")[0]

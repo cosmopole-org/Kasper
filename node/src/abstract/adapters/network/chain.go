@@ -1,7 +1,9 @@
 package network
 
+import "crypto/tls"
+
 type IChain interface {
-	Listen(port int)
+	Listen(port int, tlsConfig *tls.Config)
 	SubmitTrx(chainId string, machineId string, typ string, payload []byte)
 	RegisterPipeline(pipeline func([][]byte) []string)
 	NotifyNewMachineCreated(chainId int64, machineId string)

@@ -40,16 +40,9 @@ func (t *Tcp) InjectBridge(bridge FedApi) {
 	t.bridge = bridge
 }
 
-func (t *Tcp) Listen(port int) {
+func (t *Tcp) Listen(port int, tlsConfig *tls.Config) {
 	future.Async(func() {
-		cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
-		if err != nil {
-			log.Fatalf("failed to load key pair: %v", err)
-		}
-
-		config := &tls.Config{Certificates: []tls.Certificate{cert}}
-
-		ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", port), config)
+		ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", port), tlsConfig)
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
 		}

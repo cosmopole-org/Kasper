@@ -188,7 +188,7 @@ func (t *SubChain) BroadcastInShard(payload []byte) {
 	}
 }
 
-func (b *Blockchain) Listen(port int) {
+func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 	for _, t := range b.chains.Items() {
 		for _, subchain := range t.SubChains.Items() {
 			future.Async(func() {
@@ -197,15 +197,7 @@ func (b *Blockchain) Listen(port int) {
 		}
 	}
 	future.Async(func() {
-
-		cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
-		if err != nil {
-			log.Fatalf("failed to load key pair: %v", err)
-		}
-
-		config := &tls.Config{Certificates: []tls.Certificate{cert}}
-
-		ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", port), config)
+		ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", port), tlsConfig)
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
 		}

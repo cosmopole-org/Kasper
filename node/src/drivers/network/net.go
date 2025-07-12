@@ -1,6 +1,7 @@
 package tool_net
 
 import (
+	"crypto/tls"
 	"kasper/src/abstract/adapters/network"
 	"kasper/src/abstract/adapters/security"
 	"kasper/src/abstract/adapters/signaler"
@@ -8,6 +9,8 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/drivers/network/chain"
 	"kasper/src/drivers/network/tcp"
+	"net/http"
+    "golang.org/x/crypto/acme/autocert"
 )
 
 type Network struct {
@@ -45,13 +48,25 @@ func NewNetwork(
 }
 
 func (net *Network) Run(ports map[string]int) {
+	manager := autocert.Manager{
+        Cache:      autocert.DirCache("certs"),
+        Prompt:     autocert.AcceptTOS,
+        HostPolicy: autocert.HostWhitelist("yourdomain.com"),
+    }
+
+    config := &tls.Config{
+        GetCertificate: manager.GetCertificate,
+    }
+
+    // This starts HTTP server on :80 for challenges
+    go func() {
+        http.ListenAndServe(":80", manager.HTTPHandler(nil))
+    }()
+
 	tcpPort, ok := ports["tcp"]
 	if ok {
-		net.tcp.Listen(tcpPort)
+		net.tcp.Listen(tcpPort, config)
 	}
-	chainPort, ok := ports["chain"]
-	if ok {
-		net.tcp.Listen(chainPort)
-	}
-	net.chain.Listen(chainPort)
+	net.fed.Listen(ports["fed"], config)
+	net.chain.Listen(ports["chain"], config)
 }

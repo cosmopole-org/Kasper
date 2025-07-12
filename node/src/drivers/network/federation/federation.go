@@ -1,6 +1,7 @@
 package net_federation
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"kasper/src/abstract/adapters/file"
@@ -54,15 +55,21 @@ func FirstStageBackFill(core core.ICore) *FedNet {
 	return &FedNet{app: core, packetCallbacks: &m}
 }
 
-func (fed *FedNet) SecondStageForFill(port int, storage storage.IStorage, file file.IFile, signaler signaler.ISignaler) network.IFederation {
+func (fed *FedNet) Listen(port int, tlsConfig *tls.Config) {
 	fed.Port = port
+	future.Async(func() {
+		fed.Gateway.Listen(port, tlsConfig)
+	}, false)
+}
+
+func (fed *FedNet) SecondStageForFill(storage storage.IStorage, file file.IFile, signaler signaler.ISignaler) network.IFederation {
 	fed.Gateway = NewTcp(fed.app)
 	fed.storage = storage
 	fed.file = file
 	fed.signaler = signaler
 	fed.Gateway.InjectBridge(func(socket *Socket, ip string, pack packet.OriginPacket) {
 		hostName := ""
-		for _, peer := range fed.app.Tools().Network().Chain().Peers(){
+		for _, peer := range fed.app.Tools().Network().Chain().Peers() {
 			if peer == ip {
 				a, err := net.LookupAddr(ip)
 				if err != nil {
@@ -81,9 +88,6 @@ func (fed *FedNet) SecondStageForFill(port int, storage storage.IStorage, file f
 			log.Println("hostname not known")
 		}
 	})
-	future.Async(func() {
-		fed.Gateway.Listen(port)
-	}, false)
 	return fed
 }
 

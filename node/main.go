@@ -59,12 +59,10 @@ func main() {
 			"keyhan",
 		},
 		map[string]interface{}{
-			"storageRoot":    os.Getenv("STORAGE_ROOT_PATH"),
-			"appletDbPath":   os.Getenv("APPLET_DB_PATH"),
-			"baseDbPath":     os.Getenv("BASE_DB_PATH"),
-			"federationPort": int(federationPort),
-			"blockchainPort": int(blockchainPort),
-			"pointLogsDb":    os.Getenv("POINT_LOGS_DB"),
+			"storageRoot":  os.Getenv("STORAGE_ROOT_PATH"),
+			"appletDbPath": os.Getenv("APPLET_DB_PATH"),
+			"baseDbPath":   os.Getenv("BASE_DB_PATH"),
+			"pointLogsDb":  os.Getenv("POINT_LOGS_DB"),
 		},
 	)
 
@@ -74,7 +72,9 @@ func main() {
 
 	app.Tools().Network().Run(
 		map[string]int{
-			"tcp": int(port),
+			"tcp":   int(port),
+			"fed":   int(federationPort),
+			"chain": int(blockchainPort),
 		},
 	)
 
