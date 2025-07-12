@@ -14,7 +14,7 @@ const express = require('express');
 const net = require('net');
 const crypto = require('crypto');
 
-const port = 8080;
+const port = 8079;
 let host = 'api.decillionai.com';
 let privateKey = undefined;
 
