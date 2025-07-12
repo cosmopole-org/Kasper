@@ -185,7 +185,7 @@ const executeBash = async (command) => {
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/login", { "username": "kasperius", "emailToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjhlOGZjOGU1NTZmN2E3NmQwOGQzNTgyOWQ2ZjkwYWUyZTEyY2ZkMGQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTQ5OTY0MzYxOTkxMTQyNjA4MzEiLCJlbWFpbCI6InRoZXByb2dyYW1tZXJtYWNoaW5lQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoiZ1JtNmRfanVJWFNtSmhmU2E2TDlhUSIsIm5hbWUiOiJLZXloYW4gTW9oYW1tYWRpIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0xhUGR5SW51TWE1dVN5YXlDbkwtRHpGVHI3cllDWEg2Uk1UQ2NmWXpZY2N5NHV5QT1zOTYtYyIsImdpdmVuX25hbWUiOiJLZXloYW4iLCJmYW1pbHlfbmFtZSI6Ik1vaGFtbWFkaSIsImlhdCI6MTc1MjE0NTMxNCwiZXhwIjoxNzUyMTQ4OTE0fQ.DajddvIQtwKxOn4Y-sL50joFHsVIeU_3VjVmmrrVoOfr_K9srZLOa0XmwbIEMryZJ-ecgimvhYtS1aKkHag20mpx3frX3BQYU1iNlkF2S0WZFu-Y4qFmcf2C_jy5uTXyMLWKlEwgoVr-cmC6I1V2QLIWluwWz93N16Dox1suo3EspmcGLLUfDqqzfkMgs_D8pi6UbL3KkT0xUD4L6MeawJzlaV71uZoq504ABU4SrmqL-1D0RMTcmtIlP-TKYfwV-HzjLprzKUCbRpS4mpWimZOfV1oYEN6qsCWQdlTlIxIaj1AwWollNCKThxrmfoNC5-gvjUNd1_ICK8CbEX6z9A" });
+    let res = await sendRequest("", "/users/login", { "username": "kasperius", "emailToken": "" });
     console.log(res.resCode, res.obj);
 
     privateKey = Buffer.from(
@@ -223,17 +223,17 @@ async function doTest() {
     // console.log(res.resCode, res.obj);
     // let pointMainId = res.obj.point.id;
 
-    res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    console.log(res.resCode, res.obj);
-    let pointId = res.obj.point.id;
+    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
+    // console.log(res.resCode, res.obj);
+    // let pointId = res.obj.point.id;
 
-    res = await sendRequest(userId, "/apps/create", { "chainId": 1 });
-    console.log(res.resCode, res.obj);
-    let appId = res.obj.app.id;
+    // res = await sendRequest(userId, "/apps/create", { "chainId": 1 });
+    // console.log(res.resCode, res.obj);
+    // let appId = res.obj.app.id;
 
-    res = await sendRequest(userId, "/functions/create", { "username": "deepseek3", "appId": appId, "path": "/ai/chat" });
-    console.log(res.resCode, res.obj);
-    let machineId = res.obj.user.id;
+    // res = await sendRequest(userId, "/functions/create", { "username": "deepseek3", "appId": appId, "path": "/ai/chat" });
+    // console.log(res.resCode, res.obj);
+    // let machineId = res.obj.user.id;
 
     // let machineId = '4@global';
 
@@ -344,8 +344,8 @@ async function doTest() {
     // res = await sendRequest(userId, "/functions/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
     // console.log(res.resCode, res.obj);
 
-    res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointId, "userId": machineId });
-    console.log(res.resCode, res.obj);
+    // res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointId, "userId": machineId });
+    // console.log(res.resCode, res.obj);
 
     // res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointMainId, "userId": machineId });
     // console.log(res.resCode, res.obj);
@@ -406,41 +406,41 @@ async function doTest() {
     // console.log("starting chatserver...")
     // await sleep(10000);
 
-    console.log("sending prompt...")
+    // console.log("sending prompt...")
 
-    res = await sendRequest(userId, "/points/signal", {
-        "type": "single",
-        "pointId": pointId,
-        "userId": machineId,
-        "data": JSON.stringify({
-            "action": "chat",
-            "prompt": "hello deepseek. how is weather like ?"
-        })
-    });
+    // res = await sendRequest(userId, "/points/signal", {
+    //     "type": "single",
+    //     "pointId": pointId,
+    //     "userId": machineId,
+    //     "data": JSON.stringify({
+    //         "action": "chat",
+    //         "prompt": "hello deepseek. how is weather like ?"
+    //     })
+    // });
 
-    console.log(res.resCode, res.obj);
+    // console.log(res.resCode, res.obj);
 
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
-    const askMessage = () => {
-        rl.question(`message:`, async q => {
-            if (q.trim().length > 0) {
-                await sendRequest(userId, "/points/signal", {
-                    "type": "single",
-                    "pointId": pointId,
-                    "userId": machineId,
-                    "data": JSON.stringify({
-                        "action": "chat",
-                        "prompt": q
-                    })
-                });
-            }
-            askMessage();
-        });
-    }
-    askMessage();
+    // const rl = readline.createInterface({
+    //     input: process.stdin,
+    //     output: process.stdout,
+    // });
+    // const askMessage = () => {
+    //     rl.question(`message:`, async q => {
+    //         if (q.trim().length > 0) {
+    //             await sendRequest(userId, "/points/signal", {
+    //                 "type": "single",
+    //                 "pointId": pointId,
+    //                 "userId": machineId,
+    //                 "data": JSON.stringify({
+    //                     "action": "chat",
+    //                     "prompt": q
+    //                 })
+    //             });
+    //         }
+    //         askMessage();
+    //     });
+    // }
+    // askMessage();
     // socket.destroy();
     // console.log("end.");
 }
