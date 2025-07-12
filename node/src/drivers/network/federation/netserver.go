@@ -1,6 +1,7 @@
 package net_federation
 
 import (
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -41,11 +42,20 @@ func (t *Tcp) InjectBridge(bridge FedApi) {
 
 func (t *Tcp) Listen(port int) {
 	future.Async(func() {
-		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
 		if err != nil {
-			fmt.Println(err)
-			return
+			log.Fatalf("failed to load key pair: %v", err)
 		}
+
+		config := &tls.Config{Certificates: []tls.Certificate{cert}}
+
+		ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", port), config)
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+		defer ln.Close()
+		log.Println("Federation TLS server listening on port ", port)
+		
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
