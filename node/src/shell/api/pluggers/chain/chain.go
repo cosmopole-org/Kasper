@@ -18,6 +18,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Create)
 		}
 		
+		func (c *Plugger) SubmitBaseTrx() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.SubmitBaseTrx)
+		}
+		
 	func (c *Plugger) Install(a *actions.Actions) *Plugger {
 		err := actions.Install(a)
 		if err != nil {

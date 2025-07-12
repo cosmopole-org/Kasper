@@ -22,6 +22,14 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Transfer)
 		}
 		
+		func (c *Plugger) Mint() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Mint)
+		}
+		
+		func (c *Plugger) CheckSign() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.CheckSign)
+		}
+		
 		func (c *Plugger) LockToken() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.LockToken)
 		}
