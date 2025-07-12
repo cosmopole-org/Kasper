@@ -26,7 +26,7 @@ socket.connect(port, host);
 
 socket.on('connect', () => {
   console.log(`Established a TCP connection with ${host}:${port}`);
-  doTest();
+  runServer();
 });
 
 socket.on('error', e => {
@@ -179,7 +179,7 @@ async function sleep(ms) {
   });
 }
 
-(async () => {
+async function runServer() {
   privateKey = Buffer.from(
     "-----BEGIN RSA PRIVATE KEY-----\n" + GOD_USER_PRIVATEKEY + "\n-----END RSA PRIVATE KEY-----\n",
     'utf-8'
@@ -264,4 +264,4 @@ async function sleep(ms) {
   });
 
   app.listen(4242, () => console.log('Running on port 4242'));
-})
+}
