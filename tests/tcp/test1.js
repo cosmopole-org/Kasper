@@ -5,7 +5,7 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const readline = require('node:readline');
 
-const port = 8080;
+const port = 8078;
 let host = 'api.decillionai.com';
 let privateKey = undefined;
 

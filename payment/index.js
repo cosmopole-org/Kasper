@@ -15,7 +15,7 @@ const net = require('net');
 const crypto = require('crypto');
 const tls = require('tls');
 
-const port = 8079;
+const port = 8078;
 let host = 'api.decillionai.com';
 let privateKey = undefined;
 
