@@ -72,6 +72,19 @@ func (a *Actions) Mint(state state.IState, input inputsusers.MintInput) (any, er
 	return map[string]any{}, nil
 }
 
+// CheckSign /users/checkSign check [ true false false ] access [ true false false false POST ]
+func (a *Actions) CheckSign(state state.IState, input inputsusers.CheckSignInput) (any, error) {
+	if state.Info().UserId() != "1@global" {
+		return nil, errors.New("access denied")
+	}
+	if success, _, _ := a.App.Tools().Security().AuthWithSignature(input.UserId, input.Payload, input.Signature); success {
+		email := state.Trx().GetLink("UserIdToEmail::" + input.UserId)
+		return map[string]any{"valid": true, "email": email}, nil
+	} else {
+		return map[string]any{"valid": false}, nil
+	}
+}
+
 // LockToken /users/lockToken check [ true false false ] access [ true false false false POST ]
 func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput) (any, error) {
 	user := models.User{Id: state.Info().UserId()}.Pull(state.Trx())
@@ -181,6 +194,7 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 		}
 		trx.PutLink("UserPrivateKey::"+response.User.Id, privKey)
 		trx.PutLink("UserEmailToId::"+email, response.User.Id)
+		trx.PutLink("UserIdToEmail::"+response.User.Id, email)
 		log.Println()
 		return outputsusers.LoginOutput{User: response.User, Session: response.Session, PrivateKey: privKey}, nil
 	} else {

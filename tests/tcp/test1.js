@@ -199,8 +199,12 @@ connectoToTlsServer();
 
 async function doTest() {
 
-    let res = await sendRequest("", "/users/login", { "username": "kasperius", "emailToken": "" });
+    let res = await sendRequest("", "/users/login", { "username": "kasperius", "emailToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjhlOGZjOGU1NTZmN2E3NmQwOGQzNTgyOWQ2ZjkwYWUyZTEyY2ZkMGQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTQ5OTY0MzYxOTkxMTQyNjA4MzEiLCJlbWFpbCI6InRoZXByb2dyYW1tZXJtYWNoaW5lQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoiWXlyZ2R4bEZCUWNUeGtveHlINGkxdyIsIm5hbWUiOiJLZXloYW4gTW9oYW1tYWRpIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0xhUGR5SW51TWE1dVN5YXlDbkwtRHpGVHI3cllDWEg2Uk1UQ2NmWXpZY2N5NHV5QT1zOTYtYyIsImdpdmVuX25hbWUiOiJLZXloYW4iLCJmYW1pbHlfbmFtZSI6Ik1vaGFtbWFkaSIsImlhdCI6MTc1MjM0MjY0OCwiZXhwIjoxNzUyMzQ2MjQ4fQ.Spl44n0DLIQB1lQdcDy-RylIFhAXfM0edZ41mICRMDkUOHGoAI1vYRl7AmLaJmejgFJqb2DmPEO3GuDdCyyKTPCjPqEo1ipZecuz14XiN7EdAo3F8WGJYceQfit6qE-MCrME2X5vjr8BXPPJtfdLOa_IzBjFAVR_6m3jhNdQAD39OcTdVBcUHlaWNWrBiaKE_g2FwELMd_f2V9aL2K2nDP7Av_tCm7q26UjTY74XZBiZst_AUGFgK1jraBsb4uAUCaYqMkWeZOgsJLhuXvHNVir8N7cYGzvBksqfk3jcIvHgqo7pKhlMMSrx1dMoF3P-fQMpyIB2syESHcCWdeAIhg" });
     console.log(res.resCode, res.obj);
+
+    console.log("--------------------");
+    console.log(res.obj.privateKey);
+    console.log("--------------------");
 
     privateKey = Buffer.from(
         "-----BEGIN RSA PRIVATE KEY-----\n" + res.obj.privateKey + "\n-----END RSA PRIVATE KEY-----\n",
@@ -211,6 +215,11 @@ async function doTest() {
     await sendRequest(userId, "authenticate", {});
 
     await sleep(3000);
+
+    await fetch("https://payment.decillionai.com/create-checkout-session", {
+        method: "POST",
+        
+    })
 
     // console.log("sending run pc request...");
     // res = await sendRequest(userId, "/pc/runPc", {});

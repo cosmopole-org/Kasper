@@ -34,22 +34,22 @@ let pcLogs = "";
 
 function connectoToTlsServer() {
   socket = tls.connect(options, () => {
-      if (socket.authorized) {
-          console.log('✔ TLS connection authorized');
-      } else {
-          console.log('⚠ TLS connection not authorized:', socket.authorizationError);
-      }
+    if (socket.authorized) {
+      console.log('✔ TLS connection authorized');
+    } else {
+      console.log('⚠ TLS connection not authorized:', socket.authorizationError);
+    }
 
-      runServer();
+    runServer();
   });
 
   socket.on('error', e => {
-      console.log(e);
+    console.log(e);
   });
 
   socket.on('close', e => {
-      console.log(e);
-      connectoToTlsServer();
+    console.log(e);
+    connectoToTlsServer();
   });
 
   let received = Buffer.from([]);
@@ -57,31 +57,31 @@ function connectoToTlsServer() {
   let nextLength = 0;
 
   function readBytes() {
-      if (observePhase) {
-          if (received.length >= 4) {
-              console.log(received.at(0), received.at(1), received.at(2), received.at(3));
-              nextLength = received.subarray(0, 4).readIntBE(0, 4);
-              received = received.subarray(4);
-              observePhase = false;
-              readBytes();
-          }
-      } else {
-          if (received.length >= nextLength) {
-              payload = received.subarray(0, nextLength);
-              received = received.subarray(nextLength);
-              observePhase = true;
-              processPacket(payload);
-              readBytes();
-          }
+    if (observePhase) {
+      if (received.length >= 4) {
+        console.log(received.at(0), received.at(1), received.at(2), received.at(3));
+        nextLength = received.subarray(0, 4).readIntBE(0, 4);
+        received = received.subarray(4);
+        observePhase = false;
+        readBytes();
       }
+    } else {
+      if (received.length >= nextLength) {
+        payload = received.subarray(0, nextLength);
+        received = received.subarray(nextLength);
+        observePhase = true;
+        processPacket(payload);
+        readBytes();
+      }
+    }
   }
 
   socket.on('data', (data) => {
-      console.log(data.toString());
-      setTimeout(() => {
-          received = Buffer.concat([received, data]);
-          readBytes();
-      });
+    console.log(data.toString());
+    setTimeout(() => {
+      received = Buffer.concat([received, data]);
+      readBytes();
+    });
   });
 }
 
@@ -204,9 +204,36 @@ async function runServer() {
 
   const app = express();
 
-  const YOUR_DOMAIN = 'http://localhost:4242';
+  const YOUR_DOMAIN = 'https://payment.decillionai.com';
 
   app.post('/create-checkout-session', async (req, res) => {
+    let userId = req.body.userId;
+    let payload = req.body.payload;
+    let diff = Date.now() - Buffer.from(payload).readBigInt64LE();
+    if (!(diff > 0 && diff < 60000)) {
+      res.send(JSON.stringify({ success: false, errCode: 1 }));
+      return;
+    }
+    let signature = req.body.signature;
+    let emailRes = await sendRequest("1@global", "/users/checkSign", { userId: userId, payload: payload, signature: signature });
+    if (!emailRes.valid) {
+      res.send(JSON.stringify({ success: false, errCode: 2 }));
+      return;
+    }
+    let email = emailRes.email;
+    const customers = await stripe.customers.list({
+      email: email,
+      limit: 1,
+    });
+    let customer;
+    if (customers.data.length > 0) {
+      customer = customers.data[0];
+    } else {
+      customer = await stripe.customers.create({
+        email: email,
+        name: `User Userson`,
+      });
+    }
     const session = await stripe.checkout.sessions.create({
       line_items: [
         {
@@ -220,6 +247,8 @@ async function runServer() {
           quantity: 1,
         },
       ],
+      payment_method_types: ["card"],
+      customer: customer.id,
       mode: 'payment',
       success_url: `${YOUR_DOMAIN}/success.html`,
       cancel_url: `${YOUR_DOMAIN}/cancel.html`,
