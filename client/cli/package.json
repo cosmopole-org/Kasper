@@ -1,0 +1,29 @@
+{
+    "name": "decillion",
+    "version": "1.0.0",
+    "description": "Decillion AI client CLI package",
+    "keywords": [
+        "decillion",
+        "ai",
+        "blockchain",
+        "agent",
+        "typescript"
+    ],
+    "homepage": "https://github.com/cosmopole-org/Kasper",
+    "bugs": {
+        "url": "https://github.com/cosmopole-org/Kasper/issues"
+    },
+    "author": "Keyhan Mohammadi <theprogrammermachine@gmail.com> (https://decillionai.com)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/cosmopole-org/Kasper.git"
+    },
+    "files": [
+        "dist"
+    ],
+    "type": "module",
+    "main": "dist/index.js",
+    "dependencies": {
+        "typescript": "^5.8.3"
+    }
+}
