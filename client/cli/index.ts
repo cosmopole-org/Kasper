@@ -217,22 +217,191 @@ class Decillion {
         });
         return (await res.json()).sessionUrl;
     }
-    public async getUser(userId: string): Promise<{ resCode: number, obj: any }> {
-        if (!this.userId) {
-            return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+    public users = {
+        get: async (userId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/users/get", { "userId": userId });
+        },
+        list: async (offset: number, count: number): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/users/list", { "offset": offset, "count": count });
         }
-        return await this.sendRequest(this.userId, "/users/get", { "userId": userId });
     }
-    public async listUsers(offset: number, count: number): Promise<{ resCode: number, obj: any }> {
-        if (!this.userId) {
-            return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
-        }
-        return await this.sendRequest(this.userId, "/users/list", { "offset": offset, "count": count });
+    public points = {
+        create: async (isPublic: boolean, persHist: boolean, origin: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/create", { "isPublic": isPublic, "persHist": persHist, "orig": origin });
+        },
+        update: async (pointId: string, isPublic: boolean, persHist: boolean): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/update", { "pointId": pointId, "isPublic": isPublic, "persHist": persHist });
+        },
+        delete: async (pointId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/delete", { "pointId": pointId });
+        },
+        get: async (pointId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/get", { "pointId": pointId });
+        },
+        myPoints: async (offset: number, count: number, tag: string, orig: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/read", { "offset": offset, "count": count, "tag": tag, "orig": orig });
+        },
+        list: async (offset: number, count: number): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/list", { "offset": offset, "count": count });
+        },
+        join: async (pointId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/join", { "pointId": pointId });
+        },
+        history: async (pointId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/history", { "pointId": pointId });
+        },
+        signal: async (pointId: string, userId: string, typ: string, data: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/signal", { "pointId": pointId, "userId": userId, "type": typ, "data": data });
+        },
+    }
+    public invites = {
+        create: async (pointId: string, userId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/invites/create", { "pointId": pointId, "userId": userId });
+        },
+        cancel: async (pointId: string, userId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/invites/cancel", { "pointId": pointId, "userId": userId });
+        },
+        accept: async (pointId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/invites/accept", { "pointId": pointId });
+        },
+        decline: async (pointId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/invites/decline", { "pointId": pointId });
+        },
+    }
+    public chains = {
+        create: async (participants: { [key: string]: number }, isTemp: boolean): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/chains/create", { "participants": participants, "isTemp": isTemp });
+        },
+        submitBaseTrx: async (chainId: number, key: string, obj: any): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            let payload = this.stringToBytes(JSON.stringify(obj));
+            let signature = this.sign(payload);
+            return await this.sendRequest(this.userId, "/chains/submitBaseTrx", { "chainId": chainId, "key": key, "payload": payload, "signature": signature });
+        },
+    }
+    public machines = {
+        createApp: async (chainId: number): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/apps/create", { "chainId": chainId });
+        },
+        createMachine: async (username: string, appId: string, path: string, publicKey: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/machines/create", { "username": username, "appId": appId, "path": path, "publicKey": publicKey });
+        },
+        deploy: async (machineId: string, byteCode: string, runtime: string, metadata: { [key: string]: any }): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/machines/deploy", { "machineId": machineId, "byteCode": byteCode, "runtime": runtime, "metadata": metadata });
+        },
+        listApps: async (offset: number, count: number): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/apps/list", { "offset": offset, "count": count });
+        },
+        listMachines: async (offset: number, count: number): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/machines/list", { "offset": offset, "count": count });
+        },
+    }
+    storage = {
+        upload: async (pointId: string, data: string, fileId?: string) => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/storage/upload", { "pointId": pointId, "data": data, "fileId": fileId });
+        },
+        download: async (pointId: string, fileId: string) => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            let res = await this.sendRequest(this.userId, "/storage/download", { "pointId": pointId, "fileId": fileId });
+            if (res.resCode === 0) {
+                return new Promise((resolve, reject) => {
+                    fs.writeFile("files/" + fileId, res.obj.data, { encoding: 'binary' }, () => {
+                        resolve(undefined);
+                    });
+                })
+            }
+        },
+    }
+    pc = {
+        runPc: async () => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/pc/runPc", {});
+        },
+        execCommand: async (vmId: string, command: string) => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/pc/execCommand", { "vmId": vmId, "command": command });
+        },
     }
 }
 
-async function doTest() {
+(async () => {
 
+    let app = new Decillion();
+    app.connect();
 
     // console.log("sending run pc request...");
     // res = await sendRequest(userId, "/pc/runPc", {});
@@ -479,4 +648,4 @@ async function doTest() {
     // askMessage();
     // socket.destroy();
     // console.log("end.");
-}
+})();

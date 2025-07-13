@@ -30,8 +30,8 @@ func (a *Actions) CreateApp(state state.IState, input inputs_machiner.CreateAppI
 	return map[string]any{"app": app}, nil
 }
 
-// CreateFunction /functions/create check [ true false false ] access [ true false false false POST ]
-func (a *Actions) CreateFunction(state state.IState, input inputs_machiner.CreateFuncInput) (any, error) {
+// CreateMachine /machines/create check [ true false false ] access [ true false false false POST ]
+func (a *Actions) CreateMachine(state state.IState, input inputs_machiner.CreateFuncInput) (any, error) {
 	var (
 		user    model.User
 		session model.Session
@@ -53,7 +53,7 @@ func (a *Actions) CreateFunction(state state.IState, input inputs_machiner.Creat
 	return outputs_machiner.CreateOutput{User: user}, nil
 }
 
-// Deploy /functions/deploy check [ true false false ] access [ true false false false POST ]
+// Deploy /machines/deploy check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("Vm", input.MachineId) {
@@ -120,7 +120,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 	return map[string]any{"apps": apps}, nil
 }
 
-// ListMachs /functions/list check [ true false false ] access [ true false false false GET ]
+// ListMachs /machines/list check [ true false false ] access [ true false false false GET ]
 func (a *Actions) ListMachs(state state.IState, input inputs_machiner.ListInput) (any, error) {
 	trx := state.Trx()
 	functions, err := model.User{}.All(trx, input.Offset, input.Count, map[string]string{"type": "machine"})
