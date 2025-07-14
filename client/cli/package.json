@@ -29,7 +29,7 @@
     },
     "scripts": {
         "dev": "npm run build && npm start",
-        "start": "node dist/index.cjs",
+        "start": "cd dist && node index.cjs",
         "build": "tsc && mv dist/index.js dist/index.cjs",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
