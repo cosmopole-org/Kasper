@@ -2,7 +2,7 @@ package inputs_users
 
 type CheckSignInput struct {
 	UserId    string `json:"userId" validate:"required"`
-	Payload   []byte `json:"payload" validate:"required"`
+	Payload   string `json:"payload" validate:"required"`
 	Signature string `json:"signature" validate:"required"`
 }
 

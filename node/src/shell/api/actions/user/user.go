@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -77,7 +78,12 @@ func (a *Actions) CheckSign(state state.IState, input inputsusers.CheckSignInput
 	if state.Info().UserId() != "1@global" {
 		return nil, errors.New("access denied")
 	}
-	if success, _, _ := a.App.Tools().Security().AuthWithSignature(input.UserId, input.Payload, input.Signature); success {
+	data, err := base64.StdEncoding.DecodeString(input.Payload)
+	if err != nil {
+		log.Println(err)
+		return map[string]any{"valid": false}, nil
+	}
+	if success, _, _ := a.App.Tools().Security().AuthWithSignature(input.UserId, data, input.Signature); success {
 		email := state.Trx().GetLink("UserIdToEmail::" + input.UserId)
 		return map[string]any{"valid": true, "email": email}, nil
 	} else {

@@ -187,8 +187,10 @@ class Decillion {
             this.host = host;
         if (port)
             this.port = port;
-        fs_1.default.mkdirSync("auth");
-        fs_1.default.mkdirSync("files");
+        if (!fs_1.default.existsSync("auth"))
+            fs_1.default.mkdirSync("auth");
+        if (!fs_1.default.existsSync("files"))
+            fs_1.default.mkdirSync("files");
         if (fs_1.default.existsSync("auth/userId.txt") && fs_1.default.existsSync("auth/privateKey.txt")) {
             this.userId = fs_1.default.readFileSync("auth/userId.txt", { encoding: "utf-8" });
             let pk = fs_1.default.readFileSync("auth/privateKey.txt", { encoding: "utf-8" });
@@ -235,7 +237,7 @@ class Decillion {
             },
             body: JSON.stringify({
                 "userId": this.userId,
-                "payload": payload,
+                "payload": Array.from(payload),
                 "signature": sign,
             }),
         });
@@ -426,6 +428,7 @@ class Decillion {
     await app.connect();
     let res = await app.login("kasparus", "eyJhbGciOiJSUzI1NiIsImtpZCI6ImYxMDMzODYwNzE2ZTNhMmFhYjM4MGYwMGRiZTM5YTcxMTQ4NDZiYTEiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTQ5OTY0MzYxOTkxMTQyNjA4MzEiLCJlbWFpbCI6InRoZXByb2dyYW1tZXJtYWNoaW5lQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoiRGZHNVd0b0FWaF9HbWVjMHRMeU1JUSIsIm5hbWUiOiJLZXloYW4gTW9oYW1tYWRpIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0xhUGR5SW51TWE1dVN5YXlDbkwtRHpGVHI3cllDWEg2Uk1UQ2NmWXpZY2N5NHV5QT1zOTYtYyIsImdpdmVuX25hbWUiOiJLZXloYW4iLCJmYW1pbHlfbmFtZSI6Ik1vaGFtbWFkaSIsImlhdCI6MTc1MjQ5MzU0MiwiZXhwIjoxNzUyNDk3MTQyfQ.dYQfNgJXJ_TxlmZMbl4uQNgfJ6DorC9bLlyTxWYLMxK7CAqPzG-kpLhplTvCTUUiM91NKdITBfW3uyFWwU6XS1H56XnLJXWBQvgrbrFr67Qd8oCFO29KuEV6iF0L2_d4ufPCwCsQoOxzQmTQVfaMUWbX3_uhtVfDQAmz4H7EdTfT_zTeq9hwnsZTz0V1RQrQGCGFadIjh4CJiozRRmwE-DIkAarK8fc2v2W6IAUq-8n6DSROQ-l-SRg441vZDWr92i3051WSjDm8kqHq99-ANnAl7QRdtgLArL0SYKG84lCs1-9t7u3JY8N62i-HOlFD4fpScVJKndVuBLxNLC31qA");
     console.log(res);
+    // await app.authenticate();
     let payUrl = await app.generatePayment();
     console.log("payment generated. go to link below and charge your account:");
     console.log(payUrl);
