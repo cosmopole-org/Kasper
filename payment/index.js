@@ -273,14 +273,16 @@ async function handleCheckoutSession(req, res) {
 }
 
 async function handleWebhook(request, response) {
-  let event = request.body;
+  const payload = request.body;
+  const signature = request.headers["stripe-signature"];
+
+  let event;
 
   // Only verify the event if you have an endpoint secret defined.
   if (endpointSecret) {
-    const signature = request.headers["stripe-signature"];
     try {
       event = stripe.webhooks.constructEvent(
-        request.body,
+        payload,
         signature,
         endpointSecret
       );
@@ -288,6 +290,9 @@ async function handleWebhook(request, response) {
       console.log(`⚠️  Webhook signature verification failed.`, err.message);
       return response.sendStatus(400);
     }
+  } else {
+    // If no endpoint secret, parse the payload manually
+    event = JSON.parse(payload.toString());
   }
 
   // Handle the event
