@@ -44,7 +44,10 @@ func (tw *TrxWrapper) GetColumn(typ string, objId string, columnName string) []b
 }
 
 func (tw *TrxWrapper) Commit() {
-	tw.dbTrx.Commit()
+	e := tw.dbTrx.Commit()
+	if e != nil {
+		log.Println("Error on committing:", e)
+	}
 }
 
 func (tw *TrxWrapper) DelKey(key string) {
@@ -276,7 +279,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							if (temp[k] == nil) || (v != string(temp[k])) {
 								matched = false
 							}
-						}	
+						}
 					} else {
 						matched = true
 					}
@@ -317,7 +320,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							if (temp[k] == nil) || (v != string(temp[k])) {
 								matched = false
 							}
-						}	
+						}
 					} else {
 						matched = true
 					}
@@ -362,7 +365,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							if (temp[k] == nil) || (v != string(temp[k])) {
 								matched = false
 							}
-						}	
+						}
 					} else {
 						matched = true
 					}

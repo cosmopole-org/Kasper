@@ -196,7 +196,7 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 		trx.PutLink("UserPrivateKey::"+response.User.Id, privKey)
 		trx.PutLink("UserEmailToId::"+email, response.User.Id)
 		trx.PutLink("UserIdToEmail::"+response.User.Id, email)
-		log.Println("saving email:", "["+email+"]")
+		log.Println("saving email:", "["+email+"]", "["+response.User.Id+"]")
 		return outputsusers.LoginOutput{User: response.User, Session: response.Session, PrivateKey: privKey}, nil
 	} else {
 		return nil, errors.New("username already exist")
