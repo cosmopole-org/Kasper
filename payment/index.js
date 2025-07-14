@@ -224,7 +224,7 @@ async function runServer() {
       res.send(JSON.stringify({ success: false, errCode: 2 }));
       return;
     }
-    let emailRes = await sendRequest("1@global", "/users/checkSign", { userId: userId, payload: payload, signature: signature });
+    let emailRes = await sendRequest("1@global", "/users/checkSign", { userId: userId, payload: Array.from(payload), signature: signature });
     if (!emailRes.valid) {
       res.send(JSON.stringify({ success: false, errCode: 3 }));
       return;
