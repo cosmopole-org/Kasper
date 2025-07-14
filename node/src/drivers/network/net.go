@@ -11,7 +11,6 @@ import (
 	"kasper/src/drivers/network/tcp"
 	"net/http"
 
-	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -54,9 +53,6 @@ func (net *Network) Run(ports map[string]int) {
 		Cache:      autocert.DirCache("certs"),
 		Prompt:     autocert.AcceptTOS,
 		HostPolicy: autocert.HostWhitelist("api.decillionai.com"),
-		Client: &acme.Client{
-			DirectoryURL: "https://acme-staging-v02.api.letsencrypt.org/directory",
-		},
 	}
 
 	config := &tls.Config{
