@@ -177,9 +177,11 @@ class Decillion {
     public constructor(host?: string, port?: number) {
         if (host) this.host = host;
         if (port) this.port = port;
-        if (fs.existsSync("/auth/userId.txt") && fs.existsSync("/auth/privateKey.txt")) {
-            this.userId = fs.readFileSync("/auth/userId.txt", { encoding: "utf-8" });
-            let pk = fs.readFileSync("/auth/privateKey.txt", { encoding: "utf-8" });
+        fs.mkdirSync("auth");
+        fs.mkdirSync("files");
+        if (fs.existsSync("auth/userId.txt") && fs.existsSync("auth/privateKey.txt")) {
+            this.userId = fs.readFileSync("auth/userId.txt", { encoding: "utf-8" });
+            let pk = fs.readFileSync("auth/privateKey.txt", { encoding: "utf-8" });
             this.privateKey = Buffer.from(
                 "-----BEGIN RSA PRIVATE KEY-----\n" + pk + "\n-----END RSA PRIVATE KEY-----\n",
                 'utf-8'
@@ -197,8 +199,20 @@ class Decillion {
                 "-----BEGIN RSA PRIVATE KEY-----\n" + res.obj.privateKey + "\n-----END RSA PRIVATE KEY-----\n",
                 'utf-8'
             )
+            await Promise.all([
+                new Promise((resolve, _) => {
+                    fs.writeFile("auth/userId.txt", this.userId ?? "", { encoding: 'utf-8' }, () => {
+                        resolve(undefined);
+                    });
+                }),
+                new Promise((resolve, _) => {
+                    fs.writeFile("auth/privateKey.txt", this.privateKey ?? "", { encoding: 'utf-8' }, () => {
+                        resolve(undefined);
+                    });
+                })
+            ]);
+            await this.authenticate();
         }
-        await this.authenticate();
         return res;
     }
     public async authenticate(): Promise<{ resCode: number, obj: any }> {
@@ -212,6 +226,9 @@ class Decillion {
         let sign = this.sign(payload);
         let res = await fetch("https://payment.decillionai.com/create-checkout-session", {
             method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
                 "userId": this.userId,
                 "payload": payload,
@@ -405,9 +422,8 @@ class Decillion {
 
     let app = new Decillion();
     await app.connect();
-    let res = await app.login("kasparus", "eyJhbGciOiJSUzI1NiIsImtpZCI6ImYxMDMzODYwNzE2ZTNhMmFhYjM4MGYwMGRiZTM5YTcxMTQ4NDZiYTEiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTQ5OTY0MzYxOTkxMTQyNjA4MzEiLCJlbWFpbCI6InRoZXByb2dyYW1tZXJtYWNoaW5lQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoieFNsaXBNc3VsV2lQd09VWl8wMnp3ZyIsIm5hbWUiOiJLZXloYW4gTW9oYW1tYWRpIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0xhUGR5SW51TWE1dVN5YXlDbkwtRHpGVHI3cllDWEg2Uk1UQ2NmWXpZY2N5NHV5QT1zOTYtYyIsImdpdmVuX25hbWUiOiJLZXloYW4iLCJmYW1pbHlfbmFtZSI6Ik1vaGFtbWFkaSIsImlhdCI6MTc1MjQ4NDI3MywiZXhwIjoxNzUyNDg3ODczfQ.CFotbZ1Io-wSQzOUhyJSikhdeiF0v1XlhJwzU3iY4aQlaMyFNE05NdrqqExbybIEFRw93bNEzzmh1vmyOZzFOLmGvFtQPAQECC4uBB0hftqYnt6bvMjNyFg6Gj4OsDqiOaAm_Xbaa_8ODsaZuuAEHPRW-2YtseAtt1C3Gqy5Vyn3QZ2h70uBBzNT5wd37wuF7I6CsOD4mcJJA1VNMrA9KgwkCqeVPeHAI0T7N0BcN7tnNKlcDyKGjTSQnXHKUupIlZ2jj2trIoevkXCAJxzVZRCLJtT3WUqaWtY2PCyULiYw6-YJurf0I2CwMAK1uSUByjFqa0c-tN660L1fUSlsZQ");
-    // console.log(res);
-    console.log(res.obj.privateKey);
+    let res = await app.login("kasparus", "eyJhbGciOiJSUzI1NiIsImtpZCI6ImYxMDMzODYwNzE2ZTNhMmFhYjM4MGYwMGRiZTM5YTcxMTQ4NDZiYTEiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTQ5OTY0MzYxOTkxMTQyNjA4MzEiLCJlbWFpbCI6InRoZXByb2dyYW1tZXJtYWNoaW5lQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoiRGZHNVd0b0FWaF9HbWVjMHRMeU1JUSIsIm5hbWUiOiJLZXloYW4gTW9oYW1tYWRpIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0xhUGR5SW51TWE1dVN5YXlDbkwtRHpGVHI3cllDWEg2Uk1UQ2NmWXpZY2N5NHV5QT1zOTYtYyIsImdpdmVuX25hbWUiOiJLZXloYW4iLCJmYW1pbHlfbmFtZSI6Ik1vaGFtbWFkaSIsImlhdCI6MTc1MjQ5MzU0MiwiZXhwIjoxNzUyNDk3MTQyfQ.dYQfNgJXJ_TxlmZMbl4uQNgfJ6DorC9bLlyTxWYLMxK7CAqPzG-kpLhplTvCTUUiM91NKdITBfW3uyFWwU6XS1H56XnLJXWBQvgrbrFr67Qd8oCFO29KuEV6iF0L2_d4ufPCwCsQoOxzQmTQVfaMUWbX3_uhtVfDQAmz4H7EdTfT_zTeq9hwnsZTz0V1RQrQGCGFadIjh4CJiozRRmwE-DIkAarK8fc2v2W6IAUq-8n6DSROQ-l-SRg441vZDWr92i3051WSjDm8kqHq99-ANnAl7QRdtgLArL0SYKG84lCs1-9t7u3JY8N62i-HOlFD4fpScVJKndVuBLxNLC31qA");
+    console.log(res);
     let payUrl = await app.generatePayment();
     console.log("payment generated. go to link below and charge your account:");
     console.log(payUrl);

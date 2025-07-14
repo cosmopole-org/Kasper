@@ -211,6 +211,7 @@ async function runServer() {
   app.use(express.urlencoded({ extended: true }));
 
   app.post('/create-checkout-session', async (req, res) => {
+    console.log("[" + req.body?.userId + "]", "[" + req.body?.payload + "]", "[" + req.body?.signature + "]");
     if (!req.body?.userId || !req.body?.payload || !req.body?.signature) {
       res.send(JSON.stringify({ success: false, errCode: 1 }));
       return;
@@ -218,7 +219,7 @@ async function runServer() {
     let userId = req.body.userId;
     let payload = req.body.payload;
     let signature = req.body.signature;
-    let diff = Date.now() - Buffer.from(payload).readBigInt64LE();
+    let diff = BigInt(Date.now()) - Buffer.from(payload).readBigInt64BE();
     if (!(diff > 0 && diff < 60000)) {
       res.send(JSON.stringify({ success: false, errCode: 2 }));
       return;

@@ -25,3 +25,4 @@ go.sum
 .env
 
 node_modules
+dist

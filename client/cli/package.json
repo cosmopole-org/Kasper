@@ -30,7 +30,7 @@
     "scripts": {
         "dev": "npm run build && npm start",
         "start": "node dist/index.cjs",
-        "build": "rm -r dist && tsc && mv dist/index.js dist/index.cjs",
+        "build": "tsc && mv dist/index.js dist/index.cjs",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "devDependencies": {
