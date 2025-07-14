@@ -219,11 +219,11 @@ async function runServer() {
     let userId = req.body.userId;
     let payload = req.body.payload;
     let signature = req.body.signature;
-    let diff = BigInt(Date.now()) - Buffer.from(payload, 'base64').readBigInt64BE();
-    if (!(diff > 0 && diff < 60000)) {
-      res.send(JSON.stringify({ success: false, errCode: 2 }));
-      return;
-    }
+    // let diff = BigInt(Date.now()) - Buffer.from(payload, 'base64').readBigInt64BE();
+    // if (!(diff > 0 && diff < 60000)) {
+    //   res.send(JSON.stringify({ success: false, errCode: 2 }));
+    //   return;
+    // }
     let emailRes = await sendRequest("1@global", "/users/checkSign", { userId: userId, payload: payload, signature: signature });
     if (!emailRes.valid) {
       res.send(JSON.stringify({ success: false, errCode: 3 }));
