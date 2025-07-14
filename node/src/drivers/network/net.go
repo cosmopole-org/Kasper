@@ -10,7 +10,9 @@ import (
 	"kasper/src/drivers/network/chain"
 	"kasper/src/drivers/network/tcp"
 	"net/http"
-    "golang.org/x/crypto/acme/autocert"
+
+	"golang.org/x/crypto/acme"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 type Network struct {
@@ -39,9 +41,9 @@ func NewNetwork(
 	signaler signaler.ISignaler,
 	fed network.IFederation) *Network {
 	net := &Network{
-		core: core,
-		tcp:  tcp.NewTcp(core),
-		fed:  fed,
+		core:  core,
+		tcp:   tcp.NewTcp(core),
+		fed:   fed,
 		chain: chain.NewChain(core),
 	}
 	return net
@@ -49,19 +51,22 @@ func NewNetwork(
 
 func (net *Network) Run(ports map[string]int) {
 	manager := autocert.Manager{
-        Cache:      autocert.DirCache("certs"),
-        Prompt:     autocert.AcceptTOS,
-        HostPolicy: autocert.HostWhitelist("api.decillionai.com"),
-    }
+		Cache:      autocert.DirCache("certs"),
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist("api.decillionai.com"),
+		Client: &acme.Client{
+			DirectoryURL: "https://acme-staging-v02.api.letsencrypt.org/directory",
+		},
+	}
 
-    config := &tls.Config{
-        GetCertificate: manager.GetCertificate,
-    }
+	config := &tls.Config{
+		GetCertificate: manager.GetCertificate,
+	}
 
-    // This starts HTTP server on :80 for challenges
-    go func() {
-        http.ListenAndServe(":80", manager.HTTPHandler(nil))
-    }()
+	// This starts HTTP server on :80 for challenges
+	go func() {
+		http.ListenAndServe(":80", manager.HTTPHandler(nil))
+	}()
 
 	tcpPort, ok := ports["tcp"]
 	if ok {
