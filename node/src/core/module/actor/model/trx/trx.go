@@ -47,6 +47,24 @@ func (tw *TrxWrapper) Commit() {
 	e := tw.dbTrx.Commit()
 	if e != nil {
 		log.Println("Error on committing:", e)
+		log.Println("retrying commit in safe context")
+		err := tw.core.Tools().Storage().KvDb().Update(func(txn *badger.Txn) error {
+			for _, change := range tw.Changes {
+				if change.Typ == "put" {
+					if err := txn.Set([]byte(change.Key), change.Val); err != nil {
+						return err
+					}
+				} else if change.Typ == "del" {
+					if err := txn.Delete([]byte(change.Key)); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			log.Println("Error on safe context committing:", err)
+		}
 	}
 }
 
