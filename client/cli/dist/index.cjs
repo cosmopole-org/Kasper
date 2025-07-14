@@ -228,7 +228,7 @@ class Decillion {
         return await this.sendRequest(this.userId, "authenticate", {});
     }
     async generatePayment() {
-        let payload = this.longToBytes(BigInt(Date.now()));
+        let payload = this.stringToBytes(BigInt(Date.now()).toString());
         let sign = this.sign(payload);
         let res = await fetch("https://payment.decillionai.com/create-checkout-session", {
             method: "POST",
