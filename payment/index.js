@@ -260,7 +260,7 @@ async function runServer() {
       cancel_url: `${YOUR_DOMAIN}/cancel.html`,
     });
 
-    res.redirect(303, session.url);
+    res.send(session.url);
   });
 
   app.post('/webhook', express.raw({ type: 'application/json' }), async (request, response) => {

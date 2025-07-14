@@ -124,6 +124,11 @@ class Decillion {
         bytes.writeInt32BE(x);
         return bytes;
     }
+    longToBytes(x) {
+        const bytes = Buffer.alloc(8);
+        bytes.writeBigInt64BE(x);
+        return bytes;
+    }
     stringToBytes(x) {
         const bytes = Buffer.from(x);
         return bytes;
@@ -207,10 +212,17 @@ class Decillion {
         return await this.sendRequest(this.userId, "authenticate", {});
     }
     async generatePayment() {
+        let payload = this.longToBytes(BigInt(Date.now()));
+        let sign = this.sign(payload);
         let res = await fetch("https://payment.decillionai.com/create-checkout-session", {
             method: "POST",
+            body: JSON.stringify({
+                "userId": this.userId,
+                "payload": payload,
+                "signature": sign,
+            }),
         });
-        return (await res.json()).sessionUrl;
+        return (await res.text());
     }
     users = {
         get: async (userId) => {
@@ -396,11 +408,15 @@ class Decillion {
     let app = new Decillion();
     await app.connect();
     let res = await app.login("kasparus", "eyJhbGciOiJSUzI1NiIsImtpZCI6ImYxMDMzODYwNzE2ZTNhMmFhYjM4MGYwMGRiZTM5YTcxMTQ4NDZiYTEiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTQ5OTY0MzYxOTkxMTQyNjA4MzEiLCJlbWFpbCI6InRoZXByb2dyYW1tZXJtYWNoaW5lQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoieFNsaXBNc3VsV2lQd09VWl8wMnp3ZyIsIm5hbWUiOiJLZXloYW4gTW9oYW1tYWRpIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0xhUGR5SW51TWE1dVN5YXlDbkwtRHpGVHI3cllDWEg2Uk1UQ2NmWXpZY2N5NHV5QT1zOTYtYyIsImdpdmVuX25hbWUiOiJLZXloYW4iLCJmYW1pbHlfbmFtZSI6Ik1vaGFtbWFkaSIsImlhdCI6MTc1MjQ4NDI3MywiZXhwIjoxNzUyNDg3ODczfQ.CFotbZ1Io-wSQzOUhyJSikhdeiF0v1XlhJwzU3iY4aQlaMyFNE05NdrqqExbybIEFRw93bNEzzmh1vmyOZzFOLmGvFtQPAQECC4uBB0hftqYnt6bvMjNyFg6Gj4OsDqiOaAm_Xbaa_8ODsaZuuAEHPRW-2YtseAtt1C3Gqy5Vyn3QZ2h70uBBzNT5wd37wuF7I6CsOD4mcJJA1VNMrA9KgwkCqeVPeHAI0T7N0BcN7tnNKlcDyKGjTSQnXHKUupIlZ2jj2trIoevkXCAJxzVZRCLJtT3WUqaWtY2PCyULiYw6-YJurf0I2CwMAK1uSUByjFqa0c-tN660L1fUSlsZQ");
-    console.log(res);
-    res = await app.points.create(true, false, "global");
-    console.log(res);
-    res = await app.points.update(res.obj.point.id, true, true);
-    console.log(res);
+    // console.log(res);
+    console.log(res.obj.privateKey);
+    let payUrl = await app.generatePayment();
+    console.log("payment generated. go to link below and charge your account:");
+    console.log(payUrl);
+    // res = await app.points.create(true, false, "global");
+    // console.log(res);
+    // res = await app.points.update(res.obj.point.id, true, true);
+    // console.log(res);
     // console.log("sending run pc request...");
     // res = await sendRequest(userId, "/pc/runPc", {});
     // console.log(res.resCode, res.obj);
