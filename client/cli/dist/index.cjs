@@ -237,7 +237,7 @@ class Decillion {
             },
             body: JSON.stringify({
                 "userId": this.userId,
-                "payload": Array.from(payload),
+                "payload": payload.toString('base64'),
                 "signature": sign,
             }),
         });
@@ -392,7 +392,7 @@ class Decillion {
             if (!this.userId) {
                 return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
             }
-            return await this.sendRequest(this.userId, "/storage/upload", { "pointId": pointId, "data": data, "fileId": fileId });
+            return await this.sendRequest(this.userId, "/storage/upload", { "pointId": pointId, "data": data.toString('base64'), "fileId": fileId });
         },
         download: async (pointId, fileId) => {
             if (!this.userId) {
