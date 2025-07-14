@@ -206,7 +206,9 @@ async function runServer() {
 
   const YOUR_DOMAIN = 'https://payment.decillionai.com';
 
-  app.use(express.static('public'))
+  app.use(express.static('public'));
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
   app.post('/create-checkout-session', async (req, res) => {
     if (!req.body?.userId || !req.body?.payload || !req.body?.signature) {
