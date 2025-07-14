@@ -210,7 +210,7 @@ class Decillion {
                     });
                 }),
                 new Promise((resolve, _) => {
-                    fs_1.default.writeFile("auth/privateKey.txt", this.privateKey ?? "", { encoding: 'utf-8' }, () => {
+                    fs_1.default.writeFile("auth/privateKey.txt", res.obj.privateKey ?? "", { encoding: 'utf-8' }, () => {
                         resolve(undefined);
                     });
                 })

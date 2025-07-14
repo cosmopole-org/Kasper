@@ -231,7 +231,7 @@ class Decillion {
             },
             body: JSON.stringify({
                 "userId": this.userId,
-                "payload": payload,
+                "payload": Array.from(payload),
                 "signature": sign,
             }),
         });
