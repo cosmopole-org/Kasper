@@ -98,7 +98,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	return outputs_points.CreateOutput{Point: point}, nil
 }
 
-// Update /points/update check [ true false false ] access [ true false false false PUT ]
+// Update /points/update check [ true true false ] access [ true false false false PUT ]
 func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (any, error) {
 	trx := state.Trx()
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
@@ -118,7 +118,7 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 	return outputs_points.UpdateOutput{Point: point}, nil
 }
 
-// Delete /points/delete check [ true false false ] access [ true false false false DELETE ]
+// Delete /points/delete check [ true true false ] access [ true false false false DELETE ]
 func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (any, error) {
 	trx := state.Trx()
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {

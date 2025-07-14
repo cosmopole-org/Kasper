@@ -20,7 +20,6 @@ class Decillion {
     readBytes() {
         if (this.observePhase) {
             if (this.received.length >= 4) {
-                console.log(this.received.at(0), this.received.at(1), this.received.at(2), this.received.at(3));
                 this.nextLength = this.received.subarray(0, 4).readIntBE(0, 4);
                 this.received = this.received.subarray(4);
                 this.observePhase = false;
@@ -60,7 +59,6 @@ class Decillion {
                 this.connectoToTlsServer();
             });
             this.socket.on('data', (data) => {
-                console.log(data.toString());
                 setTimeout(() => {
                     this.received = Buffer.concat([this.received, data]);
                     this.readBytes();
@@ -90,8 +88,6 @@ class Decillion {
                 pointer += 4;
                 let packetId = data.subarray(pointer, pointer + pidLen).toString();
 
-                console.log("received packetId: [" + packetId + "]");
-
                 pointer += pidLen;
                 let resCode = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
                 pointer += 4;
@@ -102,7 +98,6 @@ class Decillion {
             }
         } catch (ex) { console.log(ex); }
         setTimeout(() => {
-            console.log("sending packet_received signal...");
             this.socket?.write(Buffer.from([0x00, 0x00, 0x00, 0x01, 0x01]));
         });
     }
@@ -127,7 +122,6 @@ class Decillion {
     }
     private createRequest(userId: string, path: string, obj: any) {
         let packetId = Math.random().toString().substring(2);
-        console.log("sending packetId: [" + packetId + "]");
         let payload = this.stringToBytes(JSON.stringify(obj));
         let signature = this.stringToBytes(this.sign(payload));
         let uidBytes = this.stringToBytes(userId);
@@ -146,11 +140,9 @@ class Decillion {
         return new Promise((resolve, reject) => {
             let data = this.createRequest(userId, path, obj);
             this.callbacks[data.packetId] = (resCode, obj) => {
-                console.log(performance.now().toString());
                 resolve({ resCode, obj });
             };
             setTimeout(() => {
-                console.log(performance.now().toString());
                 this.socket?.write(data.data);
             });
         });
@@ -402,8 +394,12 @@ class Decillion {
 
     let app = new Decillion();
     await app.connect();
-    await app.login("kasparus", "eyJhbGciOiJSUzI1NiIsImtpZCI6ImYxMDMzODYwNzE2ZTNhMmFhYjM4MGYwMGRiZTM5YTcxMTQ4NDZiYTEiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMDA5MDQzNzQ2NjkxOTA5NzU4NzIiLCJlbWFpbCI6Imhhd2tjb3Ntb3BvbGl0YW5AZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImF0X2hhc2giOiJXM05CTzByTkQyWUl0VWExYTdtUkJBIiwibmFtZSI6Ikhhd2sgQ29zbW9wb2xpdGFuIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0pmSHJPcmRnMUo4dmxzS3BqTEtGVjQ5Vm1HVjdPTXBOeGJFd1hUTWNJbFJrWXJ1UT1zOTYtYyIsImdpdmVuX25hbWUiOiJIYXdrIiwiZmFtaWx5X25hbWUiOiJDb3Ntb3BvbGl0YW4iLCJpYXQiOjE3NTI0NzkxMDAsImV4cCI6MTc1MjQ4MjcwMH0.OjDeLKWsk4WisXzziQ0Ymo2jp1FpdiV34OEt16XKJyXbSCjSX6SReb108BshVMMDrFMluMnJeC7UFaN8QfRxPu3zYhPQd9XOdojE2evo-V6OUaASPnvVaPXGUamtu4bC2GLmhe3cHmNS1BaxC-Hsy7yH0NnLl6gPoAsTgt1vsu1mewSb_mYJQzqgRWY8dy0NoPYBTO-13jz-4M8l6r51eb_AF3EBVvhEO_9whKOkaaqGSoiRfV5mP41hM81MSyqgVCuCwSMsqn82IwXGim548HzeFNbAqof7uVJ_a7N0crdK81tFfiafs6-KWeZEB1F4_rlG6g2ASND3uoruaOmMJA");
-    await app.points.create(true, false, "global");
+    let res = await app.login("kasparus", "eyJhbGciOiJSUzI1NiIsImtpZCI6ImYxMDMzODYwNzE2ZTNhMmFhYjM4MGYwMGRiZTM5YTcxMTQ4NDZiYTEiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI0MDc0MDg3MTgxOTIuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTQ5OTY0MzYxOTkxMTQyNjA4MzEiLCJlbWFpbCI6InRoZXByb2dyYW1tZXJtYWNoaW5lQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoieFNsaXBNc3VsV2lQd09VWl8wMnp3ZyIsIm5hbWUiOiJLZXloYW4gTW9oYW1tYWRpIiwicGljdHVyZSI6Imh0dHBzOi8vbGgzLmdvb2dsZXVzZXJjb250ZW50LmNvbS9hL0FDZzhvY0xhUGR5SW51TWE1dVN5YXlDbkwtRHpGVHI3cllDWEg2Uk1UQ2NmWXpZY2N5NHV5QT1zOTYtYyIsImdpdmVuX25hbWUiOiJLZXloYW4iLCJmYW1pbHlfbmFtZSI6Ik1vaGFtbWFkaSIsImlhdCI6MTc1MjQ4NDI3MywiZXhwIjoxNzUyNDg3ODczfQ.CFotbZ1Io-wSQzOUhyJSikhdeiF0v1XlhJwzU3iY4aQlaMyFNE05NdrqqExbybIEFRw93bNEzzmh1vmyOZzFOLmGvFtQPAQECC4uBB0hftqYnt6bvMjNyFg6Gj4OsDqiOaAm_Xbaa_8ODsaZuuAEHPRW-2YtseAtt1C3Gqy5Vyn3QZ2h70uBBzNT5wd37wuF7I6CsOD4mcJJA1VNMrA9KgwkCqeVPeHAI0T7N0BcN7tnNKlcDyKGjTSQnXHKUupIlZ2jj2trIoevkXCAJxzVZRCLJtT3WUqaWtY2PCyULiYw6-YJurf0I2CwMAK1uSUByjFqa0c-tN660L1fUSlsZQ");
+    console.log(res);
+    res = await app.points.create(true, false, "global");
+    console.log(res);
+    res = await app.points.update(res.obj.point.id, true, true);
+    console.log(res);
 
     // console.log("sending run pc request...");
     // res = await sendRequest(userId, "/pc/runPc", {});
