@@ -1,25 +1,23 @@
 // This is a public sample test API key.
-// Don’t submit any personally identifiable information in requests made with this key.
+// Don't submit any personally identifiable information in requests made with this key.
 // Sign in to see your own test API key embedded in code samples.
 
 const endpointSecret = process.env.ENDPOINT_SECRET;
 const GOD_USER_PRIVATEKEY = process.env.GOD_USER_PRIVATEKEY;
 
-const stripe = require('stripe')(process.env.SECRET_KEY);
-// Replace this endpoint secret with your endpoint's unique secret
-// If you are testing with the CLI, find the secret by running 'stripe listen'
-// If you are using an endpoint defined with the API or dashboard, look in your webhook settings
-// at https://dashboard.stripe.com/webhooks
-const express = require('express');
-const net = require('net');
-const crypto = require('crypto');
-const tls = require('tls');
+const stripe = require("stripe")(process.env.SECRET_KEY);
+const express = require("express");
+const net = require("net");
+const crypto = require("crypto");
+const tls = require("tls");
 
 const port = 8078;
-let host = 'api.decillionai.com';
+let host = "api.decillionai.com";
 let privateKey = undefined;
 
 let callbacks = {};
+let socket;
+let pcLogs = "";
 
 const options = {
   host: host,
@@ -28,26 +26,25 @@ const options = {
   rejectUnauthorized: true,
 };
 
-let socket;
-
-let pcLogs = "";
-
+// TLS Connection Management
 function connectoToTlsServer() {
   socket = tls.connect(options, () => {
     if (socket.authorized) {
-      console.log('✔ TLS connection authorized');
+      console.log("✔ TLS connection authorized");
     } else {
-      console.log('⚠ TLS connection not authorized:', socket.authorizationError);
+      console.log(
+        "⚠ TLS connection not authorized:",
+        socket.authorizationError
+      );
     }
-
     runServer();
   });
 
-  socket.on('error', e => {
+  socket.on("error", (e) => {
     console.log(e);
   });
 
-  socket.on('close', e => {
+  socket.on("close", (e) => {
     console.log(e);
     connectoToTlsServer();
   });
@@ -59,7 +56,12 @@ function connectoToTlsServer() {
   function readBytes() {
     if (observePhase) {
       if (received.length >= 4) {
-        console.log(received.at(0), received.at(1), received.at(2), received.at(3));
+        console.log(
+          received.at(0),
+          received.at(1),
+          received.at(2),
+          received.at(3)
+        );
         nextLength = received.subarray(0, 4).readIntBE(0, 4);
         received = received.subarray(4);
         observePhase = false;
@@ -76,7 +78,7 @@ function connectoToTlsServer() {
     }
   }
 
-  socket.on('data', (data) => {
+  socket.on("data", (data) => {
     console.log(data.toString());
     setTimeout(() => {
       received = Buffer.concat([received, data]);
@@ -115,20 +117,23 @@ function processPacket(data) {
       let payload = data.subarray(pointer).toString();
       let obj = JSON.parse(payload);
       let cb = callbacks[packetId];
-      cb(resCode, obj);
+      if (cb) cb(resCode, obj);
     }
-  } catch (ex) { console.log(ex); }
+  } catch (ex) {
+    console.log(ex);
+  }
   setTimeout(() => {
     console.log("sending packet_received signal...");
     socket.write(Buffer.from([0x00, 0x00, 0x00, 0x01, 0x01]));
   });
 }
 
+// Utility Functions
 function sign(b) {
   if (privateKey) {
-    var sign = crypto.createSign('RSA-SHA256');
-    sign.update(b, 'utf8');
-    var signature = sign.sign(privateKey, 'base64');
+    var sign = crypto.createSign("RSA-SHA256");
+    sign.update(b, "utf8");
+    var signature = sign.sign(privateKey, "base64");
     return signature;
   } else {
     return "";
@@ -147,9 +152,7 @@ function stringToBytes(x) {
 }
 
 function createRequest(userId, path, obj) {
-
   let packetId = Math.random().toString().substring(2);
-
   console.log("sending packetId: [" + packetId + "]");
 
   let payload = stringToBytes(JSON.stringify(obj));
@@ -159,11 +162,15 @@ function createRequest(userId, path, obj) {
   let pathBytes = stringToBytes(path);
 
   let b = Buffer.concat([
-    intToBytes(signature.length), signature,
-    intToBytes(uidBytes.length), uidBytes,
-    intToBytes(pathBytes.length), pathBytes,
-    intToBytes(pidBytes.length), pidBytes,
-    payload
+    intToBytes(signature.length),
+    signature,
+    intToBytes(uidBytes.length),
+    uidBytes,
+    intToBytes(pathBytes.length),
+    pathBytes,
+    intToBytes(pidBytes.length),
+    pidBytes,
+    payload,
   ]);
 
   return { packetId: packetId, data: Buffer.concat([intToBytes(b.length), b]) };
@@ -191,129 +198,176 @@ async function sleep(ms) {
   });
 }
 
+// Route Handlers
+async function handleCheckoutSession(req, res) {
+  console.log(
+    "[" + req.body?.userId + "]",
+    "[" + req.body?.payload + "]",
+    "[" + req.body?.signature + "]"
+  );
+
+  if (!req.body?.userId || !req.body?.payload || !req.body?.signature) {
+    res.send(JSON.stringify({ success: false, errCode: 1 }));
+    return;
+  }
+
+  let userId = req.body.userId;
+  let payload = req.body.payload;
+  let signature = req.body.signature;
+  let diff =
+    BigInt(Date.now()) - BigInt(Buffer.from(payload, "base64").toString());
+
+  if (!(diff > 0 && diff < 60000)) {
+    res.send(JSON.stringify({ success: false, errCode: 2 }));
+    return;
+  }
+
+  let emailRes = await sendRequest("1@global", "/users/checkSign", {
+    userId: userId,
+    payload: payload,
+    signature: signature,
+  });
+  if (!emailRes.obj.valid) {
+    res.send(JSON.stringify({ success: false, errCode: 3 }));
+    return;
+  }
+
+  let email = emailRes.obj.email;
+  const customers = await stripe.customers.list({
+    email: email,
+    limit: 1,
+  });
+
+  let customer;
+  if (customers.data.length > 0) {
+    customer = customers.data[0];
+  } else {
+    customer = await stripe.customers.create({
+      email: email,
+      name: `User Userson`,
+    });
+  }
+
+  const YOUR_DOMAIN = "https://payment.decillionai.com";
+  const session = await stripe.checkout.sessions.create({
+    line_items: [
+      {
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: "One Year Plan",
+          },
+          unit_amount: 5000,
+        },
+        quantity: 1,
+      },
+    ],
+    payment_method_types: ["card"],
+    customer: customer.id,
+    mode: "payment",
+    success_url: `${YOUR_DOMAIN}/success.html`,
+    cancel_url: `${YOUR_DOMAIN}/cancel.html`,
+  });
+
+  res.send(session.url);
+}
+
+async function handleWebhook(request, response) {
+  let event = request.body;
+
+  // Only verify the event if you have an endpoint secret defined.
+  if (endpointSecret) {
+    const signature = request.headers["stripe-signature"];
+    try {
+      event = stripe.webhooks.constructEvent(
+        request.body,
+        signature,
+        endpointSecret
+      );
+    } catch (err) {
+      console.log(`⚠️  Webhook signature verification failed.`, err.message);
+      return response.sendStatus(400);
+    }
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case "checkout.session.completed":
+      const session = event.data.object;
+      console.log(`Checkout session completed: ${session.id}`);
+
+      // Get customer email from the session
+      const customer = await stripe.customers.retrieve(session.customer);
+      let userEmail = customer.email;
+
+      await sendRequest("1@global", "/users/mint", {
+        toUserEmail: userEmail,
+        amount: 10,
+      });
+      break;
+
+    case "payment_intent.succeeded":
+      const paymentIntent = event.data.object;
+      console.log(`PaymentIntent for ${paymentIntent.amount} was successful!`);
+
+      // Get customer email from payment intent
+      if (paymentIntent.customer) {
+        const customer = await stripe.customers.retrieve(
+          paymentIntent.customer
+        );
+        let userEmail = customer.email;
+        await sendRequest("1@global", "/users/mint", {
+          toUserEmail: userEmail,
+          amount: 10,
+        });
+      }
+      break;
+
+    case "payment_method.attached":
+      const paymentMethod = event.data.object;
+      console.log(`Payment method attached: ${paymentMethod.id}`);
+      break;
+
+    default:
+      console.log(`Unhandled event type ${event.type}.`);
+  }
+
+  // Return a 200 response to acknowledge receipt of the event
+  response.send();
+}
+
+// Server Setup
 async function runServer() {
   privateKey = Buffer.from(
-    "-----BEGIN RSA PRIVATE KEY-----\n" + GOD_USER_PRIVATEKEY + "\n-----END RSA PRIVATE KEY-----\n",
-    'utf-8'
-  )
+    "-----BEGIN RSA PRIVATE KEY-----\n" +
+      GOD_USER_PRIVATEKEY +
+      "\n-----END RSA PRIVATE KEY-----\n",
+    "utf-8"
+  );
+
   let userId = "1@global";
-
   await sendRequest(userId, "authenticate", {});
-
   await sleep(3000);
 
   const app = express();
 
-  const YOUR_DOMAIN = 'https://payment.decillionai.com';
+  app.use(express.static("public"));
 
-  app.use(express.static('public'));
+  // Webhook route must come BEFORE express.json() to get raw body
+  app.post(
+    "/webhook",
+    express.raw({ type: "application/json" }),
+    handleWebhook
+  );
+
+  // Now apply JSON parsing for other routes
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  app.post('/create-checkout-session', async (req, res) => {
-    console.log("[" + req.body?.userId + "]", "[" + req.body?.payload + "]", "[" + req.body?.signature + "]");
-    if (!req.body?.userId || !req.body?.payload || !req.body?.signature) {
-      res.send(JSON.stringify({ success: false, errCode: 1 }));
-      return;
-    }
-    let userId = req.body.userId;
-    let payload = req.body.payload;
-    let signature = req.body.signature;
-    let diff = BigInt(Date.now()) - BigInt(Buffer.from(payload, 'base64').toString());
-    if (!(diff > 0 && diff < 60000)) {
-      res.send(JSON.stringify({ success: false, errCode: 2 }));
-      return;
-    }
-    let emailRes = await sendRequest("1@global", "/users/checkSign", { userId: userId, payload: payload, signature: signature });
-    if (!emailRes.obj.valid) {
-      res.send(JSON.stringify({ success: false, errCode: 3 }));
-      return;
-    }
-    let email = emailRes.obj.email;
-    const customers = await stripe.customers.list({
-      email: email,
-      limit: 1,
-    });
-    let customer;
-    if (customers.data.length > 0) {
-      customer = customers.data[0];
-    } else {
-      customer = await stripe.customers.create({
-        email: email,
-        name: `User Userson`,
-      });
-    }
-    const session = await stripe.checkout.sessions.create({
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "One Year Plan",
-            },
-            unit_amount: 5000,
-          },
-          quantity: 1,
-        },
-      ],
-      payment_method_types: ["card"],
-      customer: customer.id,
-      mode: 'payment',
-      success_url: `${YOUR_DOMAIN}/success.html`,
-      cancel_url: `${YOUR_DOMAIN}/cancel.html`,
-    });
+  // Routes
+  app.post("/create-checkout-session", handleCheckoutSession);
 
-    res.send(session.url);
-  });
-
-  app.post('/webhook', express.raw({ type: 'application/json' }), async (request, response) => {
-    let event = request.body;
-    // Only verify the event if you have an endpoint secret defined.
-    // Otherwise use the basic event deserialized with JSON.parse
-    if (endpointSecret) {
-      // Get the signature sent by Stripe
-      const signature = request.headers['stripe-signature'];
-      try {
-        event = stripe.webhooks.constructEvent(
-          request.body,
-          signature,
-          endpointSecret
-        );
-      } catch (err) {
-        console.log(`⚠️  Webhook signature verification failed.`, err.message);
-        return response.sendStatus(400);
-      }
-    }
-
-    // Handle the event
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        const paymentIntent = event.data.object;
-        console.log(`PaymentIntent for ${paymentIntent.amount} was successful!`);
-
-        // Then define and call a method to handle the successful payment intent.
-        // handlePaymentIntentSucceeded(paymentIntent);
-
-        let userEmail = paymentIntent.customer.email;
-
-        await sendRequest(userId, "/users/mint", { toUserEmail: userEmail, amount: 10 });
-
-        break;
-      case 'payment_method.attached':
-        const paymentMethod = event.data.object;
-        // Then define and call a method to handle the successful attachment of a PaymentMethod.
-        // handlePaymentMethodAttached(paymentMethod);
-        break;
-      default:
-        // Unexpected event type
-        console.log(`Unhandled event type ${event.type}.`);
-    }
-
-    // Return a 200 response to acknowledge receipt of the event
-    response.send();
-  });
-
-  app.listen(4242, () => console.log('Running on port 4242'));
+  app.listen(4242, () => console.log("Running on port 4242"));
 }
 
 connectoToTlsServer();
