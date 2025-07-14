@@ -18,8 +18,8 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.CreateApp)
 		}
 		
-		func (c *Plugger) CreateFunction() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.CreateFunction)
+		func (c *Plugger) CreateMachine() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.CreateMachine)
 		}
 		
 		func (c *Plugger) Deploy() iaction.IAction {

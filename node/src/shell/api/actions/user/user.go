@@ -143,6 +143,7 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 	}
 	trx := state.Trx()
 	userId := trx.GetLink("UserEmailToId::" + email)
+	log.Println("fetching email:", "["+email+"]", "["+userId+"]")
 	if userId != "" {
 		user := models.User{Id: userId}.Pull(trx)
 		session := models.Session{Id: trx.GetIndex("Session", "userId", "id", user.Id)}.Pull(trx)
@@ -195,7 +196,7 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 		trx.PutLink("UserPrivateKey::"+response.User.Id, privKey)
 		trx.PutLink("UserEmailToId::"+email, response.User.Id)
 		trx.PutLink("UserIdToEmail::"+response.User.Id, email)
-		log.Println()
+		log.Println("saving email:", "["+email+"]")
 		return outputsusers.LoginOutput{User: response.User, Session: response.Session, PrivateKey: privKey}, nil
 	} else {
 		return nil, errors.New("username already exist")
