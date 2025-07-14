@@ -206,7 +206,7 @@ class Decillion {
                     });
                 }),
                 new Promise((resolve, _) => {
-                    fs.writeFile("auth/privateKey.txt", this.privateKey ?? "", { encoding: 'utf-8' }, () => {
+                    fs.writeFile("auth/privateKey.txt", res.obj.privateKey ?? "", { encoding: 'utf-8' }, () => {
                         resolve(undefined);
                     });
                 })
