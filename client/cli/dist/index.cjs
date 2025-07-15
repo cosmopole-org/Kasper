@@ -80,9 +80,12 @@ class Decillion {
                 pointer += keyLen;
                 let payload = data.subarray(pointer);
                 let obj = JSON.parse(payload.toString());
-                console.log(key, obj);
                 if (key == "pc/message") {
-                    console.log(obj.message);
+                    if (pcId)
+                        process.stdout.write(obj.message);
+                }
+                else {
+                    console.log(key, obj);
                 }
             }
             else if (data.at(pointer) == 0x02) {
@@ -547,6 +550,18 @@ const commands = {
         }
         return app.users.get(args[0]);
     },
+    "users.list": async (args) => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        if (!isNumeric(args[0])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
+        }
+        if (!isNumeric(args[1])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
+        }
+        return app.users.list(Number(args[0]), Number(args[1]));
+    },
     "points.create": async (args) => {
         if (args.length !== 3) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
@@ -775,7 +790,7 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
         }
         if (!isNumeric(args[1])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[1] } };
+            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
         }
         return await app.machines.listApps(Number(args[0]), Number(args[1]));
     },
@@ -787,7 +802,7 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
         }
         if (!isNumeric(args[1])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[1] } };
+            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
         }
         return await app.machines.listMachines(Number(args[0]), Number(args[1]));
     },
