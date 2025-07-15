@@ -337,6 +337,8 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					if matched && (tempId != "") {
 						if index < offset {
 							index++
+							temp = map[string][]byte{}
+							tempId = id
 							continue
 						}
 						index++
@@ -380,6 +382,8 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					if matched && (tempId != "") {
 						if index < offset {
 							index++
+							temp = map[string][]byte{}
+							tempId = id
 							continue
 						}
 						if index >= (offset + count) {
