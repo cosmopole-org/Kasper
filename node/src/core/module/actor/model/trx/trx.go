@@ -290,18 +290,16 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					itemVal = v
 					return nil
 				})
-				if _, ok := objs[id]; !ok && (tempId != id) {
-					matched := false
+				if tempId != id {
+					matched := true
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
-							if (temp[k] == nil) || (v != string(temp[k])) {
+							if (len(temp[k]) == 0) || (v != string(temp[k])) {
 								matched = false
 							}
 						}
-					} else {
-						matched = true
 					}
-					if matched && (len(temp) > 0) {
+					if matched && (tempId != "") {
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
@@ -332,18 +330,16 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					itemVal = v
 					return nil
 				})
-				if _, ok := objs[id]; !ok && (tempId != id) {
-					matched := false
+				if tempId != id {
+					matched := true
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
-							if (temp[k] == nil) || (v != string(temp[k])) {
+							if (len(temp[k]) == 0) || (v != string(temp[k])) {
 								matched = false
 							}
 						}
-					} else {
-						matched = true
 					}
-					if matched && (len(temp) > 0) {
+					if matched && (tempId != "") {
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
@@ -378,18 +374,16 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					itemVal = v
 					return nil
 				})
-				if _, ok := objs[id]; !ok && (tempId != id) {
-					matched := false
+				if tempId != id {
+					matched := true
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
-							if (temp[k] == nil) || (v != string(temp[k])) {
+							if (len(temp[k]) == 0) || (v != string(temp[k])) {
 								matched = false
 							}
 						}
-					} else {
-						matched = true
 					}
-					if matched && (len(temp) > 0) {
+					if matched && (tempId != "") {
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
