@@ -305,7 +305,6 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					temp = map[string][]byte{}
 					tempId = id
 				}
-				log.Println("["+string(itemKey)+"]", "["+string(prefix)+id+"::"+"]", "["+string(itemKey)[len(string(prefix))+len(id)+len("::"):]+"]")
 				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
 				if err != nil {
 					return nil, err
@@ -317,22 +316,10 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 			offset := meta[0]
 			temp := map[string][]byte{}
 			tempId := ""
-			preId := ""
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 				item := it.Item()
 				itemKey := item.Key()
 				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
-				if index < offset {
-					if preId != id {
-						preId = id
-						index++
-					}
-					continue
-				}
-				if preId != id {
-					preId = id
-					index++
-				}
 				var itemVal []byte
 				err := item.Value(func(v []byte) error {
 					itemVal = v
@@ -348,12 +335,16 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 						}
 					}
 					if matched && (tempId != "") {
+						if index < offset {
+							index++
+							continue
+						}
+						index++
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
 					tempId = id
 				}
-				log.Println("["+string(itemKey)+"]", "["+string(prefix)+id+"::"+"]", "["+string(itemKey)[len(string(prefix))+len(id)+len("::"):]+"]")
 				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
 				if err != nil {
 					return nil, err
@@ -368,25 +359,10 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 			count := meta[1]
 			temp := map[string][]byte{}
 			tempId := ""
-			preId := ""
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 				item := it.Item()
 				itemKey := item.Key()
 				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
-				if index < offset {
-					if preId != id {
-						preId = id
-						index++
-					}
-					continue
-				}
-				if index >= (offset + count) {
-					break
-				}
-				if preId != id {
-					preId = id
-					index++
-				}
 				var itemVal []byte
 				err := item.Value(func(v []byte) error {
 					itemVal = v
@@ -402,12 +378,19 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 						}
 					}
 					if matched && (tempId != "") {
+						if index < offset {
+							index++
+							continue
+						}
+						if index >= (offset + count) {
+							break
+						}
+						index++
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
 					tempId = id
 				}
-				log.Println("["+string(itemKey)+"]", "["+string(prefix)+id+"::"+"]", "["+string(itemKey)[len(string(prefix))+len(id)+len("::"):]+"]")
 				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
 				if err != nil {
 					return nil, err
