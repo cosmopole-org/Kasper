@@ -422,15 +422,18 @@ class Decillion {
 
     let app = new Decillion();
     await app.connect();
-    let res = await app.login("kasparus", "");
-    console.log(res);
+    // let res = await app.login("kasparus", "");
+    // console.log(res);
+    await app.authenticate();
+    // let res = await app.users.get("1@global");
+    // console.log(res);
     let payUrl = await app.generatePayment();
     console.log("payment generated. go to link below and charge your account:");
     console.log(payUrl);
-    res = await app.points.create(true, false, "global");
-    console.log(res);
-    res = await app.points.update(res.obj.point.id, true, true);
-    console.log(res);
+    // let res = await app.points.create(true, false, "global");
+    // console.log(res);
+    // res = await app.points.update(res.obj.point.id, true, true);
+    // console.log(res);
 
     // console.log("sending run pc request...");
     // res = await sendRequest(userId, "/pc/runPc", {});

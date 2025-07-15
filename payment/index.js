@@ -305,6 +305,8 @@ async function handleWebhook(request, response) {
       const customer = await stripe.customers.retrieve(session.customer);
       let userEmail = customer.email;
 
+      console.log("[" + email + "]")
+
       await sendRequest("1@global", "/users/mint", {
         toUserEmail: userEmail,
         amount: 10,

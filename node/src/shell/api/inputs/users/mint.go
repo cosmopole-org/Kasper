@@ -1,7 +1,7 @@
 package inputs_users
 
 type MintInput struct {
-	ToUserEmail string `json:"toUsername" validate:"required"`
+	ToUserEmail string `json:"toUserEmail" validate:"required"`
 	Amount      int64  `json:"amount" validate:"required"`
 }
 
