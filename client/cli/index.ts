@@ -12,7 +12,6 @@ class Decillion {
     port: number = 8078;
     host: string = 'api.decillionai.com';
     callbacks: { [key: string]: (packageId: number, obj: any) => void } = {};
-    pcLogs: string = "";
     socket: tls.TLSSocket | undefined;
     received: Buffer = Buffer.from([]);
     observePhase: boolean = true;
@@ -79,8 +78,7 @@ class Decillion {
                 let obj = JSON.parse(payload.toString());
                 console.log(key, obj);
                 if (key == "pc/message") {
-                    this.pcLogs += obj.message;
-                    console.log(this.pcLogs);
+                    console.log(obj.message);
                 }
             } else if (data.at(pointer) == 0x02) {
                 pointer++;
@@ -165,19 +163,6 @@ class Decillion {
             setTimeout(() => {
                 resolve(undefined);
             }, ms);
-        });
-    }
-    private async executeBash(command: string) {
-        return new Promise((resolve, reject) => {
-            let dir = exec.exec(command, function (err, stdout, stderr) {
-                if (err) {
-                    reject(err);
-                }
-                console.log(stdout);
-            });
-            dir.on('exit', function (code) {
-                resolve(code);
-            });
         });
     }
     private userId: string | undefined;
@@ -350,6 +335,30 @@ class Decillion {
             }
             return await this.sendRequest(this.userId, "/points/signal", { "pointId": pointId, "userId": userId, "type": typ, "data": data });
         },
+        addMember: async (userId: string, pointId: string, metadata: { [key: string]: any }): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/addMember", { "pointId": pointId, "userId": userId, "metadata": metadata });
+        },
+        updateMember: async (userId: string, pointId: string, metadata: { [key: string]: any }): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/updateMember", { "pointId": pointId, "userId": userId, "metadata": metadata });
+        },
+        removeMember: async (userId: string, pointId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/removeMember", { "pointId": pointId, "userId": userId });
+        },
+        listMembers: async (pointId: string): Promise<{ resCode: number, obj: any }> => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/points/removeMember", { "pointId": pointId });
+        },
     }
     public invites = {
         create: async (pointId: string, userId: string): Promise<{ resCode: number, obj: any }> => {
@@ -384,7 +393,7 @@ class Decillion {
             }
             return await this.sendRequest(this.userId, "/chains/create", { "participants": participants, "isTemp": isTemp });
         },
-        submitBaseTrx: async (chainId: number, key: string, obj: any): Promise<{ resCode: number, obj: any }> => {
+        submitBaseTrx: async (chainId: BigInt, key: string, obj: any): Promise<{ resCode: number, obj: any }> => {
             if (!this.userId) {
                 return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
             }
@@ -394,7 +403,7 @@ class Decillion {
         },
     }
     public machines = {
-        createApp: async (chainId: number): Promise<{ resCode: number, obj: any }> => {
+        createApp: async (chainId: bigint): Promise<{ resCode: number, obj: any }> => {
             if (!this.userId) {
                 return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
             }
@@ -463,7 +472,26 @@ class Decillion {
 }
 
 function isNumeric(str: string) {
-    return !isNaN(parseInt(str));
+    try {
+        BigInt(str);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function executeBash(command: string) {
+    return new Promise((resolve, reject) => {
+        let dir = exec.exec(command, function (err, stdout, stderr) {
+            if (err) {
+                reject(err);
+            }
+            console.log(stdout);
+        });
+        dir.on('exit', function (code) {
+            resolve(code);
+        });
+    });
 }
 
 const rl = readline.createInterface({
@@ -472,6 +500,7 @@ const rl = readline.createInterface({
 });
 
 let app = new Decillion();
+let pcId: string | undefined = undefined;
 
 const commands: { [key: string]: (args: string[]) => Promise<{ resCode: number, obj: any }> } = {
     "login": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
@@ -579,17 +608,186 @@ const commands: { [key: string]: (args: string[]) => Promise<{ resCode: number, 
         }
         return await app.points.list(Number(args[0]), Number(args[1]));
     },
-    // "points.history": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
-    //     if (args.length !== 1) {
-    //         return { resCode: 30, obj: { message: "invalid parameters count" } }
-    //     }
-    //     return await app.points.history(args[0]);
-    // },
+    "points.history": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        return await app.points.history(args[0]);
+    },
     "points.signal": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
         if (args.length !== 4) {
             return { resCode: 30, obj: { message: "invalid parameters count" } }
         }
         return await app.points.signal(args[0], args[1], args[2], args[3]);
+    },
+    "points.addMember": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        let metadata: { [key: string]: any } = {};
+        try {
+            metadata = JSON.parse(args[2]);
+        } catch (ex) {
+            return { resCode: 30, obj: { message: "invalid metadata json" } }
+        }
+        return await app.points.addMember(args[0], args[1], metadata);
+    },
+    "points.updateMember": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        let metadata: { [key: string]: any } = {};
+        try {
+            metadata = JSON.parse(args[2]);
+        } catch (ex) {
+            return { resCode: 30, obj: { message: "invalid metadata json" } }
+        }
+        return await app.points.updateMember(args[0], args[1], metadata);
+    },
+    "points.removeMember": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        return await app.points.removeMember(args[0], args[1]);
+    },
+    "points.listMembers": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        return await app.points.listMembers(args[0]);
+    },
+    "invites.create": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        return await app.invites.create(args[0], args[1]);
+    },
+    "invites.cancel": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        return await app.invites.cancel(args[0], args[1]);
+    },
+    "invites.accept": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        return await app.invites.accept(args[0]);
+    },
+    "invites.decline": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        return await app.invites.decline(args[0]);
+    },
+    "storage.upload": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2 && args.length !== 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        if (args.length === 2) {
+            return await app.storage.upload(args[0], fs.readFileSync(args[1]));
+        } else {
+            return await app.storage.upload(args[0], fs.readFileSync(args[1]), args[2]);
+        }
+    },
+    "storage.download": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        await app.storage.download(args[0], args[1]);
+        return { resCode: 0, obj: { "message": `file ${args[1]} downloaded.` } };
+    },
+    "chains.create": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        let participants: { [key: string]: number } = {};
+        try {
+            participants = JSON.parse(args[0]);
+        } catch (ex) {
+            return { resCode: 30, obj: { message: "invalid participants json" } }
+        }
+        if (args[1] !== "true" && args[1] !== "false") {
+            return { resCode: 30, obj: { message: "unknown parameter value: isTemp --> " + args[1] } }
+        }
+        return await app.chains.create(participants, args[1] == "true");
+    },
+    "chains.submitBaseTrx": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2 && 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        if (!isNumeric(args[0])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: chainId --> " + args[0] } }
+        }
+        let obj: any = {};
+        try {
+            obj = JSON.parse(args[2]);
+        } catch (ex) {
+            return { resCode: 30, obj: { message: "invalid object json" } }
+        }
+        return await app.chains.submitBaseTrx(BigInt(args[0]), args[1], obj);
+    },
+    "machines.createApp": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        if (!isNumeric(args[0])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: chainId --> " + args[0] } }
+        }
+        return await app.machines.createApp(BigInt(args[0]));
+    },
+    "machines.createMachine": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        return await app.machines.createMachine(args[0], args[1], args[2], "");
+    },
+    "machines.deploy": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        let metadata: any = {};
+        try {
+            metadata = JSON.parse(args[2]);
+        } catch (ex) {
+            return { resCode: 30, obj: { message: "invalid metadata json" } }
+        }
+        await executeBash(`cd ${args[1]}/builder && bash build.sh`);
+        let bc = fs.readFileSync(`${args[1]}/builder/bytecode`);
+        return await app.machines.deploy(args[0], bc.toString('base64'), args[2], metadata);
+    },
+    "machines.listApps": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        if (!isNumeric(args[0])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } }
+        }
+        if (!isNumeric(args[1])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[1] } }
+        }
+        return await app.machines.listApps(Number(args[0]), Number(args[1]));
+    },
+    "machines.listMachines": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        if (!isNumeric(args[0])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } }
+        }
+        if (!isNumeric(args[1])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[1] } }
+        }
+        return await app.machines.listMachines(Number(args[0]), Number(args[1]));
+    },
+    "pc.runPc": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+        if (args.length !== 0) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } }
+        }
+        console.clear();
+        let res = await app.pc.runPc();
+        pcId = res.obj.vmId
+        return res;
     },
 }
 
@@ -618,6 +816,22 @@ const help = `
 let ask = () => {
     rl.question(`${app.myUsername()}$ `, async q => {
         let parts = q.trim().split(' ');
+        if (pcId) {
+            let command = q.trim();
+            if (parts.length == 2 && parts[0] === "pc" && parts[1] == "stop") {
+                pcId = undefined;
+                console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
+                setTimeout(() => {
+                    ask();
+                });
+            } else {
+                await app.pc.execCommand(pcId, command);
+                setTimeout(() => {
+                    ask();
+                });
+            }
+            return;
+        }
         if (parts.length == 1) {
             if (parts[0] == "clear") {
                 console.clear();
@@ -657,266 +871,4 @@ let ask = () => {
     await app.connect();
     console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
     ask();
-})();
-
-(async () => {
-
-    // let res = await app.login("kasparus", "");
-    // console.log(res);
-    // await app.authenticate();
-    // let payUrl = await app.generatePayment();
-    // console.log("payment generated. go to link below and charge your account:");
-    // console.log(payUrl);
-    // console.log("");
-
-    // let res = await app.points.create(true, false, "global");
-    // console.log(res);
-    // res = await app.points.update(res.obj.point.id, true, true);
-    // console.log(res);
-
-    // console.log("sending run pc request...");
-    // res = await sendRequest(userId, "/pc/runPc", {});
-    // console.log(res.resCode, res.obj);
-    // let vmId = res.obj.vmId;
-
-    // await sleep(15000);
-
-    // res = await sendRequest(userId, "/pc/execCommand", { "vmId": vmId, "command": "ls" });
-    // console.log(res.resCode, res.obj);
-
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    // console.log(res.resCode, res.obj);
-    // let pointOneId = res.obj.point.id;
-
-    // res = await sendRequest(userId, "/points/get", { "pointId": pointOneId });
-    // console.log(res.resCode, res.obj);
-
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    // console.log(res.resCode, res.obj);
-    // let pointTwoId = res.obj.point.id;
-
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    // console.log(res.resCode, res.obj);
-    // let pointMainId = res.obj.point.id;
-
-    // res = await sendRequest(userId, "/points/create", { "persHist": false, "isPublic": true, "orig": "global" });
-    // console.log(res.resCode, res.obj);
-    // let pointId = res.obj.point.id;
-
-    // res = await sendRequest(userId, "/apps/create", { "chainId": 1 });
-    // console.log(res.resCode, res.obj);
-    // let appId = res.obj.app.id;
-
-    // res = await sendRequest(userId, "/functions/create", { "username": "deepseek3", "appId": appId, "path": "/ai/chat" });
-    // console.log(res.resCode, res.obj);
-    // let machineId = res.obj.user.id;
-
-    // let machineId = '4@global';
-
-    // let keys = {
-    //     "init": [pointOneId, pointTwoId],
-    //     "merge": [pointMainId],
-    //     "train": [pointOneId, pointTwoId],
-    //     "agg": [pointMainId],
-    // };
-
-    // let srcFiles = {
-    //     [pointOneId]: {},
-    //     [pointTwoId]: {},
-    //     [pointMainId]: {}
-    // };
-
-    // for (let key in keys) {
-    //     let ids = keys[key];
-    //     for (let i = 0; i < ids.length; i++) {
-    //         let pointId = ids[i];
-    //         let mainPyScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_" + key + "/src/main.py", { encoding: 'utf-8' }));
-    //         res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": mainPyScript });
-    //         console.log(res.resCode, res.obj);
-    //         let mainPyId = res.obj.file.id;
-    //         let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_" + key + "/src/run.sh", { encoding: 'utf-8' }));
-    //         res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runShScript });
-    //         console.log(res.resCode, res.obj);
-    //         let runShId = res.obj.file.id;
-    //         srcFiles[pointId][key + "SrcFiles"] = {
-    //             [mainPyId]: "main.py",
-    //             [runShId]: "run.sh"
-    //         };
-    //     }
-    // }
-
-    // let trainsetOne = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_init/src/train.csv", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointOneId, "data": trainsetOne });
-    // console.log(res.resCode, res.obj);
-    // let trainsetOneId = res.obj.file.id;
-
-    // let testsetOne = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_init/src/test.csv", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointOneId, "data": testsetOne });
-    // console.log(res.resCode, res.obj);
-    // let testsetOneId = res.obj.file.id;
-
-    // let trainsetTwo = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_init/src/train.csv", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointTwoId, "data": trainsetTwo });
-    // console.log(res.resCode, res.obj);
-    // let trainsetTwoId = res.obj.file.id;
-
-    // let testsetTwo = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_init/src/test.csv", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointTwoId, "data": testsetTwo });
-    // console.log(res.resCode, res.obj);
-    // let testsetTwoId = res.obj.file.id;
-
-    // srcFiles[pointOneId]["initSrcFiles"][trainsetOneId] = "train.csv";
-    // srcFiles[pointOneId]["initSrcFiles"][testsetOneId] = "test.csv";
-    // srcFiles[pointOneId]["trainSrcFiles"][trainsetOneId] = "train.csv";
-    // srcFiles[pointOneId]["trainSrcFiles"][testsetOneId] = "test.csv";
-
-    // srcFiles[pointTwoId]["initSrcFiles"][trainsetTwoId] = "train.csv";
-    // srcFiles[pointTwoId]["initSrcFiles"][testsetTwoId] = "test.csv";
-    // srcFiles[pointTwoId]["trainSrcFiles"][trainsetTwoId] = "train.csv";
-    // srcFiles[pointTwoId]["trainSrcFiles"][testsetTwoId] = "test.csv";
-
-    // let idOne = btoa("{\"value\":1}");
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointOneId, "data": idOne });
-    // console.log(res.resCode, res.obj);
-    // let idOneId = res.obj.file.id;
-
-    // let idTwo = btoa("{\"value\":2}");
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointTwoId, "data": idTwo });
-    // console.log(res.resCode, res.obj);
-    // let idTwoId = res.obj.file.id;
-
-    // srcFiles[pointOneId]["trainSrcFiles"][idOneId] = "id";
-    // srcFiles[pointTwoId]["trainSrcFiles"][idTwoId] = "id";
-
-    // for (let key in keys) {
-    //     await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/ai_${key}/builder && bash build.sh '' '${userId}'`);
-    //     let dockerfileBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/ai_" + key + "/builder/Dockerfile");
-    //     res = await sendRequest(userId, "/functions/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "ai_" + key }, "byteCode": dockerfileBC.toString('base64') });
-    //     console.log(res.resCode, res.obj);
-    // }
-
-    // // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder && bash build.sh '' '${userId}'`);
-    // // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/ai/builder/main.wasm");
-    // // res = await sendRequest(userId, "/functions/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
-    // // console.log(res.resCode, res.obj);
-
-    // let runJsScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.js", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runJsScript });
-    // console.log(res.resCode, res.obj);
-    // let runJsId = res.obj.file.id;
-
-    // let runShScript = btoa(fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/src/run.sh", { encoding: 'utf-8' }));
-    // res = await sendRequest(userId, "/storage/upload", { "pointId": pointId, "data": runShScript });
-    // console.log(res.resCode, res.obj);
-    // let runShId = res.obj.file.id;
-
-    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder && bash build.sh '' '${userId}'`);
-    // let dockerfile2BC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/docker/deepseek/builder/Dockerfile");
-    // res = await sendRequest(userId, "/functions/deploy", { "runtime": "docker", "machineId": machineId, "metadata": { "imageName": "deepseek" }, "byteCode": dockerfile2BC.toString('base64') });
-    // console.log(res.resCode, res.obj);
-
-    // await executeBash(`cd /home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder && bash build.sh '' '${userId}'`);
-    // let mainWasmBC = fs.readFileSync("/home/keyhan/MyWorkspace/kasper/applet/wasm/deepseek/builder/main.wasm");
-    // res = await sendRequest(userId, "/functions/deploy", { "runtime": "wasm", "machineId": machineId, "byteCode": mainWasmBC.toString('base64') });
-    // console.log(res.resCode, res.obj);
-
-    // res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointId, "userId": machineId });
-    // console.log(res.resCode, res.obj);
-
-    // res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointMainId, "userId": machineId });
-    // console.log(res.resCode, res.obj);
-
-    // res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointOneId, "userId": machineId });
-    // console.log(res.resCode, res.obj);
-
-    // res = await sendRequest(userId, "/points/addMember", { "metadata": {}, "pointId": pointTwoId, "userId": machineId });
-    // console.log(res.resCode, res.obj);
-
-    // res = await sendRequest(userId, "/points/signal", {
-    //     "type": "single",
-    //     "pointId": pointOneId,
-    //     "userId": machineId,
-    //     "data": JSON.stringify({
-    //         "attachment": JSON.stringify({
-    //             "initSrcFiles": srcFiles[pointOneId]["initSrcFiles"],
-    //             "trainSrcFiles": srcFiles[pointOneId]["trainSrcFiles"],
-    //             "mergeSrcFiles": srcFiles[pointMainId]["mergeSrcFiles"],
-    //             "aggSrcFiles": srcFiles[pointMainId]["aggSrcFiles"],
-    //             "aggPointId": pointMainId,
-    //             "action": "init"
-    //         })
-    //     })
-    // });
-    // console.log(res.resCode, res.obj);
-
-    // res = await sendRequest(userId, "/points/signal", {
-    //     "type": "single",
-    //     "pointId": pointTwoId,
-    //     "userId": machineId,
-    //     "data": JSON.stringify({
-    //         "attachment": JSON.stringify({
-    //             "initSrcFiles": srcFiles[pointTwoId]["initSrcFiles"],
-    //             "trainSrcFiles": srcFiles[pointTwoId]["trainSrcFiles"],
-    //             "mergeSrcFiles": srcFiles[pointMainId]["mergeSrcFiles"],
-    //             "aggSrcFiles": srcFiles[pointMainId]["aggSrcFiles"],
-    //             "aggPointId": pointMainId,
-    //             "action": "init"
-    //         })
-    //     })
-    // });
-    // console.log(res.resCode, res.obj);
-
-    // sendRequest(userId, "/points/signal", {
-    //     "type": "single",
-    //     "pointId": pointId,
-    //     "userId": machineId,
-    //     "data": JSON.stringify({
-    //         "action": "startChatbot",
-    //         "srcFiles": {
-    //             [runJsId]: "run.js",
-    //             [runShId]: "run.sh"
-    //         }
-    //     })
-    // });
-
-    // console.log("starting chatserver...")
-    // await sleep(10000);
-
-    // console.log("sending prompt...")
-
-    // res = await sendRequest(userId, "/points/signal", {
-    //     "type": "single",
-    //     "pointId": pointId,
-    //     "userId": machineId,
-    //     "data": JSON.stringify({
-    //         "action": "chat",
-    //         "prompt": "hello deepseek. how is weather like ?"
-    //     })
-    // });
-
-    // console.log(res.resCode, res.obj);
-
-    // const rl = readline.createInterface({
-    //     input: process.stdin,
-    //     output: process.stdout,
-    // });
-    // const askMessage = () => {
-    //     rl.question(`message:`, async q => {
-    //         if (q.trim().length > 0) {
-    //             await sendRequest(userId, "/points/signal", {
-    //                 "type": "single",
-    //                 "pointId": pointId,
-    //                 "userId": machineId,
-    //                 "data": JSON.stringify({
-    //                     "action": "chat",
-    //                     "prompt": q
-    //                 })
-    //             });
-    //         }
-    //         askMessage();
-    //     });
-    // }
-    // askMessage();
-    // socket.destroy();
-    // console.log("end.");
 })();

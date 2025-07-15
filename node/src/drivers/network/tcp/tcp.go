@@ -298,18 +298,15 @@ func (t *Socket) pushBuffer() {
 func (t *Socket) connectListener(uid string) *signaler.Listener {
 	t.app.Tools().Signaler().Lock()
 	defer t.app.Tools().Signaler().Unlock()
-	lis, found := t.app.Tools().Signaler().Listeners().Get(uid)
-	if !found {
-		lis = &signaler.Listener{
-			Id:      uid,
-			Paused:  false,
-			DisTime: 0,
-			Signal: func(key string, b any) {
-				if b != nil {
-					t.writeUpdate(key, b, true)
-				}
-			},
-		}
+	lis := &signaler.Listener{
+		Id:      uid,
+		Paused:  false,
+		DisTime: 0,
+		Signal: func(key string, b any) {
+			if b != nil {
+				t.writeUpdate(key, b, true)
+			}
+		},
 	}
 	t.Ack = true
 	return lis
