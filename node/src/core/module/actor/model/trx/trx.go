@@ -290,7 +290,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					itemVal = v
 					return nil
 				})
-				if _, ok := objs[id]; !ok {
+				if _, ok := objs[id]; !ok && (tempId != id) {
 					matched := false
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
@@ -332,7 +332,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					itemVal = v
 					return nil
 				})
-				if _, ok := objs[id]; !ok {
+				if _, ok := objs[id]; !ok && (tempId != id) {
 					matched := false
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
@@ -378,7 +378,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					itemVal = v
 					return nil
 				})
-				if _, ok := objs[id]; !ok {
+				if _, ok := objs[id]; !ok && (tempId != id) {
 					matched := false
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
