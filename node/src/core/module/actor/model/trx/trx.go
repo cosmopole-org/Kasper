@@ -301,7 +301,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					} else {
 						matched = true
 					}
-					if matched {
+					if matched && (len(temp) > 0) {
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
@@ -343,7 +343,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					} else {
 						matched = true
 					}
-					if matched {
+					if matched && (len(temp) > 0) {
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
@@ -389,7 +389,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					} else {
 						matched = true
 					}
-					if matched {
+					if matched && (len(temp) > 0) {
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
