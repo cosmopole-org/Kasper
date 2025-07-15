@@ -258,6 +258,16 @@ class Decillion {
     myUsername() {
         return this.username ?? "Decillion User";
     }
+    myPrivateKey() {
+        if (this.privateKey) {
+            let str = this.privateKey.toString().slice("-----BEGIN RSA PRIVATE KEY-----\n".length);
+            str = str.slice(0, str.length - "\n-----END RSA PRIVATE KEY-----\n".length);
+            return str;
+        }
+        else {
+            return "empty";
+        }
+    }
     async generatePayment() {
         let payload = this.stringToBytes(BigInt(Date.now()).toString());
         let sign = this.sign(payload);
@@ -487,6 +497,15 @@ const commands = {
         }
         return { resCode: 0, obj: { "paymentUrl": await app.generatePayment() } };
     },
+    "printPrivateKey": async (args) => {
+        if (args.length !== 0) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        console.log("");
+        console.log(app.myPrivateKey());
+        console.log("");
+        return { resCode: 0, obj: { "message": "printed." } };
+    },
     "users.me": async (args) => {
         if (args.length !== 0) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
@@ -542,7 +561,7 @@ const commands = {
         return await app.points.join(args[0]);
     },
     "points.myPoints": async (args) => {
-        if (args.length !== 4) {
+        if (args.length !== 3) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (!isNumeric(args[0])) {
@@ -551,7 +570,7 @@ const commands = {
         if (!isNumeric(args[1])) {
             return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
         }
-        return await app.points.myPoints(Number(args[0]), Number(args[1]), args[2], args[3]);
+        return await app.points.myPoints(Number(args[0]), Number(args[1]), "", args[2]);
     },
     "points.list": async (args) => {
         if (args.length !== 2) {
@@ -565,12 +584,12 @@ const commands = {
         }
         return await app.points.list(Number(args[0]), Number(args[1]));
     },
-    "points.history": async (args) => {
-        if (args.length !== 1) {
-            return { resCode: 30, obj: { message: "invalid parameters count" } };
-        }
-        return await app.points.history(args[0]);
-    },
+    // "points.history": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
+    //     if (args.length !== 1) {
+    //         return { resCode: 30, obj: { message: "invalid parameters count" } }
+    //     }
+    //     return await app.points.history(args[0]);
+    // },
     "points.signal": async (args) => {
         if (args.length !== 4) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
@@ -578,13 +597,42 @@ const commands = {
         return await app.points.signal(args[0], args[1], args[2], args[3]);
     },
 };
+const help = `
+    commands:
+
+    [users]
+
+    users.login [username] [email token] ==> login to your account
+    users.get [user id] ==> get a user's data
+    users.me ==> get your data
+
+    [points]
+
+    ponts.create [is public] [has persistent history] [origin] ==> create a point with these props in the specified origin state
+    points.update [point id] [is public] [has persistent history] ==> a point with the specified point id to these props
+    ponts.get [point id] ==> get point by point id
+    ponts.delete [point id] ==> delete point by point id
+    ponts.join [point id] ==> join a public point by point id
+    ponts.myPoints [offset] [count] [origin] ==> get your points specifying offset and count of the list and origin you want to search in
+    ponts.list [offset] [count] ==> search in all points specifying offset and count
+    ponts.signal [point id] [user id] [transfer type] [data] ==> signal a point to send data througn protocol to a user in the point or broadcast data in the point to all users in it
+
+`;
 let ask = () => {
     rl.question(`${app.myUsername()}$ `, async (q) => {
         let parts = q.trim().split(' ');
         if (parts.length == 1) {
             if (parts[0] == "clear") {
                 console.clear();
-                console.log("Welcome to Decillion AI shell, enter your command: \n");
+                console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
+                setTimeout(() => {
+                    ask();
+                });
+                return;
+            }
+            else if (parts[0] == "help") {
+                console.log(help);
+                console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
                 setTimeout(() => {
                     ask();
                 });
@@ -612,7 +660,7 @@ let ask = () => {
 (async () => {
     console.clear();
     await app.connect();
-    console.log("Welcome to Decillion AI shell, enter your command: \n");
+    console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
     ask();
 })();
 (async () => {
