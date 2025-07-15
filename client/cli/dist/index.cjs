@@ -7,6 +7,7 @@ const tls_1 = __importDefault(require("tls"));
 const crypto_1 = __importDefault(require("crypto"));
 const fs_1 = __importDefault(require("fs"));
 const child_process_1 = __importDefault(require("child_process"));
+const node_readline_1 = __importDefault(require("node:readline"));
 const USER_ID_NOT_SET_ERR_CODE = 10;
 const USER_ID_NOT_SET_ERR_MSG = "not authenticated, userId is not set";
 class Decillion {
@@ -152,9 +153,17 @@ class Decillion {
     async sendRequest(userId, path, obj) {
         return new Promise((resolve, reject) => {
             let data = this.createRequest(userId, path, obj);
+            let to;
             this.callbacks[data.packetId] = (resCode, obj) => {
+                if (to) {
+                    clearTimeout(to);
+                }
                 resolve({ resCode, obj });
             };
+            to = setTimeout(() => {
+                resolve({ resCode: 20, obj: { message: "request timeout" } });
+                clearTimeout(to);
+            }, 5000);
             setTimeout(() => {
                 this.socket?.write(data.data);
             });
@@ -182,6 +191,7 @@ class Decillion {
     }
     userId;
     privateKey;
+    username;
     constructor(host, port) {
         if (host)
             this.host = host;
@@ -198,7 +208,11 @@ class Decillion {
         }
     }
     async connect() {
-        return this.connectoToTlsServer();
+        await this.connectoToTlsServer();
+        if (this.userId && this.privateKey) {
+            console.log((await this.authenticate()).obj);
+            this.username = (await this.users.me()).obj.user.username;
+        }
     }
     async login(username, emailToken) {
         let res = await this.sendRequest("", "/users/login", { "username": username, "emailToken": emailToken });
@@ -218,6 +232,7 @@ class Decillion {
                 })
             ]);
             await this.authenticate();
+            this.username = (await this.users.me()).obj.user.username;
         }
         return res;
     }
@@ -226,6 +241,22 @@ class Decillion {
             return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
         }
         return await this.sendRequest(this.userId, "authenticate", {});
+    }
+    logout() {
+        if (fs_1.default.existsSync("auth/userId.txt"))
+            fs_1.default.rmSync("auth/userId.txt");
+        if (fs_1.default.existsSync("auth/privateKey.txt"))
+            fs_1.default.rmSync("auth/privateKey.txt");
+        if (!this.userId && !this.privateKey && !this.username) {
+            return { resCode: 1, obj: { "message": "user is not logged in" } };
+        }
+        this.userId = undefined;
+        this.privateKey = undefined;
+        this.username = undefined;
+        return { resCode: 0, obj: { "message": "user logged out" } };
+    }
+    myUsername() {
+        return this.username ?? "Decillion User";
     }
     async generatePayment() {
         let payload = this.stringToBytes(BigInt(Date.now()).toString());
@@ -249,6 +280,12 @@ class Decillion {
                 return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
             }
             return await this.sendRequest(this.userId, "/users/get", { "userId": userId });
+        },
+        me: async () => {
+            if (!this.userId) {
+                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            }
+            return await this.sendRequest(this.userId, "/users/get", { "userId": this.userId });
         },
         list: async (offset, count) => {
             if (!this.userId) {
@@ -423,17 +460,169 @@ class Decillion {
         },
     };
 }
+function isNumeric(str) {
+    return !isNaN(parseInt(str));
+}
+const rl = node_readline_1.default.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+});
+let app = new Decillion();
+const commands = {
+    "login": async (args) => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return await app.login(args[0], args[1]);
+    },
+    "logout": async (args) => {
+        if (args.length !== 0) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return app.logout();
+    },
+    "charge": async (args) => {
+        if (args.length !== 0) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return { resCode: 0, obj: { "paymentUrl": await app.generatePayment() } };
+    },
+    "users.me": async (args) => {
+        if (args.length !== 0) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return app.users.me();
+    },
+    "users.get": async (args) => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return app.users.get(args[0]);
+    },
+    "points.create": async (args) => {
+        if (args.length !== 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        if (args[0] !== "true" && args[0] !== "false") {
+            return { resCode: 30, obj: { message: "unknown parameter value: isPublic --> " + args[0] } };
+        }
+        if (args[1] !== "true" && args[1] !== "false") {
+            return { resCode: 30, obj: { message: "unknown parameter value: persHist --> " + args[1] } };
+        }
+        return await app.points.create(args[0] === "true", args[1] === "true", args[2]);
+    },
+    "points.update": async (args) => {
+        if (args.length !== 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        if (args[1] !== "true" && args[1] !== "false") {
+            return { resCode: 30, obj: { message: "unknown parameter value: isPublic --> " + args[1] } };
+        }
+        if (args[2] !== "true" && args[2] !== "false") {
+            return { resCode: 30, obj: { message: "unknown parameter value: persHist --> " + args[2] } };
+        }
+        return await app.points.update(args[0], args[1] === "true", args[2] === "true");
+    },
+    "points.get": async (args) => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return await app.points.get(args[0]);
+    },
+    "points.delete": async (args) => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return await app.points.delete(args[0]);
+    },
+    "points.join": async (args) => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return await app.points.join(args[0]);
+    },
+    "points.myPoints": async (args) => {
+        if (args.length !== 4) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        if (!isNumeric(args[0])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
+        }
+        if (!isNumeric(args[1])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
+        }
+        return await app.points.myPoints(Number(args[0]), Number(args[1]), args[2], args[3]);
+    },
+    "points.list": async (args) => {
+        if (args.length !== 2) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        if (!isNumeric(args[0])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
+        }
+        if (!isNumeric(args[1])) {
+            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
+        }
+        return await app.points.list(Number(args[0]), Number(args[1]));
+    },
+    "points.history": async (args) => {
+        if (args.length !== 1) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return await app.points.history(args[0]);
+    },
+    "points.signal": async (args) => {
+        if (args.length !== 4) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return await app.points.signal(args[0], args[1], args[2], args[3]);
+    },
+};
+let ask = () => {
+    rl.question(`${app.myUsername()}$ `, async (q) => {
+        let parts = q.trim().split(' ');
+        if (parts.length == 1) {
+            if (parts[0] == "clear") {
+                console.clear();
+                console.log("Welcome to Decillion AI shell, enter your command: \n");
+                setTimeout(() => {
+                    ask();
+                });
+                return;
+            }
+        }
+        let fn = commands[parts[0]];
+        if (fn !== undefined) {
+            let res = await fn(parts.slice(1));
+            if (res.resCode == 0) {
+                console.log(res.obj);
+            }
+            else {
+                console.log("Error: ", res.obj);
+            }
+        }
+        else {
+            console.log("command not detected.");
+        }
+        setTimeout(() => {
+            ask();
+        });
+    });
+};
 (async () => {
-    let app = new Decillion();
+    console.clear();
     await app.connect();
+    console.log("Welcome to Decillion AI shell, enter your command: \n");
+    ask();
+})();
+(async () => {
     // let res = await app.login("kasparus", "");
     // console.log(res);
-    await app.authenticate();
-    // let res = await app.users.get("1@global");
-    // console.log(res);
-    let payUrl = await app.generatePayment();
-    console.log("payment generated. go to link below and charge your account:");
-    console.log(payUrl);
+    // await app.authenticate();
+    // let payUrl = await app.generatePayment();
+    // console.log("payment generated. go to link below and charge your account:");
+    // console.log(payUrl);
+    // console.log("");
     // let res = await app.points.create(true, false, "global");
     // console.log(res);
     // res = await app.points.update(res.obj.point.id, true, true);

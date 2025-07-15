@@ -10,6 +10,7 @@ import (
 	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/future"
 	"log"
+	"strings"
 )
 
 type Actions struct {
@@ -121,14 +122,31 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 // Delete /points/delete check [ true true false ] access [ true false false false DELETE ]
 func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (any, error) {
 	trx := state.Trx()
+	if len(trx.GetColumn("Point", state.Info().PointId(), "|")) == 0 {
+		return nil, errors.New("point does not exist")
+	}
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
 		return nil, errors.New("you are not admin")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
 	trx.DelKey("obj::Point::" + point.Id + "::|")
-	a.App.Tools().Signaler().LeaveGroup(point.Id, state.Info().UserId())
+	members, _ := trx.GetLinksList("member::"+point.Id+"::", 0, 0)
+	usersList := []string{}
+	for _, member := range members {
+		parts := strings.Split(member, "::")
+		trx.DelKey("link::memberof::" + parts[1] + "::" + parts[2])
+		trx.DelKey("link::" + member)
+		usersList = append(usersList, parts[1])
+	}
+	admins, _ := trx.GetLinksList("admin::"+point.Id+"::", 0, 0)
+	for _, admin := range admins {
+		trx.DelKey("link::" + admin)
+	}
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/delete", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
+		for _, user := range usersList {
+			a.App.Tools().Signaler().LeaveGroup(point.Id, user)
+		}
 	}, false)
 	return outputs_points.DeleteOutput{Point: point}, nil
 }
