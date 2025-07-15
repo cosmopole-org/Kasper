@@ -323,6 +323,10 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 				itemKey := item.Key()
 				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
 				if index < offset {
+					if preId != id {
+						preId = id
+						index++
+					}
 					continue
 				}
 				if preId != id {
@@ -355,7 +359,9 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					return nil, err
 				}
 			}
-			objs[tempId] = temp
+			if index >= offset {
+				objs[tempId] = temp
+			}
 		} else if len(meta) == 2 {
 			index := int64(0)
 			offset := meta[0]
@@ -368,9 +374,13 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 				itemKey := item.Key()
 				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
 				if index < offset {
+					if preId != id {
+						preId = id
+						index++
+					}
 					continue
 				}
-				if index > (offset + count) {
+				if index >= (offset + count) {
 					break
 				}
 				if preId != id {
@@ -403,7 +413,9 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					return nil, err
 				}
 			}
-			objs[tempId] = temp
+			if index >= offset && index < (offset+count) {
+				objs[tempId] = temp
+			}
 		}
 		return objs, nil
 	} else {
