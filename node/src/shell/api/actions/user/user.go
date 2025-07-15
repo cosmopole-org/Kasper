@@ -119,7 +119,7 @@ func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput
 
 var (
 	clientID = "94AKF0INP2ApjXud6TTirxyjoQxqNpEk"
-	issuer   = "dev-epfxvx2scaq4cj3t.us.auth0.com"
+	issuer   = "https://dev-epfxvx2scaq4cj3t.us.auth0.com"
 )
 
 // Login /users/login check [ false false false ] access [ true false false false POST ]
