@@ -307,7 +307,8 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					temp = map[string][]byte{}
 					tempId = id
 				}
-				temp[string(itemKey[len(prefix)+len(id)+len("::"):])] = itemVal
+				log.Println("["+string(itemKey)+"]", "["+string(prefix)+id+"::"+"]", "["+string(itemKey)[len(string(prefix))+len(id)+len("::"):]+"]")
+				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
 				if err != nil {
 					return nil, err
 				}
@@ -348,7 +349,8 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					temp = map[string][]byte{}
 					tempId = id
 				}
-				temp[string(itemKey[len(prefix)+len(id)+len("::"):])] = itemVal
+				log.Println("["+string(itemKey)+"]", "["+string(prefix)+id+"::"+"]", "["+string(itemKey)[len(string(prefix))+len(id)+len("::"):]+"]")
+				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
 				if err != nil {
 					return nil, err
 				}
@@ -393,7 +395,8 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					temp = map[string][]byte{}
 					tempId = id
 				}
-				temp[string(itemKey[len(prefix)+len(id)+len("::"):])] = itemVal
+				log.Println("["+string(itemKey)+"]", "["+string(prefix)+id+"::"+"]", "["+string(itemKey)[len(string(prefix))+len(id)+len("::"):]+"]")
+				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
 				if err != nil {
 					return nil, err
 				}
