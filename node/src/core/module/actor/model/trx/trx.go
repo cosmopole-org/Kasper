@@ -284,7 +284,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 				item := it.Item()
 				itemKey := item.Key()
-				id := strings.Split(string(itemKey[:len(prefix)]), "::")[2]
+				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
 				var itemVal []byte
 				err := item.Value(func(v []byte) error {
 					itemVal = v
@@ -326,7 +326,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 				}
 				item := it.Item()
 				itemKey := item.Key()
-				id := strings.Split(string(itemKey[:len(prefix)]), "::")[2]
+				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
 				var itemVal []byte
 				err := item.Value(func(v []byte) error {
 					itemVal = v
@@ -372,7 +372,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 				}
 				item := it.Item()
 				itemKey := item.Key()
-				id := strings.Split(string(itemKey[:len(prefix)]), "::")[2]
+				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
 				var itemVal []byte
 				err := item.Value(func(v []byte) error {
 					itemVal = v
