@@ -1,12 +1,37 @@
-import net from 'net';
+
 import tls from 'tls';
 import crypto from 'crypto';
 import fs from 'fs';
 import exec from 'child_process';
 import readline from 'node:readline';
+import express from 'express';
+import { Server } from 'node:http';
 
 const USER_ID_NOT_SET_ERR_CODE: number = 10;
 const USER_ID_NOT_SET_ERR_MSG: string = "not authenticated, userId is not set";
+
+const AUTH0_DOMAIN = 'dev-epfxvx2scaq4cj3t.us.auth0.com';
+const CLIENT_ID = '94AKF0INP2ApjXud6TTirxyjoQxqNpEk';
+const REDIRECT_URI = 'http://localhost:3000/callback';
+
+function base64URLEncode(str: Buffer) {
+    return str.toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+function sha256(buffer: string) {
+    return crypto.createHash('sha256').update(buffer).digest();
+}
+
+function generatePKCECodes() {
+    const verifier = base64URLEncode(crypto.randomBytes(32));  // your "original code verifier"
+    const challenge = base64URLEncode(sha256(verifier));       // hashed "code challenge"
+    return { verifier, challenge };
+}
+
+const { verifier, challenge } = generatePKCECodes();
 
 class Decillion {
     port: number = 8078;
@@ -190,30 +215,92 @@ class Decillion {
             this.username = (await this.users.me()).obj.user.username;
         }
     }
-    public async login(username: string, emailToken: string): Promise<{ resCode: number, obj: any }> {
-        let res = await this.sendRequest("", "/users/login", { "username": username, "emailToken": emailToken });
-        if (res.resCode == 0) {
-            this.userId = res.obj.user.id;
-            this.privateKey = Buffer.from(
-                "-----BEGIN RSA PRIVATE KEY-----\n" + res.obj.privateKey + "\n-----END RSA PRIVATE KEY-----\n",
-                'utf-8'
-            )
-            await Promise.all([
-                new Promise((resolve, _) => {
-                    fs.writeFile("auth/userId.txt", this.userId ?? "", { encoding: 'utf-8' }, () => {
-                        resolve(undefined);
+    private loginServer: Server | undefined;
+    private runLoginServer() {
+        const server = express();
+        const port = 3000;
+        const authConfig = {
+            domain: AUTH0_DOMAIN,
+            clientId: CLIENT_ID,
+            redirectUri: 'http://localhost:3000/callback',
+        };
+        server.get('/callback', async (req, res) => {
+            const code = req.query.code;
+            try {
+                const tokenRes = await fetch(`https://${authConfig.domain}/oauth/token`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        grant_type: 'authorization_code',
+                        client_id: authConfig.clientId,
+                        code_verifier: verifier,
+                        code,
+                        redirect_uri: authConfig.redirectUri,
+                    }),
+                    headers: { 'content-type': 'application/json' }
+                });
+
+                const idToken = (await tokenRes.json()).id_token;
+
+                let res = await this.sendRequest("", "/users/login", { "username": this.pendingUsername, "emailToken": idToken });
+                if (res.resCode == 0) {
+                    this.userId = res.obj.user.id;
+                    this.privateKey = Buffer.from(
+                        "-----BEGIN RSA PRIVATE KEY-----\n" + res.obj.privateKey + "\n-----END RSA PRIVATE KEY-----\n",
+                        'utf-8'
+                    )
+                    await Promise.all([
+                        new Promise((resolve, _) => {
+                            fs.writeFile("auth/userId.txt", this.userId ?? "", { encoding: 'utf-8' }, () => {
+                                resolve(undefined);
+                            });
+                        }),
+                        new Promise((resolve, _) => {
+                            fs.writeFile("auth/privateKey.txt", res.obj.privateKey ?? "", { encoding: 'utf-8' }, () => {
+                                resolve(undefined);
+                            });
+                        })
+                    ]);
+                    await this.authenticate();
+                    this.username = (await this.users.me()).obj.user.username;
+                }
+                console.log("Login successfull");
+                if (this.loginServer) {
+                    this.loginServer.close(() => {
+                        if (this.loginPromise) {
+                            this.loginPromise(res);
+                        }
                     });
-                }),
-                new Promise((resolve, _) => {
-                    fs.writeFile("auth/privateKey.txt", res.obj.privateKey ?? "", { encoding: 'utf-8' }, () => {
-                        resolve(undefined);
-                    });
-                })
-            ]);
-            await this.authenticate();
-            this.username = (await this.users.me()).obj.user.username;
-        }
-        return res;
+                }
+            } catch (err) {
+                console.error('Auth error:', err);
+                res.status(500).send('Authentication failed');
+            }
+        });
+
+        this.loginServer = server.listen(port, () => {
+            console.log(`Waiting for your login to complete...`);
+        });
+    }
+    private loginPromise: ((value: { resCode: number, obj: any } | PromiseLike<{ resCode: number, obj: any }>) => void) | undefined;
+    private pendingUsername: string | undefined;
+    public async login(username: string): Promise<{ resCode: number, obj: any }> {
+        return new Promise((resolve, reject) => {
+            this.pendingUsername = username;
+            const params = new URLSearchParams({
+                response_type: 'code',
+                client_id: CLIENT_ID,
+                redirect_uri: REDIRECT_URI,
+                scope: 'openid email',
+                code_challenge: challenge,
+                code_challenge_method: 'S256'
+            });
+            const url = `https://${AUTH0_DOMAIN}/authorize?${params.toString()}`;
+            this.loginPromise = resolve;
+            this.runLoginServer();
+            console.log("\nOpen this url and login:\n");
+            console.log(url);
+            console.log("");
+        });
     }
     public async authenticate(): Promise<{ resCode: number, obj: any }> {
         if (!this.userId) {
@@ -505,10 +592,10 @@ let pcId: string | undefined = undefined;
 
 const commands: { [key: string]: (args: string[]) => Promise<{ resCode: number, obj: any }> } = {
     "login": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
-        if (args.length !== 2) {
+        if (args.length !== 1) {
             return { resCode: 30, obj: { message: "invalid parameters count" } }
         }
-        return await app.login(args[0], args[1]);
+        return await app.login(args[0]);
     },
     "logout": async (args: string[]): Promise<{ resCode: number, obj: any }> => {
         if (args.length !== 0) {
