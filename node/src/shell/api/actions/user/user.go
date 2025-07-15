@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"io"
+	"github.com/coreos/go-oidc"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
@@ -20,16 +20,21 @@ import (
 	outputsusers "kasper/src/shell/api/outputs/users"
 	"kasper/src/shell/utils/crypto"
 	"log"
-	"net"
-	"net/http"
-	"time"
 )
 
 type Actions struct {
-	App core.ICore
+	App       core.ICore
+	OauthProv *oidc.Provider
+	OauthCtx  context.Context
 }
 
 func Install(a *Actions) error {
+	a.OauthCtx = context.Background()
+	provider, err := oidc.NewProvider(a.OauthCtx, issuer)
+	if err != nil {
+		panic("Failed to get provider: " + err.Error())
+	}
+	a.OauthProv = provider
 	return nil
 }
 
@@ -113,40 +118,28 @@ func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput
 }
 
 var (
-	zeroDialer net.Dialer
+	clientID = "94AKF0INP2ApjXud6TTirxyjoQxqNpEk"
+	issuer   = "dev-epfxvx2scaq4cj3t.us.auth0.com"
 )
-
-var netClient = &http.Client{
-	Transport: &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return zeroDialer.DialContext(ctx, "tcp4", addr)
-		},
-	},
-	Timeout: time.Duration(1000) * time.Second,
-}
 
 // Login /users/login check [ false false false ] access [ true false false false POST ]
 func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, error) {
-	var resp, err = netClient.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + (input.EmailToken))
+
+	verifier := a.OauthProv.Verifier(&oidc.Config{ClientID: clientID})
+
+	idToken, err := verifier.Verify(a.OauthCtx, input.EmailToken)
 	if err != nil {
+		log.Println("Invalid token: " + err.Error())
 		return nil, err
 	}
-	defer resp.Body.Close()
-	body, err2 := io.ReadAll(resp.Body)
-	if err2 != nil {
-		return nil, err2
+	var claims struct {
+		Email string `json:"email"`
 	}
-	result := make(map[string]interface{})
-	err3 := json.Unmarshal(body, &result)
-	if err3 != nil {
-		return nil, err3
+	if err = idToken.Claims(&claims); err != nil {
+		log.Println("Failed to parse claims" + err.Error())
+		return nil, err
 	}
-	email := ""
-	if result["email"] != nil {
-		email = result["email"].(string)
-	} else {
-		return nil, errors.New("access denied")
-	}
+	email := claims.Email
 	trx := state.Trx()
 	userId := trx.GetLink("UserEmailToId::" + email)
 	log.Println("fetching email:", "["+email+"]", "["+userId+"]")
