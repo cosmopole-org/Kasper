@@ -11,17 +11,18 @@ const node_readline_1 = __importDefault(require("node:readline"));
 const express_1 = __importDefault(require("express"));
 const USER_ID_NOT_SET_ERR_CODE = 10;
 const USER_ID_NOT_SET_ERR_MSG = "not authenticated, userId is not set";
-const AUTH0_DOMAIN = 'dev-epfxvx2scaq4cj3t.us.auth0.com';
-const CLIENT_ID = '94AKF0INP2ApjXud6TTirxyjoQxqNpEk';
-const REDIRECT_URI = 'http://localhost:3000/callback';
+const AUTH0_DOMAIN = "dev-epfxvx2scaq4cj3t.us.auth0.com";
+const CLIENT_ID = "94AKF0INP2ApjXud6TTirxyjoQxqNpEk";
+const REDIRECT_URI = "http://localhost:3000/callback";
 function base64URLEncode(str) {
-    return str.toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+    return str
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
 }
 function sha256(buffer) {
-    return crypto_1.default.createHash('sha256').update(buffer).digest();
+    return crypto_1.default.createHash("sha256").update(buffer).digest();
 }
 function generatePKCECodes() {
     const verifier = base64URLEncode(crypto_1.default.randomBytes(32)); // your "original code verifier"
@@ -31,7 +32,7 @@ function generatePKCECodes() {
 const { verifier, challenge } = generatePKCECodes();
 class Decillion {
     port = 8078;
-    host = 'api.decillionai.com';
+    host = "api.decillionai.com";
     callbacks = {};
     socket;
     received = Buffer.from([]);
@@ -66,21 +67,21 @@ class Decillion {
             };
             this.socket = tls_1.default.connect(options, () => {
                 if (this.socket?.authorized) {
-                    console.log('✔ TLS connection authorized');
+                    console.log("✔ TLS connection authorized");
                 }
                 else {
-                    console.log('⚠ TLS connection not authorized:', this.socket?.authorizationError);
+                    console.log("⚠ TLS connection not authorized:", this.socket?.authorizationError);
                 }
                 resolve(undefined);
             });
-            this.socket.on('error', e => {
+            this.socket.on("error", (e) => {
                 console.log(e);
             });
-            this.socket.on('close', e => {
+            this.socket.on("close", (e) => {
                 console.log(e);
                 this.connectoToTlsServer();
             });
-            this.socket.on('data', (data) => {
+            this.socket.on("data", (data) => {
                 setTimeout(() => {
                     this.received = Buffer.concat([this.received, data]);
                     this.readBytes();
@@ -131,9 +132,9 @@ class Decillion {
     }
     sign(b) {
         if (this.privateKey) {
-            var sign = crypto_1.default.createSign('RSA-SHA256');
-            sign.update(b.toString(), 'utf8');
-            var signature = sign.sign(this.privateKey, 'base64');
+            var sign = crypto_1.default.createSign("RSA-SHA256");
+            sign.update(b.toString(), "utf8");
+            var signature = sign.sign(this.privateKey, "base64");
             return signature;
         }
         else {
@@ -162,13 +163,20 @@ class Decillion {
         let pidBytes = this.stringToBytes(packetId);
         let pathBytes = this.stringToBytes(path);
         let b = Buffer.concat([
-            this.intToBytes(signature.length), signature,
-            this.intToBytes(uidBytes.length), uidBytes,
-            this.intToBytes(pathBytes.length), pathBytes,
-            this.intToBytes(pidBytes.length), pidBytes,
-            payload
+            this.intToBytes(signature.length),
+            signature,
+            this.intToBytes(uidBytes.length),
+            uidBytes,
+            this.intToBytes(pathBytes.length),
+            pathBytes,
+            this.intToBytes(pidBytes.length),
+            pidBytes,
+            payload,
         ]);
-        return { packetId: packetId, data: Buffer.concat([this.intToBytes(b.length), b]) };
+        return {
+            packetId: packetId,
+            data: Buffer.concat([this.intToBytes(b.length), b]),
+        };
     }
     async sendRequest(userId, path, obj) {
         return new Promise((resolve, reject) => {
@@ -208,10 +216,13 @@ class Decillion {
             fs_1.default.mkdirSync("auth");
         if (!fs_1.default.existsSync("files"))
             fs_1.default.mkdirSync("files");
-        if (fs_1.default.existsSync("auth/userId.txt") && fs_1.default.existsSync("auth/privateKey.txt")) {
+        if (fs_1.default.existsSync("auth/userId.txt") &&
+            fs_1.default.existsSync("auth/privateKey.txt")) {
             this.userId = fs_1.default.readFileSync("auth/userId.txt", { encoding: "utf-8" });
             let pk = fs_1.default.readFileSync("auth/privateKey.txt", { encoding: "utf-8" });
-            this.privateKey = Buffer.from("-----BEGIN RSA PRIVATE KEY-----\n" + pk + "\n-----END RSA PRIVATE KEY-----\n", 'utf-8');
+            this.privateKey = Buffer.from("-----BEGIN RSA PRIVATE KEY-----\n" +
+                pk +
+                "\n-----END RSA PRIVATE KEY-----\n", "utf-8");
         }
     }
     async connect() {
@@ -228,38 +239,43 @@ class Decillion {
         const authConfig = {
             domain: AUTH0_DOMAIN,
             clientId: CLIENT_ID,
-            redirectUri: 'http://localhost:3000/callback',
+            redirectUri: "http://localhost:3000/callback",
         };
-        server.get('/callback', async (req, res) => {
+        server.get("/callback", async (req, res) => {
             const code = req.query.code;
             try {
                 const tokenRes = await fetch(`https://${authConfig.domain}/oauth/token`, {
                     method: "POST",
                     body: JSON.stringify({
-                        grant_type: 'authorization_code',
+                        grant_type: "authorization_code",
                         client_id: authConfig.clientId,
                         code_verifier: verifier,
                         code,
                         redirect_uri: authConfig.redirectUri,
                     }),
-                    headers: { 'content-type': 'application/json' }
+                    headers: { "content-type": "application/json" },
                 });
                 const idToken = (await tokenRes.json()).id_token;
-                let res = await this.sendRequest("", "/users/login", { "username": this.pendingUsername, "emailToken": idToken });
+                let res = await this.sendRequest("", "/users/login", {
+                    username: this.pendingUsername,
+                    emailToken: idToken,
+                });
                 if (res.resCode == 0) {
                     this.userId = res.obj.user.id;
-                    this.privateKey = Buffer.from("-----BEGIN RSA PRIVATE KEY-----\n" + res.obj.privateKey + "\n-----END RSA PRIVATE KEY-----\n", 'utf-8');
+                    this.privateKey = Buffer.from("-----BEGIN RSA PRIVATE KEY-----\n" +
+                        res.obj.privateKey +
+                        "\n-----END RSA PRIVATE KEY-----\n", "utf-8");
                     await Promise.all([
                         new Promise((resolve, _) => {
-                            fs_1.default.writeFile("auth/userId.txt", this.userId ?? "", { encoding: 'utf-8' }, () => {
+                            fs_1.default.writeFile("auth/userId.txt", this.userId ?? "", { encoding: "utf-8" }, () => {
                                 resolve(undefined);
                             });
                         }),
                         new Promise((resolve, _) => {
-                            fs_1.default.writeFile("auth/privateKey.txt", res.obj.privateKey ?? "", { encoding: 'utf-8' }, () => {
+                            fs_1.default.writeFile("auth/privateKey.txt", res.obj.privateKey ?? "", { encoding: "utf-8" }, () => {
                                 resolve(undefined);
                             });
-                        })
+                        }),
                     ]);
                     await this.authenticate();
                     this.username = (await this.users.me()).obj.user.username;
@@ -274,8 +290,8 @@ class Decillion {
                 }
             }
             catch (err) {
-                console.error('Auth error:', err);
-                res.status(500).send('Authentication failed');
+                console.error("Auth error:", err);
+                res.status(500).send("Authentication failed");
             }
         });
         this.loginServer = server.listen(port, () => {
@@ -288,12 +304,12 @@ class Decillion {
         return new Promise((resolve, reject) => {
             this.pendingUsername = username;
             const params = new URLSearchParams({
-                response_type: 'code',
+                response_type: "code",
                 client_id: CLIENT_ID,
                 redirect_uri: REDIRECT_URI,
-                scope: 'openid email',
+                scope: "openid email",
                 code_challenge: challenge,
-                code_challenge_method: 'S256'
+                code_challenge_method: "S256",
             });
             const url = `https://${AUTH0_DOMAIN}/authorize?${params.toString()}`;
             this.loginPromise = resolve;
@@ -305,7 +321,10 @@ class Decillion {
     }
     async authenticate() {
         if (!this.userId) {
-            return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+            return {
+                resCode: USER_ID_NOT_SET_ERR_CODE,
+                obj: { message: USER_ID_NOT_SET_ERR_MSG },
+            };
         }
         return await this.sendRequest(this.userId, "authenticate", {});
     }
@@ -315,19 +334,21 @@ class Decillion {
         if (fs_1.default.existsSync("auth/privateKey.txt"))
             fs_1.default.rmSync("auth/privateKey.txt");
         if (!this.userId && !this.privateKey && !this.username) {
-            return { resCode: 1, obj: { "message": "user is not logged in" } };
+            return { resCode: 1, obj: { message: "user is not logged in" } };
         }
         this.userId = undefined;
         this.privateKey = undefined;
         this.username = undefined;
-        return { resCode: 0, obj: { "message": "user logged out" } };
+        return { resCode: 0, obj: { message: "user logged out" } };
     }
     myUsername() {
         return this.username ?? "Decillion User";
     }
     myPrivateKey() {
         if (this.privateKey) {
-            let str = this.privateKey.toString().slice("-----BEGIN RSA PRIVATE KEY-----\n".length);
+            let str = this.privateKey
+                .toString()
+                .slice("-----BEGIN RSA PRIVATE KEY-----\n".length);
             str = str.slice(0, str.length - "\n-----END RSA PRIVATE KEY-----\n".length);
             return str;
         }
@@ -341,205 +362,384 @@ class Decillion {
         let res = await fetch("https://payment.decillionai.com/create-checkout-session", {
             method: "POST",
             headers: {
-                'Content-Type': 'application/json'
+                "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                "userId": this.userId,
-                "payload": payload.toString('base64'),
-                "signature": sign,
+                userId: this.userId,
+                payload: payload.toString("base64"),
+                signature: sign,
             }),
         });
-        return (await res.text());
+        return await res.text();
     }
     users = {
         get: async (userId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/users/get", { "userId": userId });
+            return await this.sendRequest(this.userId, "/users/get", {
+                userId: userId,
+            });
         },
         me: async () => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/users/get", { "userId": this.userId });
+            return await this.sendRequest(this.userId, "/users/get", {
+                userId: this.userId,
+            });
         },
         list: async (offset, count) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/users/list", { "offset": offset, "count": count });
-        }
+            return await this.sendRequest(this.userId, "/users/list", {
+                offset: offset,
+                count: count,
+            });
+        },
     };
     points = {
         create: async (isPublic, persHist, origin) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/create", { "isPublic": isPublic, "persHist": persHist, "orig": origin });
+            return await this.sendRequest(this.userId, "/points/create", {
+                isPublic: isPublic,
+                persHist: persHist,
+                orig: origin,
+            });
         },
         update: async (pointId, isPublic, persHist) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/update", { "pointId": pointId, "isPublic": isPublic, "persHist": persHist });
+            return await this.sendRequest(this.userId, "/points/update", {
+                pointId: pointId,
+                isPublic: isPublic,
+                persHist: persHist,
+            });
         },
         delete: async (pointId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/delete", { "pointId": pointId });
+            return await this.sendRequest(this.userId, "/points/delete", {
+                pointId: pointId,
+            });
         },
         get: async (pointId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/get", { "pointId": pointId });
+            return await this.sendRequest(this.userId, "/points/get", {
+                pointId: pointId,
+            });
         },
         myPoints: async (offset, count, tag, orig) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/read", { "offset": offset, "count": count, "tag": tag, "orig": orig });
+            return await this.sendRequest(this.userId, "/points/read", {
+                offset: offset,
+                count: count,
+                tag: tag,
+                orig: orig,
+            });
         },
         list: async (offset, count) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/list", { "offset": offset, "count": count });
+            return await this.sendRequest(this.userId, "/points/list", {
+                offset: offset,
+                count: count,
+            });
         },
         join: async (pointId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/join", { "pointId": pointId });
+            return await this.sendRequest(this.userId, "/points/join", {
+                pointId: pointId,
+            });
         },
         history: async (pointId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/history", { "pointId": pointId });
+            return await this.sendRequest(this.userId, "/points/history", {
+                pointId: pointId,
+            });
         },
         signal: async (pointId, userId, typ, data) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/signal", { "pointId": pointId, "userId": userId, "type": typ, "data": data });
+            return await this.sendRequest(this.userId, "/points/signal", {
+                pointId: pointId,
+                userId: userId,
+                type: typ,
+                data: data,
+            });
         },
         addMember: async (userId, pointId, metadata) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/addMember", { "pointId": pointId, "userId": userId, "metadata": metadata });
+            return await this.sendRequest(this.userId, "/points/addMember", {
+                pointId: pointId,
+                userId: userId,
+                metadata: metadata,
+            });
         },
         updateMember: async (userId, pointId, metadata) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/updateMember", { "pointId": pointId, "userId": userId, "metadata": metadata });
+            return await this.sendRequest(this.userId, "/points/updateMember", {
+                pointId: pointId,
+                userId: userId,
+                metadata: metadata,
+            });
         },
         removeMember: async (userId, pointId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/removeMember", { "pointId": pointId, "userId": userId });
+            return await this.sendRequest(this.userId, "/points/removeMember", {
+                pointId: pointId,
+                userId: userId,
+            });
         },
         listMembers: async (pointId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/points/removeMember", { "pointId": pointId });
+            return await this.sendRequest(this.userId, "/points/removeMember", {
+                pointId: pointId,
+            });
         },
     };
     invites = {
         create: async (pointId, userId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/invites/create", { "pointId": pointId, "userId": userId });
+            return await this.sendRequest(this.userId, "/invites/create", {
+                pointId: pointId,
+                userId: userId,
+            });
         },
         cancel: async (pointId, userId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/invites/cancel", { "pointId": pointId, "userId": userId });
+            return await this.sendRequest(this.userId, "/invites/cancel", {
+                pointId: pointId,
+                userId: userId,
+            });
         },
         accept: async (pointId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/invites/accept", { "pointId": pointId });
+            return await this.sendRequest(this.userId, "/invites/accept", {
+                pointId: pointId,
+            });
         },
         decline: async (pointId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/invites/decline", { "pointId": pointId });
+            return await this.sendRequest(this.userId, "/invites/decline", {
+                pointId: pointId,
+            });
         },
     };
     chains = {
         create: async (participants, isTemp) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/chains/create", { "participants": participants, "isTemp": isTemp });
+            return await this.sendRequest(this.userId, "/chains/create", {
+                participants: participants,
+                isTemp: isTemp,
+            });
         },
         submitBaseTrx: async (chainId, key, obj) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
             let payload = this.stringToBytes(JSON.stringify(obj));
             let signature = this.sign(payload);
-            return await this.sendRequest(this.userId, "/chains/submitBaseTrx", { "chainId": chainId, "key": key, "payload": payload, "signature": signature });
+            return await this.sendRequest(this.userId, "/chains/submitBaseTrx", {
+                chainId: chainId,
+                key: key,
+                payload: payload,
+                signature: signature,
+            });
         },
     };
     machines = {
         createApp: async (chainId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/apps/create", { "chainId": chainId });
+            return await this.sendRequest(this.userId, "/apps/create", {
+                chainId: chainId,
+            });
         },
         createMachine: async (username, appId, path, publicKey) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/machines/create", { "username": username, "appId": appId, "path": path, "publicKey": publicKey });
+            return await this.sendRequest(this.userId, "/machines/create", {
+                username: username,
+                appId: appId,
+                path: path,
+                publicKey: publicKey,
+            });
         },
         deploy: async (machineId, byteCode, runtime, metadata) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/machines/deploy", { "machineId": machineId, "byteCode": byteCode, "runtime": runtime, "metadata": metadata });
+            return await this.sendRequest(this.userId, "/machines/deploy", {
+                machineId: machineId,
+                byteCode: byteCode,
+                runtime: runtime,
+                metadata: metadata,
+            });
         },
         listApps: async (offset, count) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/apps/list", { "offset": offset, "count": count });
+            return await this.sendRequest(this.userId, "/apps/list", {
+                offset: offset,
+                count: count,
+            });
         },
         listMachines: async (offset, count) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/machines/list", { "offset": offset, "count": count });
+            return await this.sendRequest(this.userId, "/machines/list", {
+                offset: offset,
+                count: count,
+            });
         },
     };
     storage = {
         upload: async (pointId, data, fileId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/storage/upload", { "pointId": pointId, "data": data.toString('base64'), "fileId": fileId });
+            return await this.sendRequest(this.userId, "/storage/upload", {
+                pointId: pointId,
+                data: data.toString("base64"),
+                fileId: fileId,
+            });
         },
         download: async (pointId, fileId) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            let res = await this.sendRequest(this.userId, "/storage/download", { "pointId": pointId, "fileId": fileId });
+            let res = await this.sendRequest(this.userId, "/storage/download", {
+                pointId: pointId,
+                fileId: fileId,
+            });
             if (res.resCode === 0) {
                 return new Promise((resolve, reject) => {
-                    fs_1.default.writeFile("files/" + fileId, res.obj.data, { encoding: 'binary' }, () => {
+                    fs_1.default.writeFile("files/" + fileId, res.obj.data, { encoding: "binary" }, () => {
                         resolve(undefined);
                     });
                 });
@@ -549,15 +749,24 @@ class Decillion {
     pc = {
         runPc: async () => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
             return await this.sendRequest(this.userId, "/pc/runPc", {});
         },
         execCommand: async (vmId, command) => {
             if (!this.userId) {
-                return { resCode: USER_ID_NOT_SET_ERR_CODE, obj: { message: USER_ID_NOT_SET_ERR_MSG } };
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
             }
-            return await this.sendRequest(this.userId, "/pc/execCommand", { "vmId": vmId, "command": command });
+            return await this.sendRequest(this.userId, "/pc/execCommand", {
+                vmId: vmId,
+                command: command,
+            });
         },
     };
 }
@@ -578,7 +787,7 @@ async function executeBash(command) {
             }
             console.log(stdout);
         });
-        dir.on('exit', function (code) {
+        dir.on("exit", function (code) {
             resolve(code);
         });
     });
@@ -590,32 +799,32 @@ const rl = node_readline_1.default.createInterface({
 let app = new Decillion();
 let pcId = undefined;
 const commands = {
-    "login": async (args) => {
+    login: async (args) => {
         if (args.length !== 1) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         return await app.login(args[0]);
     },
-    "logout": async (args) => {
+    logout: async (args) => {
         if (args.length !== 0) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         return app.logout();
     },
-    "charge": async (args) => {
+    charge: async (args) => {
         if (args.length !== 0) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
-        return { resCode: 0, obj: { "paymentUrl": await app.generatePayment() } };
+        return { resCode: 0, obj: { paymentUrl: await app.generatePayment() } };
     },
-    "printPrivateKey": async (args) => {
+    printPrivateKey: async (args) => {
         if (args.length !== 0) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         console.log("");
         console.log(app.myPrivateKey());
         console.log("");
-        return { resCode: 0, obj: { "message": "printed." } };
+        return { resCode: 0, obj: { message: "printed." } };
     },
     "users.me": async (args) => {
         if (args.length !== 0) {
@@ -634,10 +843,16 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (!isNumeric(args[0])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: offset --> " + args[0] },
+            };
         }
         if (!isNumeric(args[1])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: count --> " + args[1] },
+            };
         }
         return app.users.list(Number(args[0]), Number(args[1]));
     },
@@ -646,10 +861,16 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (args[0] !== "true" && args[0] !== "false") {
-            return { resCode: 30, obj: { message: "unknown parameter value: isPublic --> " + args[0] } };
+            return {
+                resCode: 30,
+                obj: { message: "unknown parameter value: isPublic --> " + args[0] },
+            };
         }
         if (args[1] !== "true" && args[1] !== "false") {
-            return { resCode: 30, obj: { message: "unknown parameter value: persHist --> " + args[1] } };
+            return {
+                resCode: 30,
+                obj: { message: "unknown parameter value: persHist --> " + args[1] },
+            };
         }
         return await app.points.create(args[0] === "true", args[1] === "true", args[2]);
     },
@@ -658,10 +879,16 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (args[1] !== "true" && args[1] !== "false") {
-            return { resCode: 30, obj: { message: "unknown parameter value: isPublic --> " + args[1] } };
+            return {
+                resCode: 30,
+                obj: { message: "unknown parameter value: isPublic --> " + args[1] },
+            };
         }
         if (args[2] !== "true" && args[2] !== "false") {
-            return { resCode: 30, obj: { message: "unknown parameter value: persHist --> " + args[2] } };
+            return {
+                resCode: 30,
+                obj: { message: "unknown parameter value: persHist --> " + args[2] },
+            };
         }
         return await app.points.update(args[0], args[1] === "true", args[2] === "true");
     },
@@ -688,10 +915,16 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (!isNumeric(args[0])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: offset --> " + args[0] },
+            };
         }
         if (!isNumeric(args[1])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: count --> " + args[1] },
+            };
         }
         return await app.points.myPoints(Number(args[0]), Number(args[1]), "", args[2]);
     },
@@ -700,10 +933,16 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (!isNumeric(args[0])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: offset --> " + args[0] },
+            };
         }
         if (!isNumeric(args[1])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: count --> " + args[1] },
+            };
         }
         return await app.points.list(Number(args[0]), Number(args[1]));
     },
@@ -797,7 +1036,7 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         await app.storage.download(args[0], args[1]);
-        return { resCode: 0, obj: { "message": `file ${args[1]} downloaded.` } };
+        return { resCode: 0, obj: { message: `file ${args[1]} downloaded.` } };
     },
     "chains.create": async (args) => {
         if (args.length !== 2) {
@@ -811,7 +1050,10 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid participants json" } };
         }
         if (args[1] !== "true" && args[1] !== "false") {
-            return { resCode: 30, obj: { message: "unknown parameter value: isTemp --> " + args[1] } };
+            return {
+                resCode: 30,
+                obj: { message: "unknown parameter value: isTemp --> " + args[1] },
+            };
         }
         return await app.chains.create(participants, args[1] == "true");
     },
@@ -820,7 +1062,10 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (!isNumeric(args[0])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: chainId --> " + args[0] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: chainId --> " + args[0] },
+            };
         }
         let obj = {};
         try {
@@ -836,7 +1081,10 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (!isNumeric(args[0])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: chainId --> " + args[0] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: chainId --> " + args[0] },
+            };
         }
         return await app.machines.createApp(BigInt(args[0]));
     },
@@ -859,17 +1107,23 @@ const commands = {
         }
         await executeBash(`cd ${args[1]}/builder && bash build.sh`);
         let bc = fs_1.default.readFileSync(`${args[1]}/builder/bytecode`);
-        return await app.machines.deploy(args[0], bc.toString('base64'), args[2], metadata);
+        return await app.machines.deploy(args[0], bc.toString("base64"), args[2], metadata);
     },
     "machines.listApps": async (args) => {
         if (args.length !== 2) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (!isNumeric(args[0])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: offset --> " + args[0] },
+            };
         }
         if (!isNumeric(args[1])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: count --> " + args[1] },
+            };
         }
         return await app.machines.listApps(Number(args[0]), Number(args[1]));
     },
@@ -878,10 +1132,16 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         if (!isNumeric(args[0])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: offset --> " + args[0] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: offset --> " + args[0] },
+            };
         }
         if (!isNumeric(args[1])) {
-            return { resCode: 30, obj: { message: "invalid numeric value: count --> " + args[1] } };
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: count --> " + args[1] },
+            };
         }
         return await app.machines.listMachines(Number(args[0]), Number(args[1]));
     },
@@ -896,34 +1156,86 @@ const commands = {
     },
 };
 const help = `
-    commands:
+Decillion AI CLI – Command Reference
+For full documentation, visit: https://decillionai.com/docs/cli
 
-    [users]
+[Authentication & Users]
 
-    users.login [username] [email token] ==> login to your account
-    users.get [user id] ==> get a user's data
-    users.me ==> get your data
+  login [username]
+    → Log into your account.
+      - The username is permanent and cannot be changed once set.
+      - Example: login alice123
 
-    [points]
+  users.get [userId]
+    → Get data for a specific user by ID.
+      - Example: users.get 123@global
 
-    ponts.create [is public] [has persistent history] [origin] ==> create a point with these props in the specified origin state
-    points.update [point id] [is public] [has persistent history] ==> a point with the specified point id to these props
-    ponts.get [point id] ==> get point by point id
-    ponts.delete [point id] ==> delete point by point id
-    ponts.join [point id] ==> join a public point by point id
-    ponts.myPoints [offset] [count] [origin] ==> get your points specifying offset and count of the list and origin you want to search in
-    ponts.list [offset] [count] ==> search in all points specifying offset and count
-    ponts.signal [point id] [user id] [transfer type] [data] ==> signal a point to send data througn protocol to a user in the point or broadcast data in the point to all users in it
+  users.me
+    → Get your own user profile and metadata.
 
+  users.list [offset] [count]
+    → List users in paginated format.
+      - offset: number to skip (e.g., 0)
+      - count: number to fetch (e.g., 10)
+      - Example: users.list 0 10
+
+
+[Points]
+
+  points.create [isPublic] [hasPersistentHistory] [origin]
+    → Create a new point with the given configuration.
+      - isPublic: true/false — should the point be public?
+      - hasPersistentHistory: true/false — should it retain history?
+      - origin: e.g., "global" — namespace of the point
+      - Example: points.create true true global
+
+  points.update [pointId] [isPublic] [hasPersistentHistory]
+    → Update visibility and history settings for a point.
+      - Example: points.update 345@global false true
+
+  points.get [pointId]
+    → Retrieve details of a specific point.
+      - Example: points.get 345@global
+
+  points.delete [pointId]
+    → Delete a point by ID.
+      - Example: points.delete 345@global
+
+  points.join [pointId]
+    → Join a public point by ID.
+      - Example: points.join 345@global
+
+  points.myPoints [offset] [count] [origin]
+    → List your own points in a specific origin.
+      - offset: skip count (e.g., 0)
+      - count: number of results (e.g., 10)
+      - origin: optional filter like "global"
+      - Example: points.myPoints 0 10 global
+
+  points.list [offset] [count]
+    → List all public points with pagination.
+      - Example: points.list 0 10
+
+  points.signal [pointId] [userId] [transferType] [data]
+    → Send a signal/message in a point or specific user.
+      - userId: recipient (e.g., 123@global), or "-" for broadcast
+      - pointId: point to send to (e.g., 345@global), or "-" for single
+      - transferType: message type (e.g., single, broadcast)
+      - data: JSON or string payload
+      - Example 1: points.signal - 123@global single {"text": "Hello!"}
+      - Example 2: points.signal 345@global - broadcast {"text": "Hello! World"}
+
+
+For more details, visit: https://decillionai.com/docs/cli
 `;
 let ask = () => {
     rl.question(`${app.myUsername()}$ `, async (q) => {
-        let parts = q.trim().split(' ');
+        let parts = q.trim().split(" ");
         if (pcId) {
             let command = q.trim();
             if (parts.length == 2 && parts[0] === "pc" && parts[1] == "stop") {
                 pcId = undefined;
-                console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
+                console.log('Welcome to Decillion AI shell, enter your command or enter "help" to view commands instructions: \n');
                 setTimeout(() => {
                     ask();
                 });
@@ -939,7 +1251,7 @@ let ask = () => {
         if (parts.length == 1) {
             if (parts[0] == "clear") {
                 console.clear();
-                console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
+                console.log('Welcome to Decillion AI shell, enter your command or enter "help" to view commands instructions: \n');
                 setTimeout(() => {
                     ask();
                 });
@@ -947,7 +1259,7 @@ let ask = () => {
             }
             else if (parts[0] == "help") {
                 console.log(help);
-                console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
+                console.log('Welcome to Decillion AI shell, enter your command or enter "help" to view commands instructions: \n');
                 setTimeout(() => {
                     ask();
                 });
@@ -975,6 +1287,6 @@ let ask = () => {
 (async () => {
     console.clear();
     await app.connect();
-    console.log("Welcome to Decillion AI shell, enter your command or enter \"help\" to view commands instructions: \n");
+    console.log('Welcome to Decillion AI shell, enter your command or enter "help" to view commands instructions: \n');
     ask();
 })();

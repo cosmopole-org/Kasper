@@ -195,7 +195,7 @@ func (f *FireCtl) RunVm(id string, terminal chan string) {
 			}},
 			MachineCfg: models.MachineConfiguration{
 				VcpuCount:  firecracker.Int64(1),
-				MemSizeMib: firecracker.Int64(512),
+				MemSizeMib: firecracker.Int64(64),
 			},
 		}
 
