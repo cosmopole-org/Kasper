@@ -318,7 +318,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					}
 				}
 			}
-			if matched && (tempId != "") {
+			if _, ok := temp["|"]; ok && matched && (tempId != "") {
 				objs[tempId] = temp
 			}
 		} else if len(meta) == 1 {
@@ -370,7 +370,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					}
 				}
 			}
-			if matched && (tempId != "") {
+			if _, ok := temp["|"]; ok && matched && (tempId != "") {
 				if index >= offset {
 					objs[tempId] = temp
 				}
@@ -400,6 +400,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 						}
 					}
 					if _, ok := temp["|"]; ok && matched && (tempId != "") {
+						log.Println("id", id, index, offset, count)
 						if index < offset {
 							index++
 							temp = map[string][]byte{}
@@ -410,6 +411,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							break
 						}
 						index++
+						log.Println("id second", id, index, offset, count)
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
@@ -428,7 +430,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					}
 				}
 			}
-			if matched && (tempId != "") {
+			if _, ok := temp["|"]; ok && matched && (tempId != "") {
 				if index >= offset && index < (offset+count) {
 					objs[tempId] = temp
 				}
