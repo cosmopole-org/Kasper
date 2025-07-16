@@ -349,6 +349,10 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							index++
 							temp = map[string][]byte{}
 							tempId = id
+							temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
+							if err != nil {
+								return nil, err
+							}
 							continue
 						}
 						index++
@@ -409,6 +413,10 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							index++
 							temp = map[string][]byte{}
 							tempId = id
+							temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
+							if err != nil {
+								return nil, err
+							}
 							continue
 						}
 						if index >= (offset + count) {
