@@ -6,6 +6,7 @@ import (
 	"io"
 	"kasper/src/shell/utils/future"
 	"os"
+	"sync"
 	"time"
 
 	adapters "kasper/src/abstract/adapters/firectl"
@@ -17,6 +18,9 @@ import (
 )
 
 type ChannelWriteCloser struct {
+	lock   sync.Mutex
+	open   bool
+	buf    []byte
 	C      chan string
 	closed bool
 }
@@ -26,8 +30,27 @@ func (w *ChannelWriteCloser) Write(p []byte) (int, error) {
 	if w.closed {
 		return 0, fmt.Errorf("write to closed ChannelWriteCloser")
 	}
-	w.C <- string(p)
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if w.open {
+		w.C <- string(p)
+	} else {
+		w.buf = append(w.buf, p...)
+	}
 	return len(p), nil
+}
+
+// open the channel
+func (w *ChannelWriteCloser) Open() {
+	w.open = true
+	var initial string
+	func() {
+		w.lock.Lock()
+		defer w.lock.Unlock()
+		initial = string(w.buf)
+		w.buf = []byte{}
+	}()
+	w.C <- initial
 }
 
 // Close closes the channel
@@ -40,8 +63,8 @@ func (w *ChannelWriteCloser) Close() error {
 }
 
 type ChannelReader struct {
-	C    chan []byte
-	buf  []byte
+	C   chan []byte
+	buf []byte
 }
 
 func (cr *ChannelReader) Read(p []byte) (int, error) {
@@ -58,10 +81,10 @@ func (cr *ChannelReader) Read(p []byte) (int, error) {
 }
 
 type TerminalManager struct {
-	writer       *ChannelWriteCloser
-	reader       *ChannelReader
-	done         chan struct{}
-	logger       *log.Entry
+	writer *ChannelWriteCloser
+	reader *ChannelReader
+	done   chan struct{}
+	logger *log.Entry
 }
 
 type FireCtl struct {
@@ -183,7 +206,7 @@ func (f *FireCtl) RunVm(id string, terminal chan string) {
 		readerChannel := make(chan []byte)
 
 		// Create terminal manager
-		termManager := NewTerminalManager(&ChannelWriteCloser{C: writerChannel}, &ChannelReader{C: readerChannel}, mainLog)
+		termManager := NewTerminalManager(&ChannelWriteCloser{C: writerChannel, open: false}, &ChannelReader{C: readerChannel}, mainLog)
 		termManager.Start()
 		defer termManager.Stop()
 
@@ -267,6 +290,8 @@ func (f *FireCtl) RunVm(id string, terminal chan string) {
 		mainLog.Info("Press Ctrl+C to shutdown VM")
 
 		log.Println("step 5 of executing vm...")
+
+		termManager.writer.Open()
 
 		// Wait for shutdown signal
 		<-sigCh
