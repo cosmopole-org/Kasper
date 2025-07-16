@@ -202,8 +202,8 @@ func (f *FireCtl) RunVm(id string, terminal chan string) {
 		// Handle signals
 		sigCh := make(chan int, 1)
 
-		writerChannel := make(chan string)
-		readerChannel := make(chan []byte)
+		writerChannel := make(chan string, 10000)
+		readerChannel := make(chan []byte, 10000)
 
 		// Create terminal manager
 		termManager := NewTerminalManager(&ChannelWriteCloser{C: writerChannel, open: false}, &ChannelReader{C: readerChannel}, mainLog)
