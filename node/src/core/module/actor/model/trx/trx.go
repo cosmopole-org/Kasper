@@ -390,17 +390,21 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					itemVal = v
 					return nil
 				})
+				log.Println("parsing field...", tempId, id, itemKey)
 				if tempId != id {
+					log.Println("id before", id, tempId, index, offset, count)
 					matched := true
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
 							if v != string(temp[k]) {
+								log.Println(k, v, string(temp[k]))
 								matched = false
 							}
 						}
 					}
+					log.Println("match state:", matched)
 					if _, ok := temp["|"]; ok && matched && (tempId != "") {
-						log.Println("id", id, index, offset, count)
+						log.Println("id", id, tempId, index, offset, count)
 						if index < offset {
 							index++
 							temp = map[string][]byte{}
@@ -411,7 +415,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							break
 						}
 						index++
-						log.Println("id second", id, index, offset, count)
+						log.Println("id after", id, tempId, index, offset, count)
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
