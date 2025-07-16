@@ -294,12 +294,12 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					matched := true
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
-							if (len(temp[k]) == 0) || (v != string(temp[k])) {
+							if v != string(temp[k]) {
 								matched = false
 							}
 						}
 					}
-					if matched && (tempId != "") {
+					if _, ok := temp["|"]; ok && matched && (tempId != "") {
 						objs[tempId] = temp
 					}
 					temp = map[string][]byte{}
@@ -310,7 +310,17 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					return nil, err
 				}
 			}
-			objs[tempId] = temp
+			matched := true
+			if len(queryMap) > 0 {
+				for k, v := range queryMap {
+					if (len(temp[k]) == 0) || (v != string(temp[k])) {
+						matched = false
+					}
+				}
+			}
+			if matched && (tempId != "") {
+				objs[tempId] = temp
+			}
 		} else if len(meta) == 1 {
 			index := int64(0)
 			offset := meta[0]
@@ -329,12 +339,12 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					matched := true
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
-							if (len(temp[k]) == 0) || (v != string(temp[k])) {
+							if v != string(temp[k]) {
 								matched = false
 							}
 						}
 					}
-					if matched && (tempId != "") {
+					if _, ok := temp["|"]; ok && matched && (tempId != "") {
 						if index < offset {
 							index++
 							temp = map[string][]byte{}
@@ -352,8 +362,18 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					return nil, err
 				}
 			}
-			if index >= offset {
-				objs[tempId] = temp
+			matched := true
+			if len(queryMap) > 0 {
+				for k, v := range queryMap {
+					if (len(temp[k]) == 0) || (v != string(temp[k])) {
+						matched = false
+					}
+				}
+			}
+			if matched && (tempId != "") {
+				if index >= offset {
+					objs[tempId] = temp
+				}
 			}
 		} else if len(meta) == 2 {
 			index := int64(0)
@@ -374,12 +394,12 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					matched := true
 					if len(queryMap) > 0 {
 						for k, v := range queryMap {
-							if (len(temp[k]) == 0) || (v != string(temp[k])) {
+							if v != string(temp[k]) {
 								matched = false
 							}
 						}
 					}
-					if matched && (tempId != "") {
+					if _, ok := temp["|"]; ok && matched && (tempId != "") {
 						if index < offset {
 							index++
 							temp = map[string][]byte{}
@@ -400,8 +420,18 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					return nil, err
 				}
 			}
-			if index >= offset && index < (offset+count) {
-				objs[tempId] = temp
+			matched := true
+			if len(queryMap) > 0 {
+				for k, v := range queryMap {
+					if (len(temp[k]) == 0) || (v != string(temp[k])) {
+						matched = false
+					}
+				}
+			}
+			if matched && (tempId != "") {
+				if index >= offset && index < (offset+count) {
+					objs[tempId] = temp
+				}
 			}
 		}
 		return objs, nil
