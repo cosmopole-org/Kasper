@@ -25,11 +25,6 @@ def start_lorax_server():
         '--port', '80',
     ]
     
-    # Add quantization if specified
-    quantize = os.environ.get('QUANTIZE')
-    if quantize:
-        cmd.extend(['--quantize', quantize])
-    
     print(f"Starting LoRAX server with command: {' '.join(cmd)}")
     
     server_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
