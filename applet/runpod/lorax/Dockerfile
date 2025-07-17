@@ -10,7 +10,7 @@ RUN pip install runpod
 COPY handler.py /app/handler.py
 
 # Expose port for LoRAX server
-EXPOSE 8080
+EXPOSE 80
 
 # Set environment variables
 ENV CUDA_VISIBLE_DEVICES=0

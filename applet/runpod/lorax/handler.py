@@ -24,7 +24,7 @@ def start_lorax_server():
         '--max-input-length', str(max_input_length),
         '--max-total-tokens', str(max_total_tokens),
         '--hostname', '0.0.0.0',
-        '--port', '8080',
+        '--port', '80',
         '--huggingface-hub-cache', '/tmp/hf_home'
     ]
     
