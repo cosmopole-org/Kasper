@@ -63,7 +63,8 @@ def test_async_generation():
         print(f"\nResult {i+1}:")
         print(job.output())
 
-print("Testing LoRAX on RunPod Serverless...")
-test_lorax_generation()
-print("\n" + "="*50 + "\n")
-test_async_generation()
+if __name__ == "__main__":
+    print("Testing LoRAX on RunPod Serverless...")
+    test_lorax_generation()
+    print("\n" + "="*50 + "\n")
+    test_async_generation()

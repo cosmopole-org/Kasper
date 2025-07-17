@@ -135,5 +135,6 @@ server_thread = Thread(target=start_lorax_server)
 server_thread.daemon = True
 server_thread.start()
 
-# Start RunPod serverless
-runpod.serverless.start({"handler": handler})
+if __name__ == "__main__":
+    # Start RunPod serverless
+    runpod.serverless.start({"handler": handler})
