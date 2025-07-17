@@ -22,4 +22,4 @@ ENV HF_TOKEN=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
 RUN mkdir -p /tmp/transformers_cache /tmp/hf_home
 
 # Default command will be overridden by RunPod
-CMD ["python", "handler.py"]
+ENTRYPOINT ["python", "handler.py"]
