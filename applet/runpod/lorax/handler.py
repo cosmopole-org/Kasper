@@ -38,7 +38,8 @@ def start_lorax_server():
                 server_ready = True
                 print("LoRAX server is ready!")
                 return
-        except requests.exceptions.ConnectionError:
+        except Exception as e:
+            print('An exception occurred: {}'.format(e))
             pass
         
         time.sleep(5)
