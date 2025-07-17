@@ -41,7 +41,7 @@ def start_lorax_server():
     max_retries = 60
     for i in range(max_retries):
         try:
-            response = requests.get('http://localhost:8080/health')
+            response = requests.get('http://localhost:80/health')
             if response.status_code == 200:
                 server_ready = True
                 print("LoRAX server is ready!")
@@ -59,7 +59,7 @@ def generate_text(prompt, adapter_id=None, max_new_tokens=100, temperature=0.7, 
     if not server_ready:
         return {"error": "Server not ready"}
     
-    url = "http://localhost:8080/generate"
+    url = "http://localhost:80/generate"
     
     payload = {
         "inputs": prompt,
@@ -118,7 +118,7 @@ def upload_adapter(adapter_path, adapter_id):
     if not server_ready:
         return {"error": "Server not ready"}
     
-    url = "http://localhost:8080/adapter"
+    url = "http://localhost:80/adapter"
     
     files = {'file': open(adapter_path, 'rb')}
     data = {'adapter_id': adapter_id}
