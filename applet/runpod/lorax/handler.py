@@ -20,6 +20,7 @@ def start_lorax_server():
     
     cmd = [
         'lorax-launcher',
+        "--json-output",
         '--model-id', model_id,
         '--port', '80',
     ]
