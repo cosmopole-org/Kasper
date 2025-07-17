@@ -20,7 +20,6 @@ def start_lorax_server():
     
     cmd = [
         'lorax-launcher',
-        "--debug",
         '--model-id', model_id,
         '--port', '80',
     ]

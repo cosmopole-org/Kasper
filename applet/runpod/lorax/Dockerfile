@@ -8,6 +8,7 @@ RUN pip install runpod
 
 # Copy your handler script
 COPY handler.py /app/handler.py
+COPY download.py /app/download.py
 
 # Expose port for LoRAX server
 EXPOSE 80
@@ -20,6 +21,8 @@ ENV HF_TOKEN=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
 
 # Create cache directories
 RUN mkdir -p /tmp/transformers_cache /tmp/hf_home
+
+RUN python download.py
 
 # Default command will be overridden by RunPod
 ENTRYPOINT ["python", "handler.py"]
