@@ -1,0 +1,23 @@
+[build]
+base_image = "ghcr.io/predibase/lorax:latest"
+python_version = "3.11"
+cuda_version = "12.1"
+
+[build.env]
+MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.1"
+MAX_INPUT_LENGTH = "4096"
+MAX_TOTAL_TOKENS = "5096"
+QUANTIZE = "awq"  # Options: awq, eetq, bitsandbytes, fp8
+TRANSFORMERS_CACHE = "/tmp/transformers_cache"
+HF_HOME = "/tmp/hf_home"
+
+[runtime]
+handler = "handler.handler"
+python_version = "3.11"
+cuda_version = "12.1"
+
+[runtime.env]
+MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.1"
+MAX_INPUT_LENGTH = "4096"
+MAX_TOTAL_TOKENS = "5096"
+QUANTIZE = "awq"
