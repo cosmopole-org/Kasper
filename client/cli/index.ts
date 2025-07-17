@@ -1483,6 +1483,68 @@ For full documentation, visit: https://decillionai.com/docs/cli
       - pointId: id of the point which you want to download the file from it
       - fileId: id of the file you want to download from the point
       - Example: storage.download 345@global 789@global
+  
+[Chains]
+
+  chains.create [participants stakes] [isTemporary]
+    → Create a new workchain. it can be a temporary chain for private temporary and limited time use cases or a fixed workchain as a new branch in system customized for new use case.
+      - participants: a json string showing all participants in this chain based on their node ip address and the stake each of them wanna share in the consensus
+      - isTemporary: a boolean specifying wether the chain is temporary and will be disabled after some time or not
+      - Example: chains.create { "123.124.125.126": 1600, "127.128.129.120": 1500 } false
+  
+  chains.submitBaseTrx [chainId] [key] [payload]
+    → Submit a new base transaction on-chain. base transactions include the basic actions on this system sucn as points actions, machines and apps creations and deploying, invitation actions, storage actions and other actions which can also be done through this CLI.
+      - chainId: id of the workchain in which you wanna submit the transaction
+      - key: the action key (api path) you wanna execute on-chain
+      - payload: a json string containing the input values of the action to be executed
+      - Example: chains.submitBaseTrx 1 /points/create { "isPublic": true, "persHist": true, "orig": "global" }
+
+[Pc]
+
+  pc.runPc
+    → Create a new linux cloud pc micro virtual machine for different use cases.
+      - Example: pc.runPc
+  
+  pc.execCommand [vmId] [command]
+    → execute a command in cloud pc terminal
+      - vmId: the id of cloud pc returned by pc.runPc
+      - command: the command you want to execute on cloud pc
+      - Example: pc.execCommand 82855778-6cc7-4d3a-84d8-5c57749275f5@172.77.5.1 "mkdir test"
+
+[Machines]
+
+  machines.createApp [chainId]
+    → create a new Dapp on the platform on a specific workchain
+      - chainId: the workchain you want to crate app on it
+      - Example: machines.createApp 1
+
+  machines.createMachine [username] [appId] [path]
+    → create a new Dapp on the platform on a specific workchain
+      - username: the username of the machine you want to create. machines are treated same as users on this platform so they must have a unique username
+      - appId: id of the app you want to link this machine to. machines linked to same app has access to same state and storage
+      - path: the path of the function of the machine
+      - Example: machines.createApp calculator 984@global /api/sum
+
+  machines.deploy [machineId] [machine folder path] [runtime] [metadata]
+    → deploy a project as machine on the platform specifying its runtime type
+      - machineId: id of the machine you want to deploy the project on. this project code will function as this machine
+      - machine folder path: the path of the folder of the project you want to deploy which is located on your local filesystem
+      - runtime: the runtime type of the machine you want to deploy. it can be one of these types:
+        1.wasm
+        2.elpis
+        3.docker
+      - metadata: a json string specifying addition metadata of the deploy action. if the runtime type is docker it must be:
+        { "imageName": "[Docker image name you wanna create and link to this machine]" }
+      - Example1: machines.deploy 876@global /home/ubuntu/calculator-proj wasm {}
+      - Example2: machines.deploy 876@global /home/ubuntu/deepseek-docker-proj docker { "imageName": "ollama-deepseek" }
+
+  machines.listApps [offset] [count]
+    → get a paginated list of apps already created on this platform.
+      - Example: machines.listApps 0 15
+  
+  machines.listMachines [offset] [count]
+    → get a paginated list of machines already created on this platform.
+      - Example: machines.listMachines 0 15
 
 For more details, visit: https://decillionai.com/docs/cli
 `;

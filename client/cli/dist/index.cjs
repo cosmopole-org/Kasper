@@ -1224,7 +1224,98 @@ For full documentation, visit: https://decillionai.com/docs/cli
       - data: JSON or string payload
       - Example 1: points.signal - 123@global single {"text": "Hello!"}
       - Example 2: points.signal 345@global - broadcast {"text": "Hello! World"}
+  
+  points.addMember [userId] [pointId] [metadata]
+    → Add a user to one of your adminstrated points.
+      - userId: id of the user you want to add to the point
+      - pointId: id of the point in which you are admin and wanna add the user to it as member
+      - metadata: a json string which will be attached to membership for future usage
+      - Example: points.addMember 123@global 345@global { "role": "teacher" }
+  
+  points.updateMember [userId] [pointId] [metadata]
+    → Update a user membership who was added to one of your adminstrated points previously.
+      - userId: id of the member user in the point
+      - pointId: id of the point in which you've added the user as member, previously
+      - metadata: a json string which will be attached to membership for future usage
+      - Example: points.updateMember 123@global 345@global { "role": "teacher" }
+  
+  points.removeMember [userId] [pointId]
+    → Revoke a user membership who was added to one of your adminstrated points previously.
+      - userId: id of the member user in the point
+      - pointId: id of the point in which you've added the user as member, previously
+      - Example: points.removeMember 123@global 345@global
 
+  points.listMembers [userId] [pointId]
+    → Get a list of members in a point which you have access to as member or admin.
+      - pointId: id of the point which you want to get its members list
+      - Example: points.listMembers 345@global
+
+[Invites]
+
+  invites.create [pointId] [userId]
+    → Invite a user to a point in which you are admin.
+      - pointId: id of the point which you want to invite the user to it
+      - userId: id of the user you want to invite to your point
+      - Example: invites.create 345@global 123@global
+
+  invites.cancel [pointId] [userId]
+    → Cancel a point invitation previously sent to a user.
+      - pointId: id of the point which you have invited the user to it
+      - userId: id of the user whom you have invited to your point
+      - Example: invites.cancel 345@global 123@global
+
+  invites.accept [pointId]
+    → Accept a point invitation which you have received.
+      - pointId: id of the point which you have received the invitation from it.
+      - Example: invites.accept 345@global
+
+  invites.decline [pointId]
+    → Decline a point invitation which you have received.
+      - pointId: id of the point which you have received the invitation from it.
+      - Example: invites.decline 345@global
+
+[Storage]
+
+  storage.upload [pointId] [filePath] [optional param: fileId]
+    → Upload a file from your local file system to the cloud.
+      - pointId: id of the point which you want to upload the file to it
+      - filePath: path of file which you want to upload.
+      - fileId (optional): an optional parameter which is not necessery to be set in all cases. you can set it to append this file payload to another existing file in the cloud
+      - Example1: storage.upload 345@global /home/user/desktop/book.pdf
+      - Example2: storage.upload 345@global /home/user/desktop/book.pdf 789@global
+
+  storage.download [pointId] [fileId]
+    → Download a file from a point you have access to it, to your local device.
+      - pointId: id of the point which you want to download the file from it
+      - fileId: id of the file you want to download from the point
+      - Example: storage.download 345@global 789@global
+  
+[Chains]
+
+  chains.create [participants stakes] [isTemporary]
+    → Create a new workchain. it can be a temporary chain for private temporary and limited time use cases or a fixed workchain as a new branch in system customized for new use case.
+      - participants: a json string showing all participants in this chain based on their node ip address and the stake each of them wanna share in the consensus
+      - isTemporary: a boolean specifying wether the chain is temporary and will be disabled after some time or not
+      - Example: chains.create { "123.124.125.126": 1600, "127.128.129.120": 1500 } false
+  
+  chains.submitBaseTrx [chainId] [key] [payload]
+    → Submit a new base transaction on-chain. base transactions include the basic actions on this system sucn as points actions, machines and apps creations and deploying, invitation actions, storage actions and other actions which can also be done through this CLI.
+      - chainId: id of the workchain in which you wanna submit the transaction
+      - key: the action key (api path) you wanna execute on-chain
+      - payload: a json string containing the input values of the action to be executed
+      - Example: chains.submitBaseTrx 1 /points/create { "isPublic": true, "persHist": true, "orig": "global" }
+
+[Pc]
+
+  pc.runPc
+    → Create a new linux cloud pc micro virtual machine for different use cases.
+      - Example: pc.runPc
+  
+  pc.execCommand [vmId] [command]
+    → execute a command in cloud pc terminal
+      - vmId: the id of cloud pc returned by pc.runPc
+      - command: the command you want to execute on cloud pc
+      - Example: pc.execCommand abc-def-
 
 For more details, visit: https://decillionai.com/docs/cli
 `;
