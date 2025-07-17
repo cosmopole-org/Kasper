@@ -9,6 +9,7 @@ RUN pip install runpod
 # Copy your handler script
 COPY handler.py /app/handler.py
 COPY download.py /app/download.py
+COPY sleeper.py /app/sleeper.py
 
 # Expose port for LoRAX server
 EXPOSE 80
