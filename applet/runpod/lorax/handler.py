@@ -130,11 +130,10 @@ def upload_adapter(adapter_path, adapter_id):
     except requests.exceptions.RequestException as e:
         return {"error": f"Upload failed: {str(e)}"}
 
-if name == "__main__":
-    # Start the server in a separate thread
-    server_thread = Thread(target=start_lorax_server)
-    server_thread.daemon = True
-    server_thread.start()
-    
-    # Start RunPod serverless
-    runpod.serverless.start({"handler": handler})
+# Start the server in a separate thread
+server_thread = Thread(target=start_lorax_server)
+server_thread.daemon = True
+server_thread.start()
+
+# Start RunPod serverless
+runpod.serverless.start({"handler": handler})
