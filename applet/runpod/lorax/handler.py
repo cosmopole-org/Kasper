@@ -20,6 +20,7 @@ def start_lorax_server():
     
     cmd = [
         'lorax-launcher',
+        "--debug",
         '--model-id', model_id,
         '--max-input-length', str(max_input_length),
         '--max-total-tokens', str(max_total_tokens),
