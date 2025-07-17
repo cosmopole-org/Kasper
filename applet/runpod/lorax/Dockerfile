@@ -25,4 +25,4 @@ RUN mkdir -p /tmp/transformers_cache /tmp/hf_home
 RUN python download.py
 
 # Default command will be overridden by RunPod
-ENTRYPOINT ["python", "handler.py"]
+ENTRYPOINT ["python", "sleeper.py"]
