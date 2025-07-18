@@ -237,7 +237,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		heads := map[string]string{}
-		err = json.Unmarshal([]byte(headers), &headers)
+		err = json.Unmarshal([]byte(headers), &heads)
 		if err != nil {
 			log.Println(err)
 			return err.Error()
