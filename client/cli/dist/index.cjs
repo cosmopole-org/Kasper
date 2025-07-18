@@ -385,6 +385,19 @@ class Decillion {
                 userId: userId,
             });
         },
+        lockToken: async (amount, type, target) => {
+            if (!this.userId) {
+                return {
+                    resCode: USER_ID_NOT_SET_ERR_CODE,
+                    obj: { message: USER_ID_NOT_SET_ERR_MSG },
+                };
+            }
+            return await this.sendRequest(this.userId, "/users/lockToken", {
+                amount: amount,
+                type: type,
+                target: target
+            });
+        },
         me: async () => {
             if (!this.userId) {
                 return {
@@ -506,19 +519,33 @@ class Decillion {
                 pointId: pointId,
             });
         },
-        signal: async (pointId, userId, typ, data) => {
+        signal: async (pointId, userId, typ, data, lockId) => {
             if (!this.userId) {
                 return {
                     resCode: USER_ID_NOT_SET_ERR_CODE,
                     obj: { message: USER_ID_NOT_SET_ERR_MSG },
                 };
             }
-            return await this.sendRequest(this.userId, "/points/signal", {
-                pointId: pointId,
-                userId: userId,
-                type: typ,
-                data: data,
-            });
+            if (lockId) {
+                let m = json_bigint_1.default.parse(data);
+                m["paymentLockId"] = lockId;
+                m["lockSignature"] = this.sign(Buffer.from(lockId));
+                let newData = json_bigint_1.default.stringify(m);
+                return await this.sendRequest(this.userId, "/points/signal", {
+                    pointId: pointId,
+                    userId: userId,
+                    type: typ,
+                    data: newData,
+                });
+            }
+            else {
+                return await this.sendRequest(this.userId, "/points/signal", {
+                    pointId: pointId,
+                    userId: userId,
+                    type: typ,
+                    data: data,
+                });
+            }
         },
         addMember: async (userId, pointId, metadata) => {
             if (!this.userId) {
@@ -839,6 +866,18 @@ const commands = {
         }
         return app.users.get(args[0]);
     },
+    "users.lockToken": async (args) => {
+        if (args.length !== 3) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        if (!isNumeric(args[0])) {
+            return {
+                resCode: 30,
+                obj: { message: "invalid numeric value: amount --> " + args[0] },
+            };
+        }
+        return app.users.lockToken(Number(args[0]), args[1], args[2]);
+    },
     "users.list": async (args) => {
         if (args.length !== 2) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
@@ -958,6 +997,12 @@ const commands = {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         return await app.points.signal(args[0], args[1], args[2], args[3]);
+    },
+    "points.paidSignal": async (args) => {
+        if (args.length !== 5) {
+            return { resCode: 30, obj: { message: "invalid parameters count" } };
+        }
+        return await app.points.signal(args[0], args[1], args[2], args[3], args[4]);
     },
     "points.addMember": async (args) => {
         if (args.length !== 3) {
@@ -1170,6 +1215,16 @@ For full documentation, visit: https://decillionai.com/docs/cli
   users.get [userId]
     → Get data for a specific user by ID.
       - Example: users.get 123@global
+
+  users.lockToken [amount] [type] [target]
+    → lock some tokens with specific amount to spend in different use cases such as paying bots, machines and on-chain transactions.
+      - amount: the amount of tokens which will be spent and paid
+      - type: type of use case in which the token will be spent. currently 2 types are supported:
+        1. exec: for paying applet on-chain execution
+        2. pay: to pay an applet to run off-chain
+      - target: if type is "exec" then target should be a json string showing an array of validator nodes' ids. otherwise if type is "pay" the target should be the receiver userId who is the machine to be executed or the owner of that machine
+      - Example1: users.lockToken 50 exec 123@global
+      - Example2: users.lockToken 100 pay 145@global
 
   users.me
     → Get your own user profile and metadata.

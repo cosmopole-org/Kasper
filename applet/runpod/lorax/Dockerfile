@@ -22,7 +22,7 @@ RUN mkdir -p /tmp/transformers_cache /tmp/hf_home
 
 RUN python download.py
 
-RUN apt install -y nodejs npm
+RUN apt -y update && apt install -y nodejs npm
 RUN npm i
 
 # Default command will be overridden by RunPod
