@@ -194,6 +194,7 @@ public:
 void wasmDoCritical();
 void wasmRunTask(function<void(void *)>, int index);
 
+WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result newSyncTask(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result output(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result consoleLog(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
@@ -550,6 +551,9 @@ void WasmMac::registerHost(std::string modPath)
     WasmEdge_ValType Params11[6] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
     WasmEdge_ValType Returns11[1] = {WasmEdge_ValTypeGenI64()};
     this->registerFunction(HostMod, "execDocker", execDocker, Params11, 6, Returns11);
+    WasmEdge_ValType Params12[6] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
+    WasmEdge_ValType Returns12[1] = {WasmEdge_ValTypeGenI64()};
+    this->registerFunction(HostMod, "httpPost", httpPost, Params12, 6, Returns12);
 
     auto Res = WasmEdge_VMRegisterModuleFromImport(VMCxt, HostMod);
     if (!WasmEdge_ResultOK(Res))
@@ -1030,6 +1034,85 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     std::string packet = j.dump();
 
     rt->callback(&packet[0]);
+
+    // WasmEdge_StringDelete(memName);
+
+    return WasmEdge_Result_Success;
+}
+
+WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out)
+{
+    auto memName = WasmEdge_StringCreateByCString("memory");
+    auto mallocName = WasmEdge_StringCreateByCString("malloc");
+
+    WasmMac *rt = (WasmMac *)data;
+    auto mod = WasmEdge_VMGetActiveModule(rt->vm);
+    uint32_t urlOffset = WasmEdge_ValueGetI32(In[0]);
+    int urlL = WasmEdge_ValueGetI32(In[1]);
+    uint32_t headsOffset = WasmEdge_ValueGetI32(In[2]);
+    int headsL = WasmEdge_ValueGetI32(In[3]);
+    uint32_t bodyOffset = WasmEdge_ValueGetI32(In[4]);
+    int bodyL = WasmEdge_ValueGetI32(In[5]);
+
+    auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
+
+    unsigned char *rawKey = new unsigned char[urlL];
+    vector<char> rawKeyC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawKey, urlOffset, urlL);
+    for (int i = 0; i < urlL; i++)
+    {
+        rawKeyC.push_back((char)rawKey[i]);
+    }
+    auto url = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    unsigned char *rawIn = new unsigned char[headsL];
+    vector<char> rawInC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawIn, headsOffset, headsL);
+    for (int i = 0; i < headsL; i++)
+    {
+        rawInC.push_back((char)rawIn[i]);
+    }
+    auto headers = std::string(rawInC.begin(), rawInC.end());
+
+    unsigned char *rawPi = new unsigned char[bodyL];
+    vector<char> rawPiC{};
+    WasmEdge_MemoryInstanceGetData(mem, rawPi, bodyOffset, bodyL);
+    for (int i = 0; i < bodyL; i++)
+    {
+        rawPiC.push_back((char)rawPi[i]);
+    }
+    auto body = std::string(rawPiC.begin(), rawPiC.end());
+
+    json j;
+    j["key"] = "httpPost";
+    json j2;
+    j2["machineId"] = rt->machineId;
+    j2["url"] = url;
+    j2["headers"] = headers;
+    j2["body"] = body;
+    j["input"] = j2;
+    std::string packet = j.dump();
+
+    std::string val = rt->callback(&packet[0]);
+    auto valL = val.size();
+
+    WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
+    WasmEdge_Value Returns[1] = {WasmEdge_ValueGenI32(0)};
+
+    WasmEdge_VMExecute(rt->vm, mallocName, Params, 1, Returns, 1);
+    int valOffset = WasmEdge_ValueGetI32(Returns[0]);
+
+    char *rawArr = &val[0];
+    unsigned char *arr = new unsigned char[valL];
+    for (int i = 0; i < valL; i++)
+    {
+        arr[i] = (unsigned char)rawArr[i];
+    }
+
+    WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
+    int64_t c = ((ino64_t)valOffset << 32) | valL;
+
+    Out[0] = WasmEdge_ValueGenI64(c);
 
     // WasmEdge_StringDelete(memName);
 

@@ -2,12 +2,9 @@ package main
 
 import (
 	model "applet/src/models"
-	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"reflect"
 	"sort"
 	"strings"
@@ -655,6 +652,8 @@ func (nh *NetHttp) Post(url string, headers map[string]string, body any) string 
 
 var logger = &Logger{}
 
+var network = &NetHttp{}
+
 var syncTasks = map[string]func(){}
 
 func doSync(task func(), deps []string, name string) {
@@ -710,39 +709,18 @@ func run(a int64) int64 {
 	msg := input["text"]
 	logger.Log(msg.(string))
 
-	payload := map[string]any{
+	url := "https://api.runpod.ai/v2/4gi3crdziy6rim/runsync"
+	body := map[string]any{
 		"input": map[string]any{
 			"prompt": msg.(string),
 		},
 	}
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		logger.Log("Error encoding JSON:" + err.Error())
-		return 0
-	}
-	req, err := http.NewRequest("POST", "https://api.runpod.ai/v2/4gi3crdziy6rim/runsync", bytes.NewBuffer(jsonData))
-	if err != nil {
-		logger.Log("Error creating request:" + err.Error())
-		return 0
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer rpa_1O58OQHD3WZ06YWJLBQRWWT33G8HXS0KCPWXHO8Iw8unx0")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Log("Request failed:" + err.Error())
-		return 0
-	}
-	defer resp.Body.Close()
-	logger.Log("Response status:" + resp.Status)
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Log("Error reading response body:" + err.Error())
-		return 0
+	headers := map[string]string{
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer rpa_1O58OQHD3WZ06YWJLBQRWWT33G8HXS0KCPWXHO8Iw8unx0",
 	}
 	result := map[string]any{}
-	json.Unmarshal(bodyBytes, &result)
+	json.Unmarshal([]byte(network.Post(url, headers, body)), &result)
 	resultMsg := result["output"].(map[string]any)["generated_text"].(string)
 	answer, _ := json.Marshal(map[string]any{
 		"text": resultMsg,
