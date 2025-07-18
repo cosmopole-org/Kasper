@@ -1,8 +1,9 @@
 package inputs_users
 
 type LockTokenInput struct {
-	Amount        int64  `json:"amount" validate:"required"`
-	ExecMachineId string `json:"execMachineId" validate:"required"`
+	Amount int64  `json:"amount" validate:"required"`
+	Type   string `json:"type" validate:"required"`
+	Target string `json:"target" validate:"required"`
 }
 
 func (d LockTokenInput) GetData() any {

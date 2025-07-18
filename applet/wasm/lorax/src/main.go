@@ -707,20 +707,26 @@ func run(a int64) int64 {
 		logger.Log(err.Error())
 	}
 	msg := input["text"]
-	logger.Log(msg.(string))
+	paymentLockId := input["paymentLockId"]
+	lockSignature := input["lockSignature"]
 
 	url := "https://api.runpod.ai/v2/4gi3crdziy6rim/runsync"
 	body := map[string]any{
 		"input": map[string]any{
 			"prompt": msg.(string),
 		},
+		"userId":    signal.User.Id,
+		"lockId":    paymentLockId,
+		"signature": lockSignature,
 	}
 	headers := map[string]string{
 		"Content-Type":  "application/json",
 		"Authorization": "Bearer rpa_1O58OQHD3WZ06YWJLBQRWWT33G8HXS0KCPWXHO8Iw8unx0",
 	}
 	result := map[string]any{}
-	json.Unmarshal([]byte(network.Post(url, headers, body)), &result)
+	res := network.Post(url, headers, body)
+	logger.Log(res)
+	json.Unmarshal([]byte(res), &result)
 	resultMsg := result["output"].(map[string]any)["generated_text"].(string)
 	answer, _ := json.Marshal(map[string]any{
 		"text": resultMsg,

@@ -1552,7 +1552,34 @@ For more details, visit: https://decillionai.com/docs/cli
 
 let ask = () => {
   rl.question(`${app.myUsername()}$ `, async (q) => {
-    let parts = q.trim().split(" ");
+    let str = q.trim();
+    let parts: string[] = [];
+    let inVal = false;
+    let valEdge = '';
+    let temp = '';
+    for (let i = 0; i < str.length; i++) {
+      if (inVal) {
+        if (str[i] === valEdge) {
+          inVal = false;
+          valEdge = '';
+        } else {
+          temp += str[i];
+        }
+      } else {
+        if (str[i] === '\'' || str[i] === '\"') {
+          inVal = true;
+          valEdge = str[i];
+        } else if (str[i] === ' ') {
+          parts.push(temp);
+          temp = '';
+        } else {
+          temp += str[i];
+        }
+      }
+    }
+    if (temp !== '') {
+      parts.push(temp);
+    }
     if (pcId) {
       let command = q.trim();
       if (parts.length == 2 && parts[0] === "pc" && parts[1] == "stop") {

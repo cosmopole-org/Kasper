@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/adapters/docker"
 	"kasper/src/abstract/adapters/file"
 	"kasper/src/abstract/adapters/signaler"
@@ -27,7 +28,6 @@ import (
 	"kasper/src/core/module/actor/model/base"
 	inputs_points "kasper/src/shell/api/inputs/points"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
-	inputs_users "kasper/src/shell/api/inputs/users"
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
 	"log"
@@ -322,7 +322,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		trxInp := inputs_users.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost), TokenOwnerId: tokenOwnerId}
+		trxInp := packet.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost), TokenOwnerId: tokenOwnerId}
 		i, _ := json.Marshal(trxInp)
 		wm.app.ModifyState(false, func(trx trx.ITrx) {
 			trx.PutString("Temp::User::"+tokenOwnerId+"::consumedTokens::"+tokenId, "true")

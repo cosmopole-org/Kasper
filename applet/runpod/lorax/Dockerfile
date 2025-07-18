@@ -6,11 +6,7 @@ WORKDIR /app
 # Install RunPod SDK
 RUN pip install runpod
 
-# Copy your handler script
-COPY handler.py /app/handler.py
-COPY download.py /app/download.py
-COPY sleeper.py /app/sleeper.py
-COPY run.sh /app/run.sh
+COPY . .
 
 # Expose port for LoRAX server
 EXPOSE 80
@@ -25,6 +21,9 @@ ENV HF_TOKEN=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
 RUN mkdir -p /tmp/transformers_cache /tmp/hf_home
 
 RUN python download.py
+
+RUN apt install -y nodejs npm
+RUN npm i
 
 # Default command will be overridden by RunPod
 ENTRYPOINT ["bash", "run.sh"]

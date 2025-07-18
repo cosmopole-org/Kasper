@@ -65,6 +65,14 @@ def generate_text(prompt, adapter_id=None, max_new_tokens=100, temperature=0.7, 
 
 def handler(event):
     """RunPod handler function"""
+    userId = event.get('userId', '')
+    signature = event.get('signature', '')
+    lockId = event.get('lockId', '')
+
+    response = requests.post("http://localhost:3000/comsumeLock", json={"signature": signature, "lockId": lockId, "userId": userId})
+    if response.json()["success"] is not True:
+        return {"error": "payment consumption has failed"}        
+    
     global server_ready
 
     # Start server if not already running

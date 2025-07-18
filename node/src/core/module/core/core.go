@@ -33,10 +33,10 @@ import (
 	actor "kasper/src/core/module/actor"
 	mainstate "kasper/src/core/module/actor/model/state"
 	module_trx "kasper/src/core/module/actor/model/trx"
-	inputs_users "kasper/src/shell/api/inputs/users"
 	mach_model "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
+	packetmodel "kasper/src/abstract/models/packet"
 	"math"
 	"slices"
 
@@ -581,7 +581,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 				kvTokenKeyword := "consumeToken: "
 				for _, ef := range packet.Effects.DbUpdates {
 					if (len(ef.Val) > len(kvTokenKeyword)) && (string(ef.Val[0:len(kvTokenKeyword)]) == kvTokenKeyword) {
-						tokenData := inputs_users.ConsumeTokenInput{}
+						tokenData := packetmodel.ConsumeTokenInput{}
 						e := json.Unmarshal([]byte(string(ef.Val[len(kvTokenKeyword):])), &tokenData)
 						if e != nil {
 							log.Println(e)

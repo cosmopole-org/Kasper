@@ -102,19 +102,69 @@ func (a *Actions) LockToken(state state.IState, input inputsusers.LockTokenInput
 	if user.Balance < input.Amount {
 		return nil, errors.New("your balance is not enough")
 	}
-	validators := a.App.Tools().Network().Chain().GetValidatorsOfMachineShard(input.ExecMachineId)
-	str, err := json.Marshal(validators)
-	if err != nil {
-		return nil, err
-	}
-	if input.Amount < int64(len(validators)) {
-		return nil, errors.New("amount to be locked can not be less than validators count")
-	}
-	user.Balance -= input.Amount
-	user.Push(state.Trx())
 	lockId := crypto.SecureUniqueString()
-	state.Trx().PutJson("Json::User::"+state.Info().UserId(), "lockedTokens."+lockId, map[string]any{"amount": input.Amount, "validators": string(str)}, true)
+	if input.Type == "exec" {
+		validators := a.App.Tools().Network().Chain().GetValidatorsOfMachineShard(input.Target)
+		str, err := json.Marshal(validators)
+		if err != nil {
+			return nil, err
+		}
+		if input.Amount < int64(len(validators)) {
+			return nil, errors.New("amount to be locked can not be less than validators count")
+		}
+		user.Balance -= input.Amount
+		user.Push(state.Trx())
+		state.Trx().PutJson("Json::User::"+state.Info().UserId(), "lockedTokens."+lockId, map[string]any{"type": "exec", "amount": input.Amount, "validators": string(str)}, true)
+	} else if input.Type == "pay" {
+		if !state.Trx().HasObj("User", input.Target) {
+			return nil, errors.New("target user not acceptable")
+		}
+		user.Balance -= input.Amount
+		user.Push(state.Trx())
+		state.Trx().PutJson("Json::User::"+state.Info().UserId(), "lockedTokens."+lockId, map[string]any{"type": "pay", "amount": input.Amount, "userId": input.Target}, true)
+	} else {
+		return nil, errors.New("unknown lock type")
+	}
 	return map[string]any{"tokenId": lockId}, nil
+}
+
+// ConsumeLock /users/consumeLock check [ true false false ] access [ true false false false POST ]
+func (a *Actions) ConsumeLock(state state.IState, input inputsusers.ConsumeLockInput) (any, error) {
+	receiver := models.User{Id: state.Info().UserId()}.Pull(state.Trx())
+	if input.Type == "pay" {
+		if !state.Trx().HasObj("User", input.UserId) {
+			return nil, errors.New("payer user not found")
+		}
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(input.UserId, []byte(input.LockId), input.Signature); success {
+			sender := models.User{Id: input.UserId}.Pull(state.Trx())
+			if payment, err := state.Trx().GetJson("Json::User::"+sender.Id, "lockedTokens."+input.LockId); err == nil {
+				if typ, ok := payment["type"].(string); ok && (typ == "pay") {
+					if amount, ok := payment["amount"].(float64); ok && (int64(amount) == input.Amount) {
+						if target, ok := payment["userId"].(string); ok && (target == receiver.Id) {
+							sender.Balance -= input.Amount
+							sender.Push(state.Trx())
+							receiver.Balance += input.Amount
+							receiver.Push(state.Trx())
+							state.Trx().DelJson("Json::User::"+sender.Id, "lockedTokens."+input.LockId)
+							return map[string]any{"success": true}, nil
+						} else {
+							return nil, errors.New("you are not target")
+						}
+					} else {
+						return nil, errors.New("amount of payment not matched")
+					}
+				} else {
+					return nil, errors.New("type is not payment")
+				}
+			} else {
+				return nil, errors.New("lock not found")
+			}
+		} else {
+			return nil, errors.New("signature not verified")
+		}
+	} else {
+		return nil, errors.New("unknown lock type")
+	}
 }
 
 var (
