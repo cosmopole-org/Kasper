@@ -9,10 +9,12 @@ package wasm
 import "C"
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"kasper/src/abstract/adapters/docker"
 	"kasper/src/abstract/adapters/file"
 	"kasper/src/abstract/adapters/signaler"
@@ -29,6 +31,7 @@ import (
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
 	"log"
+	"net/http"
 	"strings"
 )
 
@@ -212,6 +215,50 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		// log.Println("elpis vm:", text)
+	} else if key == "httpPost" {
+		url, err := checkField(input, "url", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		headers, err := checkField(input, "headers", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		body, err := checkField(input, "body", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(body)))
+		if err != nil {
+			log.Println("Error creating request:" + err.Error())
+			return err.Error()
+		}
+		heads := map[string]string{}
+		err = json.Unmarshal([]byte(headers), &headers)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		for k, v := range heads {
+			req.Header.Set(k, v)
+		}
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println("Request failed:" + err.Error())
+			return err.Error()
+		}
+		defer resp.Body.Close()
+		log.Println("Response status:" + resp.Status)
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("Error reading response body:" + err.Error())
+			return err.Error()
+		}
+		return string(bodyBytes)
 	} else if key == "checkTokenValidity" {
 		tokenOwnerId, err := checkField(input, "tokenOwnerId", "")
 		if err != nil {

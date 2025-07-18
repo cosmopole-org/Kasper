@@ -9,6 +9,7 @@ const fs_1 = __importDefault(require("fs"));
 const child_process_1 = __importDefault(require("child_process"));
 const node_readline_1 = __importDefault(require("node:readline"));
 const express_1 = __importDefault(require("express"));
+const json_bigint_1 = __importDefault(require("json-bigint"));
 const USER_ID_NOT_SET_ERR_CODE = 10;
 const USER_ID_NOT_SET_ERR_MSG = "not authenticated, userId is not set";
 const AUTH0_DOMAIN = "dev-epfxvx2scaq4cj3t.us.auth0.com";
@@ -99,7 +100,7 @@ class Decillion {
                 let key = data.subarray(pointer, pointer + keyLen).toString();
                 pointer += keyLen;
                 let payload = data.subarray(pointer);
-                let obj = JSON.parse(payload.toString());
+                let obj = json_bigint_1.default.parse(payload.toString());
                 if (key == "pc/message") {
                     if (pcId)
                         process.stdout.write(obj.message);
@@ -117,7 +118,7 @@ class Decillion {
                 let resCode = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
                 pointer += 4;
                 let payload = data.subarray(pointer).toString();
-                let obj = JSON.parse(payload);
+                let obj = json_bigint_1.default.parse(payload);
                 let cb = this.callbacks[packetId];
                 if (cb)
                     cb(resCode, obj);
@@ -157,7 +158,7 @@ class Decillion {
     }
     createRequest(userId, path, obj) {
         let packetId = Math.random().toString().substring(2);
-        let payload = this.stringToBytes(JSON.stringify(obj));
+        let payload = this.stringToBytes(json_bigint_1.default.stringify(obj));
         let signature = this.stringToBytes(this.sign(payload));
         let uidBytes = this.stringToBytes(userId);
         let pidBytes = this.stringToBytes(packetId);
@@ -191,7 +192,7 @@ class Decillion {
             to = setTimeout(() => {
                 resolve({ resCode: 20, obj: { message: "request timeout" } });
                 clearTimeout(to);
-            }, 5000);
+            }, 360000);
             setTimeout(() => {
                 this.socket?.write(data.data);
             });
@@ -246,7 +247,7 @@ class Decillion {
             try {
                 const tokenRes = await fetch(`https://${authConfig.domain}/oauth/token`, {
                     method: "POST",
-                    body: JSON.stringify({
+                    body: json_bigint_1.default.stringify({
                         grant_type: "authorization_code",
                         client_id: authConfig.clientId,
                         code_verifier: verifier,
@@ -364,7 +365,7 @@ class Decillion {
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
+            body: json_bigint_1.default.stringify({
                 userId: this.userId,
                 payload: payload.toString("base64"),
                 signature: sign,
@@ -637,7 +638,7 @@ class Decillion {
                     obj: { message: USER_ID_NOT_SET_ERR_MSG },
                 };
             }
-            let payload = this.stringToBytes(JSON.stringify(obj));
+            let payload = this.stringToBytes(json_bigint_1.default.stringify(obj));
             let signature = this.sign(payload);
             return await this.sendRequest(this.userId, "/chains/submitBaseTrx", {
                 chainId: chainId,
@@ -964,7 +965,7 @@ const commands = {
         }
         let metadata = {};
         try {
-            metadata = JSON.parse(args[2]);
+            metadata = json_bigint_1.default.parse(args[2]);
         }
         catch (ex) {
             return { resCode: 30, obj: { message: "invalid metadata json" } };
@@ -977,7 +978,7 @@ const commands = {
         }
         let metadata = {};
         try {
-            metadata = JSON.parse(args[2]);
+            metadata = json_bigint_1.default.parse(args[2]);
         }
         catch (ex) {
             return { resCode: 30, obj: { message: "invalid metadata json" } };
@@ -1044,7 +1045,7 @@ const commands = {
         }
         let participants = {};
         try {
-            participants = JSON.parse(args[0]);
+            participants = json_bigint_1.default.parse(args[0]);
         }
         catch (ex) {
             return { resCode: 30, obj: { message: "invalid participants json" } };
@@ -1069,7 +1070,7 @@ const commands = {
         }
         let obj = {};
         try {
-            obj = JSON.parse(args[2]);
+            obj = json_bigint_1.default.parse(args[2]);
         }
         catch (ex) {
             return { resCode: 30, obj: { message: "invalid object json" } };
@@ -1095,12 +1096,12 @@ const commands = {
         return await app.machines.createMachine(args[0], args[1], args[2], "");
     },
     "machines.deploy": async (args) => {
-        if (args.length !== 3) {
+        if (args.length !== 4) {
             return { resCode: 30, obj: { message: "invalid parameters count" } };
         }
         let metadata = {};
         try {
-            metadata = JSON.parse(args[2]);
+            metadata = json_bigint_1.default.parse(args[3]);
         }
         catch (ex) {
             return { resCode: 30, obj: { message: "invalid metadata json" } };
@@ -1315,7 +1316,42 @@ For full documentation, visit: https://decillionai.com/docs/cli
     → execute a command in cloud pc terminal
       - vmId: the id of cloud pc returned by pc.runPc
       - command: the command you want to execute on cloud pc
-      - Example: pc.execCommand abc-def-
+      - Example: pc.execCommand 82855778-6cc7-4d3a-84d8-5c57749275f5@172.77.5.1 "mkdir test"
+
+[Machines]
+
+  machines.createApp [chainId]
+    → create a new Dapp on the platform on a specific workchain
+      - chainId: the workchain you want to crate app on it
+      - Example: machines.createApp 1
+
+  machines.createMachine [username] [appId] [path]
+    → create a new Dapp on the platform on a specific workchain
+      - username: the username of the machine you want to create. machines are treated same as users on this platform so they must have a unique username
+      - appId: id of the app you want to link this machine to. machines linked to same app has access to same state and storage
+      - path: the path of the function of the machine
+      - Example: machines.createApp calculator 984@global /api/sum
+
+  machines.deploy [machineId] [machine folder path] [runtime] [metadata]
+    → deploy a project as machine on the platform specifying its runtime type
+      - machineId: id of the machine you want to deploy the project on. this project code will function as this machine
+      - machine folder path: the path of the folder of the project you want to deploy which is located on your local filesystem
+      - runtime: the runtime type of the machine you want to deploy. it can be one of these types:
+        1.wasm
+        2.elpis
+        3.docker
+      - metadata: a json string specifying addition metadata of the deploy action. if the runtime type is docker it must be:
+        { "imageName": "[Docker image name you wanna create and link to this machine]" }
+      - Example1: machines.deploy 876@global /home/ubuntu/calculator-proj wasm {}
+      - Example2: machines.deploy 876@global /home/ubuntu/deepseek-docker-proj docker { "imageName": "ollama-deepseek" }
+
+  machines.listApps [offset] [count]
+    → get a paginated list of apps already created on this platform.
+      - Example: machines.listApps 0 15
+  
+  machines.listMachines [offset] [count]
+    → get a paginated list of machines already created on this platform.
+      - Example: machines.listMachines 0 15
 
 For more details, visit: https://decillionai.com/docs/cli
 `;

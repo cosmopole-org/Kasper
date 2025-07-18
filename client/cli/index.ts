@@ -5,6 +5,7 @@ import exec from "child_process";
 import readline from "node:readline";
 import express from "express";
 import { Server } from "node:http";
+import JSONbig from 'json-bigint';
 
 const USER_ID_NOT_SET_ERR_CODE: number = 10;
 const USER_ID_NOT_SET_ERR_MSG: string = "not authenticated, userId is not set";
@@ -103,7 +104,7 @@ class Decillion {
         let key = data.subarray(pointer, pointer + keyLen).toString();
         pointer += keyLen;
         let payload = data.subarray(pointer);
-        let obj = JSON.parse(payload.toString());
+        let obj = JSONbig.parse(payload.toString());
         if (key == "pc/message") {
           if (pcId) process.stdout.write(obj.message);
         } else {
@@ -119,7 +120,7 @@ class Decillion {
         let resCode = data.subarray(pointer, pointer + 4).readIntBE(0, 4);
         pointer += 4;
         let payload = data.subarray(pointer).toString();
-        let obj = JSON.parse(payload);
+        let obj = JSONbig.parse(payload);
         let cb = this.callbacks[packetId];
         if (cb) cb(resCode, obj);
       }
@@ -156,7 +157,7 @@ class Decillion {
   }
   private createRequest(userId: string, path: string, obj: any) {
     let packetId = Math.random().toString().substring(2);
-    let payload = this.stringToBytes(JSON.stringify(obj));
+    let payload = this.stringToBytes(JSONbig.stringify(obj));
     let signature = this.stringToBytes(this.sign(payload));
     let uidBytes = this.stringToBytes(userId);
     let pidBytes = this.stringToBytes(packetId);
@@ -194,7 +195,7 @@ class Decillion {
       to = setTimeout(() => {
         resolve({ resCode: 20, obj: { message: "request timeout" } });
         clearTimeout(to);
-      }, 5000);
+      }, 360000);
       setTimeout(() => {
         this.socket?.write(data.data);
       });
@@ -252,7 +253,7 @@ class Decillion {
           `https://${authConfig.domain}/oauth/token`,
           {
             method: "POST",
-            body: JSON.stringify({
+            body: JSONbig.stringify({
               grant_type: "authorization_code",
               client_id: authConfig.clientId,
               code_verifier: verifier,
@@ -395,7 +396,7 @@ class Decillion {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+        body: JSONbig.stringify({
           userId: this.userId,
           payload: payload.toString("base64"),
           signature: sign,
@@ -723,7 +724,7 @@ class Decillion {
           obj: { message: USER_ID_NOT_SET_ERR_MSG },
         };
       }
-      let payload = this.stringToBytes(JSON.stringify(obj));
+      let payload = this.stringToBytes(JSONbig.stringify(obj));
       let signature = this.sign(payload);
       return await this.sendRequest(this.userId, "/chains/submitBaseTrx", {
         chainId: chainId,
@@ -1120,7 +1121,7 @@ const commands: {
     }
     let metadata: { [key: string]: any } = {};
     try {
-      metadata = JSON.parse(args[2]);
+      metadata = JSONbig.parse(args[2]);
     } catch (ex) {
       return { resCode: 30, obj: { message: "invalid metadata json" } };
     }
@@ -1134,7 +1135,7 @@ const commands: {
     }
     let metadata: { [key: string]: any } = {};
     try {
-      metadata = JSON.parse(args[2]);
+      metadata = JSONbig.parse(args[2]);
     } catch (ex) {
       return { resCode: 30, obj: { message: "invalid metadata json" } };
     }
@@ -1221,7 +1222,7 @@ const commands: {
     }
     let participants: { [key: string]: number } = {};
     try {
-      participants = JSON.parse(args[0]);
+      participants = JSONbig.parse(args[0]);
     } catch (ex) {
       return { resCode: 30, obj: { message: "invalid participants json" } };
     }
@@ -1247,7 +1248,7 @@ const commands: {
     }
     let obj: any = {};
     try {
-      obj = JSON.parse(args[2]);
+      obj = JSONbig.parse(args[2]);
     } catch (ex) {
       return { resCode: 30, obj: { message: "invalid object json" } };
     }
@@ -1278,12 +1279,12 @@ const commands: {
   "machines.deploy": async (
     args: string[]
   ): Promise<{ resCode: number; obj: any }> => {
-    if (args.length !== 3) {
+    if (args.length !== 4) {
       return { resCode: 30, obj: { message: "invalid parameters count" } };
     }
     let metadata: any = {};
     try {
-      metadata = JSON.parse(args[2]);
+      metadata = JSONbig.parse(args[3]);
     } catch (ex) {
       return { resCode: 30, obj: { message: "invalid metadata json" } };
     }
