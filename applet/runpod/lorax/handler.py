@@ -11,22 +11,9 @@ from threading import Thread
 server_process = None
 server_ready = False
 
-
-def run_server():
-    model_id = os.environ.get('MODEL_ID', 'mistralai/Mistral-7B-Instruct-v0.1')
-    res = subprocess.Popen(['lorax-launcher', "--json-output",
-                         '--model-id', model_id, '--port', '80'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    for c in res.stdout:
-        sys.stdout.write(c)
-
-
 def start_lorax_server():
     """Start the LoRAX server in a separate thread"""
     global server_process, server_ready
-
-    r_thread = Thread(target=run_server)
-    r_thread.daemon = True
-    r_thread.start()
 
     # Wait for server to be ready
     max_retries = 60
