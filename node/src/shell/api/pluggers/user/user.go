@@ -34,6 +34,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.LockToken)
 		}
 		
+		func (c *Plugger) ConsumeLock() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ConsumeLock)
+		}
+		
 		func (c *Plugger) Login() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Login)
 		}

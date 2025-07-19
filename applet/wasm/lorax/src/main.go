@@ -710,7 +710,7 @@ func run(a int64) int64 {
 	paymentLockId := input["paymentLockId"]
 	lockSignature := input["lockSignature"]
 
-	url := "https://api.runpod.ai/v2/4gi3crdziy6rim/runsync"
+	url := "https://api.runpod.ai/v2/fkrgyj3ddvyysd/runsync"
 	body := map[string]any{
 		"input": map[string]any{
 			"prompt": msg.(string),
