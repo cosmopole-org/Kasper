@@ -1,6 +1,0 @@
-[submodule "client/app"]
-	path = client/app
-	url = https://github.com/cosmopole-org/decillionai-app
-[submodule "client/cli"]
-	path = client/cli
-	url = https://github.com/cosmopole-org/decillionai-cli
