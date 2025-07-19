@@ -7,9 +7,7 @@ WORKDIR /app
 RUN pip install runpod
 
 # Copy files
-COPY chain-bridge /app/chain-bridge
-COPY runpod-bridge /app/runpod-bridge
-COPY run.sh /app/run.sh
+COPY . .
 
 # Expose port for LoRAX server
 EXPOSE 80
