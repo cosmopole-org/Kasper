@@ -7,7 +7,7 @@ WORKDIR /app
 RUN pip install runpod
 
 # Copy files
-COPY . .
+COPY applet/docker/lorax .
 RUN ls
 
 # Expose port for LoRAX server
