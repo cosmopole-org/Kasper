@@ -6,6 +6,7 @@ WORKDIR /app
 # Install RunPod SDK
 RUN pip install runpod
 
+# Copy files
 COPY chain-bridge /app/chain-bridge
 COPY runpod-bridge /app/runpod-bridge
 COPY run.sh /app/run.sh
@@ -22,10 +23,10 @@ ENV HF_TOKEN=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
 # Create cache directories
 RUN mkdir -p /tmp/transformers_cache /tmp/hf_home
 
-RUN python runpod-bridge/download.py
+# RUN python runpod-bridge/download.py
 
-RUN apt install -y nodejs npm
-RUN npm i
+RUN apt -y update && apt install -y nodejs npm
+RUN cd chain-bridge && npm i
 
 # Default command will be overridden by RunPod
 ENTRYPOINT ["bash", "run.sh"]
