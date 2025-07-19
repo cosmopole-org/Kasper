@@ -8,6 +8,7 @@ RUN pip install runpod
 
 # Copy files
 COPY . .
+RUN ls
 
 # Expose port for LoRAX server
 EXPOSE 80
