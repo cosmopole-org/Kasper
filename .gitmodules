@@ -1,0 +1,3 @@
+[submodule "client/cli"]
+	path = client/cli
+	url = https://github.com/cosmopole-org/decillion-cli
