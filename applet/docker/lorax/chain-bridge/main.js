@@ -2,12 +2,14 @@
 // Don't submit any personally identifiable information in requests made with this key.
 // Sign in to see your own test API key embedded in code samples.
 
+require('dotenv').config();
+
 const USER_ID = process.env.USER_ID;
 const USER_PRIVATEKEY = process.env.USER_PRIVATEKEY;
 
-const stripe = require("stripe")(process.env.SECRET_KEY);
+console.log(USER_PRIVATEKEY);
+
 const express = require("express");
-const net = require("net");
 const crypto = require("crypto");
 const tls = require("tls");
 
