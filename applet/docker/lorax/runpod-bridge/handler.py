@@ -69,6 +69,22 @@ def handler(event):
     signature = event.get('signature', '')
     lockId = event.get('lockId', '')
 
+    max_retries = 60
+    for i in range(max_retries):
+        try:
+            response = requests.get('http://localhost:3000/health')
+            if response.status_code == 200:
+                print("chain bridge is ready!")
+                return
+        except Exception as e:
+            print('An exception occurred: {}'.format(e))
+            pass
+
+        time.sleep(10)
+        print(f"Waiting for bridge to start... ({i+1}/{max_retries})")
+
+    print("Failed to start chain bridge")
+
     response = requests.post("http://localhost:3000/consumeLock", json={"signature": signature, "lockId": lockId, "userId": userId})
     if response.json()["success"] is not True:
         return {"error": "payment consumption has failed"}        

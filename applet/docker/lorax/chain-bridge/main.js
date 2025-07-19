@@ -252,6 +252,9 @@ async function runServer() {
 
   // Routes
   app.post("/consumeLock", consumeLock);
+  app.post("/health", (req, res) => {
+    res.send(JSON.stringify({ success: true }));
+  });
 
   app.listen(3000, () => console.log("Running on port 3000"));
 }
