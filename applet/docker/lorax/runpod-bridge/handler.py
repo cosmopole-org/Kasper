@@ -69,7 +69,7 @@ def handler(event):
     signature = event.get('signature', '')
     lockId = event.get('lockId', '')
 
-    response = requests.post("http://localhost:3000/comsumeLock", json={"signature": signature, "lockId": lockId, "userId": userId})
+    response = requests.post("http://localhost:3000/consumeLock", json={"signature": signature, "lockId": lockId, "userId": userId})
     if response.json()["success"] is not True:
         return {"error": "payment consumption has failed"}        
     
