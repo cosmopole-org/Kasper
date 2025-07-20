@@ -75,7 +75,7 @@ def handler(event):
             response = requests.get('http://localhost:3000/health')
             if response.status_code == 200:
                 print("chain bridge is ready!")
-                return
+                break
         except Exception as e:
             print('An exception occurred: {}'.format(e))
             pass

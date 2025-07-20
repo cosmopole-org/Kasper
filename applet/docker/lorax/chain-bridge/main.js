@@ -246,7 +246,7 @@ async function runServer() {
 
   // Routes
   app.post("/consumeLock", consumeLock);
-  app.post("/health", (req, res) => {
+  app.get("/health", (req, res) => {
     res.send(JSON.stringify({ success: true }));
   });
 
