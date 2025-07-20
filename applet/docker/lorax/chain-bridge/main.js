@@ -2,7 +2,7 @@
 // Don't submit any personally identifiable information in requests made with this key.
 // Sign in to see your own test API key embedded in code samples.
 
-require('dotenv').config();
+require('dotenv').config({ path: '/app/chain-bridge/.env' });
 
 const USER_ID = process.env.USER_ID;
 const USER_PRIVATEKEY = process.env.USER_PRIVATEKEY;
