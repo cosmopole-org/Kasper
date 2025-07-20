@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"github.com/coreos/go-oidc"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
@@ -20,21 +19,28 @@ import (
 	outputsusers "kasper/src/shell/api/outputs/users"
 	"kasper/src/shell/utils/crypto"
 	"log"
+    firebase "firebase.google.com/go/v4"
+    "google.golang.org/api/option"
 )
 
 type Actions struct {
 	App       core.ICore
-	OauthProv *oidc.Provider
 	OauthCtx  context.Context
+	firebaseApp *firebase.App
+}
+
+func (a *Actions) initFirebase() {
+    opt := option.WithCredentialsFile("path/to/serviceAccountKey.json")
+    app, err := firebase.NewApp(context.Background(), nil, opt)
+    if err != nil {
+        log.Fatalf("Error initializing Firebase app: %v\n", err)
+    }
+    a.firebaseApp = app
 }
 
 func Install(a *Actions) error {
 	a.OauthCtx = context.Background()
-	provider, err := oidc.NewProvider(a.OauthCtx, issuer)
-	if err != nil {
-		panic("Failed to get provider: " + err.Error())
-	}
-	a.OauthProv = provider
+	a.initFirebase()
 	return nil
 }
 
@@ -167,29 +173,31 @@ func (a *Actions) ConsumeLock(state state.IState, input inputsusers.ConsumeLockI
 	}
 }
 
-var (
-	clientID = "94AKF0INP2ApjXud6TTirxyjoQxqNpEk"
-	issuer   = "https://dev-epfxvx2scaq4cj3t.us.auth0.com/"
-)
-
 // Login /users/login check [ false false false ] access [ true false false false POST ]
 func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, error) {
 
-	verifier := a.OauthProv.Verifier(&oidc.Config{ClientID: clientID})
+    ctx := a.OauthCtx
+    client, err := a.firebaseApp.Auth(ctx)
+    if err != nil {
+		log.Println(err)
+		e := errors.New("error getting Auth client")
+		log.Println(e)
+        return nil, e
+    }
+    token, err := client.VerifyIDToken(ctx, input.EmailToken)
+    if err != nil {
+        log.Println(err)
+		e := errors.New("invalid ID token")
+		log.Println(e)
+        return nil, e
+    }
+    email, ok := token.Claims["email"].(string)
+    if !ok {
+		e := errors.New("email claim not found or invalid")
+		log.Println(e)
+        return nil, e
+    }
 
-	idToken, err := verifier.Verify(a.OauthCtx, input.EmailToken)
-	if err != nil {
-		log.Println("Invalid token: " + err.Error())
-		return nil, err
-	}
-	var claims struct {
-		Email string `json:"email"`
-	}
-	if err = idToken.Claims(&claims); err != nil {
-		log.Println("Failed to parse claims" + err.Error())
-		return nil, err
-	}
-	email := claims.Email
 	trx := state.Trx()
 	userId := trx.GetLink("UserEmailToId::" + email)
 	log.Println("fetching email:", "["+email+"]", "["+userId+"]")
