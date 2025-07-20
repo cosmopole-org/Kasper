@@ -25,11 +25,7 @@ RUN mkdir -p /tmp/transformers_cache /tmp/hf_home
 RUN python runpod-bridge/download.py
 
 RUN apt -y update && apt install -y curl
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
-RUN export NVM_DIR="$HOME/.nvm"\
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"\
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" &&\
-    nvm install 18 && cd chain-bridge && npm i
+RUN bash build-chain.sh
 
 # Default command will be overridden by RunPod
 ENTRYPOINT ["bash", "run.sh"]
