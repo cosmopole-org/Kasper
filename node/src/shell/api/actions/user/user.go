@@ -30,7 +30,7 @@ type Actions struct {
 }
 
 func (a *Actions) initFirebase() {
-    opt := option.WithCredentialsFile("path/to/serviceAccountKey.json")
+    opt := option.WithCredentialsFile("/app/serviceAccounts.json")
     app, err := firebase.NewApp(context.Background(), nil, opt)
     if err != nil {
         log.Fatalf("Error initializing Firebase app: %v\n", err)
