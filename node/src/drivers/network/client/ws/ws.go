@@ -61,7 +61,7 @@ func (c *Handler) OnPong(socket *gws.Conn, payload []byte) {}
 func (c *Handler) OnMessage(socket *gws.Conn, message *gws.Message) {
 	defer message.Close()
 	session, _ := socket.Session().Load("session")
-	session.(*Socket).processPacket(message.Bytes())
+	session.(*Socket).processPacket(message.Bytes()[4:])
 }
 
 func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
