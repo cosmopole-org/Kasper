@@ -43,7 +43,9 @@ const (
 	PingWait     = 10 * time.Second
 )
 
-type Handler struct{}
+type Handler struct{
+    gws.BuiltinEventHandler
+}
 
 func (c *Handler) OnOpen(socket *gws.Conn) {
 	_ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
@@ -90,7 +92,7 @@ func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
 			TLSConfig: tlsConfig,
 		}
 		future.Async(func() {
-			err := server.ListenAndServe()
+			err := server.ListenAndServeTLS("", "")
 			if err != nil {
 				log.Fatalf("failed to listen: %v", err)
 			}
@@ -196,13 +198,13 @@ func (t *Socket) pushBuffer() {
 			t.Ack = false
 			packetLen := make([]byte, 4)
 			binary.BigEndian.PutUint32(packetLen, uint32(len(t.Buffer[0])))
-			err := t.Conn.WriteMessage(gws.OpcodeBinary, packetLen)
+			err := t.Conn.WriteMessage(gws.OpcodeText, packetLen)
 			if err != nil {
 				t.Ack = true
 				log.Println(err)
 				return
 			}
-			err = t.Conn.WriteMessage(gws.OpcodeBinary, t.Buffer[0])
+			err = t.Conn.WriteMessage(gws.OpcodeText, t.Buffer[0])
 			if err != nil {
 				t.Ack = true
 				log.Println(err)
