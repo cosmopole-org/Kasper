@@ -65,10 +65,11 @@ def generate_text(prompt, adapter_id=None, max_new_tokens=100, temperature=0.7, 
 
 
 def handler(event):
+    input_data = event.get('input', {})
     """RunPod handler function"""
-    userId = event.get('userId', '')
-    signature = event.get('signature', '')
-    lockId = event.get('lockId', '')
+    userId = input_data.get('userId', '')
+    signature = input_data.get('signature', '')
+    lockId = input_data.get('lockId', '')
 
     max_retries = 60
     for i in range(max_retries):
@@ -105,7 +106,6 @@ def handler(event):
         start_lorax_server()
 
     # Extract parameters from event
-    input_data = event.get('input', {})
     prompt = input_data.get('prompt', '')
     adapter_id = input_data.get('adapter_id', None)
     max_new_tokens = input_data.get('max_new_tokens', 100)

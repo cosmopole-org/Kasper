@@ -713,11 +713,11 @@ func run(a int64) int64 {
 	url := "https://api.runpod.ai/v2/fkrgyj3ddvyysd/runsync"
 	body := map[string]any{
 		"input": map[string]any{
-			"prompt": msg.(string),
+			"prompt":    msg.(string),
+			"userId":    signal.User.Id,
+			"lockId":    paymentLockId,
+			"signature": lockSignature,
 		},
-		"userId":    signal.User.Id,
-		"lockId":    paymentLockId,
-		"signature": lockSignature,
 	}
 	headers := map[string]string{
 		"Content-Type":  "application/json",

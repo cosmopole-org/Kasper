@@ -202,7 +202,7 @@ async function sleep(ms) {
 
 async function consumeLock(req, res) {
   if (!req.body.userId || !req.body.lockId || !req.body.signature) {
-    res.send(JSON.stringify({ success: false, errCode: 1 }));
+    res.send(JSON.stringify({ success: false, errCode: 1, reqBody: req.body }));
     return;
   }
 
