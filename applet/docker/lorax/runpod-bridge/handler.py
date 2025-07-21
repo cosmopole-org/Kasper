@@ -11,6 +11,7 @@ from threading import Thread
 server_process = None
 server_ready = False
 
+
 def start_lorax_server():
     """Start the LoRAX server in a separate thread"""
     global server_process, server_ready
@@ -83,12 +84,19 @@ def handler(event):
         time.sleep(10)
         print(f"Waiting for bridge to start... ({i+1}/{max_retries})")
 
-    print("Failed to start chain bridge")
-
-    response = requests.post("http://localhost:3000/consumeLock", json={"signature": signature, "lockId": lockId, "userId": userId})
+    url = "http://localhost:3000/consumeLock"
+    payload = json.dumps({
+        "lockId": lockId,
+        "signature": signature,
+        "userId": userId
+    })
+    headers = {
+        'Content-Type': 'application/json',
+    }
+    response = requests.request("POST", url, headers=headers, data=payload)
     if response.json()["success"] is not True:
-        return {"error": "payment consumption has failed"}        
-    
+        return {"error": "payment consumption has failed"}
+
     global server_ready
 
     # Start server if not already running
