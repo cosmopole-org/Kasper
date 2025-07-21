@@ -198,13 +198,13 @@ func (t *Socket) pushBuffer() {
 			t.Ack = false
 			packetLen := make([]byte, 4)
 			binary.BigEndian.PutUint32(packetLen, uint32(len(t.Buffer[0])))
-			err := t.Conn.WriteMessage(gws.OpcodeText, packetLen)
+			err := t.Conn.WriteMessage(gws.OpcodeBinary, packetLen)
 			if err != nil {
 				t.Ack = true
 				log.Println(err)
 				return
 			}
-			err = t.Conn.WriteMessage(gws.OpcodeText, t.Buffer[0])
+			err = t.Conn.WriteMessage(gws.OpcodeBinary, t.Buffer[0])
 			if err != nil {
 				t.Ack = true
 				log.Println(err)
