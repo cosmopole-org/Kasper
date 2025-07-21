@@ -95,7 +95,7 @@ def handler(event):
     }
     response = requests.request("POST", url, headers=headers, data=payload)
     if response.json()["success"] is not True:
-        return {"error": "payment consumption has failed"}
+        return {"error": "payment consumption has failed " + str(response.status_code) + " " + response.text}
 
     global server_ready
 

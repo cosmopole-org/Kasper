@@ -217,6 +217,7 @@ async function consumeLock(req, res) {
     amount: 1,
     type: "pay"
   });
+  console.log(consumption);
   if (!consumption.obj.success) {
     res.send(JSON.stringify({ success: false, errCode: 3 }));
     return;
