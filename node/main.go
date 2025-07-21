@@ -66,13 +66,16 @@ func main() {
 		},
 	)
 
-	portStr := os.Getenv("CLIENT_API_PORT")
+	portStr := os.Getenv("CLIENT_TCP_API_PORT")
 	port, _ := strconv.ParseInt(portStr, 10, 64)
+	portStr2 := os.Getenv("CLIENT_WS_API_PORT")
+	port2, _ := strconv.ParseInt(portStr2, 10, 64)
 	plugger_api.PlugAll(app)
 
 	app.Tools().Network().Run(
 		map[string]int{
 			"tcp":   int(port),
+			"ws":    int(port2),
 			"fed":   int(federationPort),
 			"chain": int(blockchainPort),
 		},
