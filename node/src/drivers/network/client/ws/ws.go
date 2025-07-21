@@ -60,6 +60,7 @@ func (c *Handler) OnPong(socket *gws.Conn, payload []byte) {}
 
 func (c *Handler) OnMessage(socket *gws.Conn, message *gws.Message) {
 	defer message.Close()
+	log.Println(string(message.Bytes()))
 	session, _ := socket.Session().Load("session")
 	session.(*Socket).processPacket(message.Bytes()[4:])
 }
@@ -72,22 +73,28 @@ func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
 			Recovery:          gws.Recovery,                         // Exception recovery
 			PermessageDeflate: gws.PermessageDeflate{Enabled: true}, // Enable compression
 		})
-		http.HandleFunc("/connect", func(writer http.ResponseWriter, request *http.Request) {
-			conn, err := upgrader.Upgrade(writer, request)
-			if err != nil {
-				return
-			}
-			socket := &Socket{Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true}
-			t.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
-			conn.Session().Store("session", socket)
-			go func() {
-				conn.ReadLoop() // Blocking prevents the context from being GC.
-			}()
-		})
-		err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
+		server := &http.Server{
+			Addr: fmt.Sprintf(":%d", port),
+			Handler: http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				conn, err := upgrader.Upgrade(writer, request)
+				if err != nil {
+					return
+				}
+				socket := &Socket{Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true}
+				t.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
+				conn.Session().Store("session", socket)
+				go func() {
+					conn.ReadLoop()
+				}()
+			}),
+			TLSConfig: tlsConfig,
 		}
+		future.Async(func() {
+			err := server.ListenAndServe()
+			if err != nil {
+				log.Fatalf("failed to listen: %v", err)
+			}
+		}, false)
 		log.Println("Clients' Ws TLS server listening on port ", port)
 	}, false)
 }
