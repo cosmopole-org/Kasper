@@ -43,13 +43,17 @@ const (
 	PingWait     = 10 * time.Second
 )
 
-type Handler struct{
-    gws.BuiltinEventHandler
+type Handler struct {
+	gws.BuiltinEventHandler
+	wsServer *Ws
 }
 
-func (c *Handler) OnOpen(socket *gws.Conn) {
+func (c *Handler) OnOpen(conn *gws.Conn) {
 	// _ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
 	log.Println("new ws client connect")
+	socket := &Socket{Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: c.wsServer.app, Ack: true}
+	c.wsServer.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
+	conn.Session().Store("session", socket)
 }
 
 func (c *Handler) OnClose(socket *gws.Conn, err error) {}
@@ -70,11 +74,9 @@ func (c *Handler) OnMessage(socket *gws.Conn, message *gws.Message) {
 
 func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
 	future.Async(func() {
-		upgrader := gws.NewUpgrader(&Handler{}, &gws.ServerOption{
-			TlsConfig:         tlsConfig,
-			ParallelEnabled:   true,                                 // Parallel message processing
-			Recovery:          gws.Recovery,                         // Exception recovery
-			PermessageDeflate: gws.PermessageDeflate{Enabled: true}, // Enable compression
+		upgrader := gws.NewUpgrader(&Handler{wsServer: t}, &gws.ServerOption{
+			ParallelEnabled: true,
+			Recovery:        gws.Recovery,
 		})
 		server := &http.Server{
 			Addr: fmt.Sprintf(":%d", port),
@@ -83,9 +85,6 @@ func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
 				if err != nil {
 					return
 				}
-				socket := &Socket{Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true}
-				t.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
-				conn.Session().Store("session", socket)
 				go func() {
 					conn.ReadLoop()
 				}()
