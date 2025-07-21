@@ -48,7 +48,8 @@ type Handler struct{
 }
 
 func (c *Handler) OnOpen(socket *gws.Conn) {
-	_ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
+	// _ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
+	log.Println("new ws client connect")
 }
 
 func (c *Handler) OnClose(socket *gws.Conn, err error) {}
