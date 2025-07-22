@@ -32,43 +32,26 @@
 
   <title>decillion_ai_app</title>
   <link rel="manifest" href="manifest.json">
-  <script src="https://apis.google.com/js/api.js"></script>
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyAE2NzFvWhfzW-00lpsFH1ucCgvBlECiJQ",
-    authDomain: "decillionai-b8ecb.firebaseapp.com",
-    projectId: "decillionai-b8ecb",
-    storageBucket: "decillionai-b8ecb.firebasestorage.app",
-    messagingSenderId: "220203818235",
-    appId: "1:220203818235:web:31b8d23a748ef292d8a45e",
-    measurementId: "G-GQWQ6VQPHZ"
-  };
-  gapi.load('auth2', function () {
-    gapi.auth2.init({
-      client_id: '220203818235-8hjvpc38be9idsdnrr1po5c71ucu5kt2.apps.googleusercontent.com',
-      scope: 'email profile' // Define the scopes you need
-    });
-  });
-</script>
+  <script>
+    function initAuth2() {
+      gapi.auth2.init({
+        client_id: "220203818235-8hjvpc38be9idsdnrr1po5c71ucu5kt2.apps.googleusercontent.com",
+        scope: 'profile email',
+        cookie_policy: 'single_host_origin', 
+      }).then(auth2 => {
+        console.log('gapi.auth2 initialized', auth2);
+      });
+    }
+    function onGapiLoad() {
+      gapi.load('auth2', initAuth2);
+    }
+  </script>
+  <script src="https://apis.google.com/js/platform.js?onload=onGapiLoad" async defer></script>
 </head>
 <script>
-  // Add an event listener to the entire document.
-  // The 'contextmenu' event fires when the user attempts to open a context menu.
   document.addEventListener('contextmenu', function (event) {
-    // event.preventDefault() stops the browser's default action for the event.
-    // In this case, it prevents the context menu from appearing.
     event.preventDefault();
-    console.log("Context menu attempt prevented!");
   });
-
-  // You can also disable it for a specific element, for example:
-  // const myElement = document.getElementById('someElementId');
-  // if (myElement) {
-  //     myElement.addEventListener('contextmenu', function(event) {
-  //         event.preventDefault();
-  //         console.log("Context menu prevented for specific element!");
-  //     });
-  // }
 </script>
 
 <body>
