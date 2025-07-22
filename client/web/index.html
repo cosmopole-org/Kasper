@@ -32,6 +32,24 @@
 
   <title>decillion_ai_app</title>
   <link rel="manifest" href="manifest.json">
+  <script src="https://apis.google.com/js/api.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAE2NzFvWhfzW-00lpsFH1ucCgvBlECiJQ",
+    authDomain: "decillionai-b8ecb.firebaseapp.com",
+    projectId: "decillionai-b8ecb",
+    storageBucket: "decillionai-b8ecb.firebasestorage.app",
+    messagingSenderId: "220203818235",
+    appId: "1:220203818235:web:31b8d23a748ef292d8a45e",
+    measurementId: "G-GQWQ6VQPHZ"
+  };
+  gapi.load('auth2', function () {
+    gapi.auth2.init({
+      client_id: '220203818235-8hjvpc38be9idsdnrr1po5c71ucu5kt2.apps.googleusercontent.com',
+      scope: 'email profile' // Define the scopes you need
+    });
+  });
+</script>
 </head>
 <script>
   // Add an event listener to the entire document.
