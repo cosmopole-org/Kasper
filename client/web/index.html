@@ -29,32 +29,16 @@
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png" />
-
   <title>decillion_ai_app</title>
   <link rel="manifest" href="manifest.json">
-  <script>
-    function initAuth2() {
-      gapi.auth2.init({
-        client_id: "220203818235-8hjvpc38be9idsdnrr1po5c71ucu5kt2.apps.googleusercontent.com",
-        scope: 'profile email',
-        cookie_policy: 'single_host_origin', 
-      }).then(auth2 => {
-        console.log('gapi.auth2 initialized', auth2);
-      });
-    }
-    function onGapiLoad() {
-      gapi.load('auth2', initAuth2);
-    }
-  </script>
-  <script src="https://apis.google.com/js/platform.js?onload=onGapiLoad" async defer></script>
 </head>
-<script>
-  document.addEventListener('contextmenu', function (event) {
-    event.preventDefault();
-  });
-</script>
 
 <body>
+  <script>
+    document.addEventListener('contextmenu', function (event) {
+      event.preventDefault();
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 
