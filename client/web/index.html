@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -27,12 +28,33 @@
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="favicon.png" />
 
   <title>decillion_ai_app</title>
   <link rel="manifest" href="manifest.json">
 </head>
+<script>
+  // Add an event listener to the entire document.
+  // The 'contextmenu' event fires when the user attempts to open a context menu.
+  document.addEventListener('contextmenu', function (event) {
+    // event.preventDefault() stops the browser's default action for the event.
+    // In this case, it prevents the context menu from appearing.
+    event.preventDefault();
+    console.log("Context menu attempt prevented!");
+  });
+
+  // You can also disable it for a specific element, for example:
+  // const myElement = document.getElementById('someElementId');
+  // if (myElement) {
+  //     myElement.addEventListener('contextmenu', function(event) {
+  //         event.preventDefault();
+  //         console.log("Context menu prevented for specific element!");
+  //     });
+  // }
+</script>
+
 <body>
   <script src="flutter_bootstrap.js" async></script>
 </body>
+
 </html>
