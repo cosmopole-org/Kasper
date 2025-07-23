@@ -43596,7 +43596,7 @@ return new A.qw(null)},
 $S:446}
 A.nm.prototype={}
 A.qN.prototype={
-am(){return new A.Ur(A.a([new A.nm("/assets/assets/av1.jpg","Alice Johnson","Hey, how are you doing?","10:30 AM",2,!1),new A.nm("/assets/assets/av2.jpg","Bob Williams","Don't forget our meeting at 2 PM!","Yesterday",0,!1),new A.nm("/assets/assets/av3.jpg","Charlie Brown","The new feature is live.","Jul 18",1,!0),new A.nm("av1.jpg","Diana Prince","See you there!","Jul 17",0,!1),new A.nm("av2.jpg","Eve Adams","What's up?","Jul 15",0,!1)],t.G2))}}
+am(){return new A.Ur(A.a([new A.nm("assets/av1.jpg","Alice Johnson","Hey, how are you doing?","10:30 AM",2,!1),new A.nm("assets/av2.jpg","Bob Williams","Don't forget our meeting at 2 PM!","Yesterday",0,!1),new A.nm("assets/av3.jpg","Charlie Brown","The new feature is live.","Jul 18",1,!0),new A.nm("av1.jpg","Diana Prince","See you there!","Jul 17",0,!1),new A.nm("av2.jpg","Eve Adams","What's up?","Jul 15",0,!1)],t.G2))}}
 A.Ur.prototype={
 P(a){var s=null,r=A.aF5(A.a([A.iA(s,s,B.G3,s,s,new A.ar_(a),s,s,s),A.iA(s,s,B.Ga,s,s,new A.ar0(a),s,s,s)],t.p),B.C,0,B.YS)
 return A.ER(r,B.l,A.aVv(new A.ar1(this),5,new A.aZ(0,A.aF5(s,s,s,s).fx.b+A.ce(a,s,t.w).w.r.b,0,0),new A.ar2()),!0,A.aGt(B.G4,new A.ar3(a),s))}}
