@@ -306,14 +306,30 @@ func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any
 	return map[string]any{}, nil
 }
 
-// Get /users/get check [ false false false ] access [ true false false false GET ]
+// Get /users/get check [ true false false ] access [ true false false false GET ]
 func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("User", input.UserId) {
 		return nil, errors.New("user not found")
 	}
 	user := models.User{Id: input.UserId}.Pull(trx)
-	return outputsusers.GetOutput{User: user}, nil
+	result := map[string]any{
+		"id":        user.Id,
+		"publicKey": user.PublicKey,
+		"type":      user.Typ,
+		"username":  user.Username,
+	}
+	meta, err := trx.GetJson("UserMeta::"+input.UserId, "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	result["name"] = meta["name"]
+	result["avatar"] = meta["avatar"]
+	if input.UserId == state.Info().UserId() {
+		result["balance"] = user.Balance
+	}
+	return outputsusers.GetOutput{User: result}, nil
 }
 
 // List /users/list check [ true false false ] access [ true false false false GET ]
@@ -324,5 +340,22 @@ func (a *Actions) List(state state.IState, input inputsusers.ListInput) (any, er
 		log.Println(err)
 		return nil, err
 	}
-	return map[string]any{"users": users}, nil
+	results := []map[string]any{}
+	for _, user := range users {
+		result := map[string]any{
+			"id":        user.Id,
+			"publicKey": user.PublicKey,
+			"type":      user.Typ,
+			"username":  user.Username,
+		}
+		meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		result["name"] = meta["name"]
+		result["avatar"] = meta["avatar"]
+		results = append(results, result)
+	}
+	return map[string]any{"users": results}, nil
 }
