@@ -4,6 +4,7 @@ type CreateInput struct {
 	IsPublic *bool  `json:"isPublic" validate:"required"`
 	PersHist *bool  `json:"persHist" validate:"required"`
 	Orig     string `json:"orig"`
+	Metadata any    `json:"metadata"`
 }
 
 func (d CreateInput) GetData() any {

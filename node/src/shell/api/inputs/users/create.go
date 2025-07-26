@@ -3,6 +3,7 @@ package inputs_users
 type CreateInput struct {
 	Username  string `json:"username" validate:"required"`
 	PublicKey string `json:"publicKey" validate:"required"`
+	Metadata  any    `json:"metadata"`
 }
 
 func (d CreateInput) GetData() any {

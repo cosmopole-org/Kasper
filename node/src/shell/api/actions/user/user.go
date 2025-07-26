@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	firebase "firebase.google.com/go/v4"
+	"google.golang.org/api/option"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
@@ -19,23 +21,21 @@ import (
 	outputsusers "kasper/src/shell/api/outputs/users"
 	"kasper/src/shell/utils/crypto"
 	"log"
-    firebase "firebase.google.com/go/v4"
-    "google.golang.org/api/option"
 )
 
 type Actions struct {
-	App       core.ICore
-	OauthCtx  context.Context
+	App         core.ICore
+	OauthCtx    context.Context
 	firebaseApp *firebase.App
 }
 
 func (a *Actions) initFirebase() {
-    opt := option.WithCredentialsFile("/app/serviceAccounts.json")
-    app, err := firebase.NewApp(context.Background(), nil, opt)
-    if err != nil {
-        log.Fatalf("Error initializing Firebase app: %v\n", err)
-    }
-    a.firebaseApp = app
+	opt := option.WithCredentialsFile("/app/serviceAccounts.json")
+	app, err := firebase.NewApp(context.Background(), nil, opt)
+	if err != nil {
+		log.Fatalf("Error initializing Firebase app: %v\n", err)
+	}
+	a.firebaseApp = app
 }
 
 func Install(a *Actions) error {
@@ -176,27 +176,27 @@ func (a *Actions) ConsumeLock(state state.IState, input inputsusers.ConsumeLockI
 // Login /users/login check [ false false false ] access [ true false false false POST ]
 func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, error) {
 
-    ctx := a.OauthCtx
-    client, err := a.firebaseApp.Auth(ctx)
-    if err != nil {
+	ctx := a.OauthCtx
+	client, err := a.firebaseApp.Auth(ctx)
+	if err != nil {
 		log.Println(err)
 		e := errors.New("error getting Auth client")
 		log.Println(e)
-        return nil, e
-    }
-    token, err := client.VerifyIDToken(ctx, input.EmailToken)
-    if err != nil {
-        log.Println(err)
+		return nil, e
+	}
+	token, err := client.VerifyIDToken(ctx, input.EmailToken)
+	if err != nil {
+		log.Println(err)
 		e := errors.New("invalid ID token")
 		log.Println(e)
-        return nil, e
-    }
-    email, ok := token.Claims["email"].(string)
-    if !ok {
+		return nil, e
+	}
+	email, ok := token.Claims["email"].(string)
+	if !ok {
 		e := errors.New("email claim not found or invalid")
 		log.Println(e)
-        return nil, e
-    }
+		return nil, e
+	}
 
 	trx := state.Trx()
 	userId := trx.GetLink("UserEmailToId::" + email)
@@ -232,6 +232,7 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 		req := inputsusers.CreateInput{
 			Username:  input.Username,
 			PublicKey: pubKey,
+			Metadata:  input.Metadata,
 		}
 		bin, _ := json.Marshal(req)
 		sign := a.App.SignPacket(bin)
@@ -274,7 +275,35 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	session = models.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
 	user.Push(trx)
 	session.Push(trx)
+	trx.PutJson("UserMeta::"+user.Id, "metadata", input.Metadata, false)
+	meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if meta["name"] == nil {
+		err := errors.New("name can't be empty")
+		log.Println(err)
+		return nil, err
+	}
 	return outputsusers.CreateOutput{User: user, Session: session}, nil
+}
+
+// Update /users/update check [ false false false ] access [ true false false false POST ]
+func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any, error) {
+	trx := state.Trx()
+	trx.PutJson("UserMeta::"+state.Info().UserId(), "metadata", input.Metadata, false)
+	meta, err := trx.GetJson("UserMeta::"+state.Info().UserId(), "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if meta["name"] == nil {
+		err := errors.New("name can't be empty")
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{}, nil
 }
 
 // Get /users/get check [ false false false ] access [ true false false false GET ]

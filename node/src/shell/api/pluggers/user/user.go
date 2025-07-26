@@ -46,6 +46,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Create)
 		}
 		
+		func (c *Plugger) Update() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Update)
+		}
+		
 		func (c *Plugger) Get() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Get)
 		}

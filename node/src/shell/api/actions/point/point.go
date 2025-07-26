@@ -95,7 +95,25 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
 	trx.PutLink("admin::"+point.Id+"::"+state.Info().UserId(), "true")
-	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
+	if input.Metadata != nil {
+		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, false)
+	}
+	meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if meta["title"] == nil {
+		err := errors.New("title can't be empty")
+		log.Println(err)
+		return nil, err
+	}
+	if meta["avatar"] == nil {
+		err := errors.New("avatar can't be empty")
+		log.Println(err)
+		return nil, err
+	}
+ 	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
 	return outputs_points.CreateOutput{Point: point}, nil
 }
 
@@ -112,7 +130,25 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 	if input.PersHist != nil {
 		point.PersHist = *input.PersHist
 	}
+	if input.Metadata != nil {
+		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, true)
+	}
 	point.Push(trx)
+		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if meta["title"] == nil {
+		err := errors.New("title can't be empty")
+		log.Println(err)
+		return nil, err
+	}
+	if meta["avatar"] == nil {
+		err := errors.New("avatar can't be empty")
+		log.Println(err)
+		return nil, err
+	}
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/update", point.Id, updates_points.Update{Point: point}, true, []string{state.Info().UserId()})
 	}, false)
@@ -159,12 +195,39 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 	}
 	point := model.Point{Id: input.PointId}.Pull(trx)
 	if point.IsPublic {
-		return outputs_points.GetOutput{Point: point}, nil
+		result := map[string]any{
+			"id":       point.Id,
+			"isPublic": point.IsPublic,
+			"persHist": point.PersHist,
+		}
+		if input.IncludeMeta {
+			metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
+			if err != nil {
+				log.Println(err)
+				return nil, err
+			}
+			result["metadata"] = metadata
+		}
+		return outputs_points.GetOutput{Point: result}, nil
 	}
 	if trx.GetLink("member::"+input.PointId+"::"+state.Info().UserId()) != "true" {
 		return nil, errors.New("access to private point denied")
 	}
-	return outputs_points.GetOutput{Point: point}, nil
+	result := map[string]any{
+		"id":       point.Id,
+		"isPublic": point.IsPublic,
+		"persHist": point.PersHist,
+	}
+	if input.IncludeMeta {
+		metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		result["metadata"] = metadata
+	}
+
+	return outputs_points.GetOutput{Point: result}, nil
 }
 
 // Read /points/read check [ true false false ] access [ true false false false GET ]
@@ -175,7 +238,23 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 		log.Println(err)
 		return nil, err
 	}
-	return outputs_points.ReadOutput{Points: points}, nil
+	results := []map[string]any{}
+	for _, point := range points {
+		result := map[string]any{
+			"id":       point.Id,
+			"isPublic": point.IsPublic,
+			"persHist": point.PersHist,
+		}
+		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		result["title"] = meta["title"]
+		result["avatar"] = meta["avatar"]
+		results = append(results, result)
+	}
+	return outputs_points.ReadOutput{Points: results}, nil
 }
 
 // Join /points/join check [ true false false ] access [ true false false false POST ]
@@ -236,5 +315,21 @@ func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, 
 		log.Println(err)
 		return nil, err
 	}
-	return map[string]any{"points": points}, nil
+	results := []map[string]any{}
+	for _, point := range points {
+		result := map[string]any{
+			"id":       point.Id,
+			"isPublic": point.IsPublic,
+			"persHist": point.PersHist,
+		}
+		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		result["title"] = meta["title"]
+		result["avatar"] = meta["avatar"]
+		results = append(results, result)
+	}
+	return map[string]any{"points": results}, nil
 }
