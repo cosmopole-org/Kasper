@@ -9,8 +9,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	firebase "firebase.google.com/go/v4"
-	"google.golang.org/api/option"
+	"fmt"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
@@ -21,6 +20,9 @@ import (
 	outputsusers "kasper/src/shell/api/outputs/users"
 	"kasper/src/shell/utils/crypto"
 	"log"
+
+	firebase "firebase.google.com/go/v4"
+	"google.golang.org/api/option"
 )
 
 type Actions struct {
@@ -208,27 +210,32 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 		return outputsusers.LoginOutput{User: user, Session: session, PrivateKey: privKey}, nil
 	}
 	if !trx.HasIndex("User", "username", "id", input.Username+"@"+a.App.Id()) {
-		key, err := rsa.GenerateKey(rand.Reader, 4096)
+		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
-			return nil, err
+			log.Fatalf("Failed to generate RSA private key: %v", err)
 		}
-		pub := key.Public()
-		keyPEM := pem.EncodeToMemory(
-			&pem.Block{
-				Type:  "RSA PRIVATE KEY",
-				Bytes: x509.MarshalPKCS1PrivateKey(key),
-			},
-		)
-		pubPEM := pem.EncodeToMemory(
-			&pem.Block{
-				Type:  "RSA PUBLIC KEY",
-				Bytes: x509.MarshalPKCS1PublicKey(pub.(*rsa.PublicKey)),
-			},
-		)
-		pubKey := string(pubPEM)
-		pubKey = pubKey[len("-----BEGIN RSA PUBLIC KEY-----\n") : len(pubKey)-len("\n-----END RSA PUBLIC KEY-----\n")]
-		privKey := string(keyPEM)
-		privKey = privKey[len("-----BEGIN RSA PRIVATE KEY-----\n") : len(privKey)-len("\n-----END RSA PRIVATE KEY-----\n")]
+		fmt.Println("RSA Key Pair generated successfully!")
+		publicKey := &privateKey.PublicKey
+		pkcs8PrivateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+		if err != nil {
+			log.Fatalf("Failed to marshal private key to PKCS#8: %v", err)
+		}
+		pkcs8Pem := pem.EncodeToMemory(&pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: pkcs8PrivateKeyBytes,
+		})
+		spkiPublicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+		if err != nil {
+			log.Fatalf("Failed to marshal public key to SPKI: %v", err)
+		}
+		spkiPem := pem.EncodeToMemory(&pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: spkiPublicKeyBytes,
+		})
+		pubKey := string(pkcs8Pem)
+		pubKey = pubKey[len("-----BEGIN PUBLIC KEY-----\n") : len(pubKey)-len("\n-----END PUBLIC KEY-----\n")]
+		privKey := string(spkiPem)
+		privKey = privKey[len("-----BEGIN PRIVATE KEY-----\n") : len(privKey)-len("\n-----END PRIVATE KEY-----\n")]
 		req := inputsusers.CreateInput{
 			Username:  input.Username,
 			PublicKey: pubKey,

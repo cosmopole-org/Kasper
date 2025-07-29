@@ -5,6 +5,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
+	"log"
 	"os"
 
 	"github.com/google/uuid"
@@ -24,32 +26,33 @@ func SecureKeyPairs(savePath string) ([]byte, []byte) {
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to generate RSA private key: %v", err)
 	}
-
+	fmt.Println("RSA Key Pair generated successfully!")
 	publicKey := &privateKey.PublicKey
-
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
+	pkcs8PrivateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		log.Fatalf("Failed to marshal private key to PKCS#8: %v", err)
+	}
+	pkcs8Pem := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: pkcs8PrivateKeyBytes,
 	})
-	err = os.WriteFile(savePath+"/private.pem", privateKeyPEM, 0644)
+	spkiPublicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to marshal public key to SPKI: %v", err)
 	}
-
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		panic(err)
-	}
-	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PUBLIC KEY",
-		Bytes: publicKeyBytes,
+	spkiPem := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: spkiPublicKeyBytes,
 	})
-	err = os.WriteFile(savePath+"/public.pem", publicKeyPEM, 0644)
+	err = os.WriteFile(savePath+"/public.pem", pkcs8Pem, 0644)
 	if err != nil {
 		panic(err)
 	}
-	return privateKeyPEM, publicKeyPEM
+	err = os.WriteFile(savePath+"/private.pem", spkiPem, 0644)
+	if err != nil {
+		panic(err)
+	}
+	return spkiPem, pkcs8Pem
 }
