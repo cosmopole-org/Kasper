@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
@@ -479,17 +480,20 @@ func (tw *TrxWrapper) GetPriKey(key string) *rsa.PrivateKey {
 	if res == "" {
 		return nil
 	} else {
-		pemData := "-----BEGIN RSA PRIVATE KEY-----\n" + res + "\n-----END RSA PRIVATE KEY-----\n"
+		pemData := "-----BEGIN PRIVATE KEY-----\n" + res + "\n-----END PRIVATE KEY-----\n"
 		block, _ := pem.Decode([]byte(pemData))
-		if block == nil || block.Type != "RSA PRIVATE KEY" {
-			log.Println("failed to decode PEM block containing private key")
-			return nil
+		if block == nil || block.Type != "PRIVATE KEY" { // Check for "PRIVATE KEY" type for PKCS#8
+			log.Fatal("Failed to decode PEM block or block type is not 'PRIVATE KEY'")
 		}
-		privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		parsedKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
-			log.Println(err)
-			return nil
+			log.Fatalf("Failed to parse PKCS#8 private key: %v", err)
 		}
+		privateKey, ok := parsedKey.(*rsa.PrivateKey)
+		if !ok {
+			log.Fatal("Parsed key is not an RSA private key. It might be another type (e.g., ECDSA).")
+		}
+		fmt.Println("PKCS#8 Private Key parsed successfully.")
 		return privateKey
 	}
 }
@@ -499,16 +503,18 @@ func (tw *TrxWrapper) GetPubKey(key string) *rsa.PublicKey {
 	if res == "" {
 		return nil
 	} else {
-		pemData := "-----BEGIN RSA PUBLIC KEY-----\n" + res + "\n-----END RSA PUBLIC KEY-----\n"
+		pemData := "-----BEGIN PUBLIC KEY-----\n" + res + "\n-----END PUBLIC KEY-----\n"
 		block, _ := pem.Decode([]byte(pemData))
-		if block == nil || block.Type != "RSA PUBLIC KEY" {
-			log.Println("failed to decode PEM block containing public key")
-			return nil
+		if block == nil || block.Type != "PUBLIC KEY" {
+			log.Fatal("Failed to decode PEM block or block type is not 'PUBLIC KEY'")
 		}
-		publicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+		parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
 		if err != nil {
-			log.Println(err)
-			return nil
+			log.Fatalf("Failed to parse SPKI public key: %v", err)
+		}
+		publicKey, ok := parsedKey.(*rsa.PublicKey)
+		if !ok {
+			log.Fatal("Parsed key is not an RSA public key. It might be another type (e.g., ECDSA).")
 		}
 		return publicKey
 	}
