@@ -4,12 +4,12 @@ const TEMP = 'flutter-temp-cache';
 const CACHE_NAME = 'flutter-app-cache';
 
 const RESOURCES = {"favicon.png": "5dcef449791fa27946b3d35ad8803796",
-"main.dart.js": "b2021388abded19e262f02f13c6b82fe",
+"main.dart.js": "cf49f16d9cee18bb8d750a3089c514df",
 "icons/Icon-512.png": "96e752610906ba2a93c65f8abe1645f1",
 "icons/Icon-maskable-512.png": "301a7604d45b3e739efc881eb04896ea",
 "icons/Icon-maskable-192.png": "c457ef57daa1d16f64b27b786ec2ea3c",
 "icons/Icon-192.png": "ac9a721a12bbc803b44f645561ecb1e1",
-"flutter_bootstrap.js": "ccd4a9954ad89f3db43e72c7e6a5ce68",
+"flutter_bootstrap.js": "054af7458fcbcb6d05ba0066a3aa0848",
 "workers/crypto.web.g.dart.js": "3b15c16747c7c408dce5027135f56854",
 "workers/crypto.web.g.dart.js.map": "81be891f40df0cd67ded3cad6122f586",
 "workers/crypto.web.g.dart.js.deps": "6adbda7636acbbb62461398c8dee29e5",
