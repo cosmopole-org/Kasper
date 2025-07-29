@@ -2,14 +2,9 @@ package actions_user
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
-	"fmt"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
@@ -210,40 +205,9 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 		return outputsusers.LoginOutput{User: user, Session: session, PrivateKey: privKey}, nil
 	}
 	if !trx.HasIndex("User", "username", "id", input.Username+"@"+a.App.Id()) {
-		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-		if err != nil {
-			log.Fatalf("Failed to generate RSA private key: %v", err)
-		}
-		publicKey := &privateKey.PublicKey
-		fmt.Println("RSA Key Pair generated successfully.")
-		fmt.Println("\n--- Step 2.1: Convert Private Key to PKCS#8 PEM String ---")
-		pkcs8PrivateKeyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
-		if err != nil {
-			log.Fatalf("Failed to marshal private key to PKCS#8 DER: %v", err)
-		}
-		pkcs8PrivateKeyPEM := pem.EncodeToMemory(&pem.Block{
-			Type:  "PRIVATE KEY",
-			Bytes: pkcs8PrivateKeyDER,
-		})
-		fmt.Println("Generated PKCS#8 Private Key (PEM):")
-		fmt.Println(string(pkcs8PrivateKeyPEM))
-		fmt.Println("\n--- Step 2.2: Convert Public Key to SPKI PEM String ---")
-		spkiPublicKeyDER, err := x509.MarshalPKIXPublicKey(publicKey)
-		if err != nil {
-			log.Fatalf("Failed to marshal public key to SPKI DER: %v", err)
-		}
-		spkiPublicKeyPEM := pem.EncodeToMemory(&pem.Block{
-			Type:  "PUBLIC KEY", // The standard PEM block type for SPKI public keys
-			Bytes: spkiPublicKeyDER,
-		})
-		fmt.Println("Generated SPKI Public Key (PEM):")
-		fmt.Println(string(spkiPublicKeyPEM))
-		
-		pubKey := string(spkiPublicKeyPEM)
-		pubKey = pubKey[len("-----BEGIN PUBLIC KEY-----\n") : len(pubKey)-len("\n-----END PUBLIC KEY-----\n")]
-		privKey := string(pkcs8PrivateKeyPEM)
-		privKey = privKey[len("-----BEGIN PRIVATE KEY-----\n") : len(privKey)-len("\n-----END PRIVATE KEY-----\n")]
-		
+		priKeyRaw, pubKeyRaw := crypto.SecureKeyPairs("")
+		priKey := string(priKeyRaw)
+		pubKey := string(pubKeyRaw)
 		req := inputsusers.CreateInput{
 			Username:  input.Username,
 			PublicKey: pubKey,
@@ -266,11 +230,11 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 			log.Println(e)
 			return nil, e
 		}
-		trx.PutLink("UserPrivateKey::"+response.User.Id, privKey)
+		trx.PutLink("UserPrivateKey::"+response.User.Id, priKey)
 		trx.PutLink("UserEmailToId::"+email, response.User.Id)
 		trx.PutLink("UserIdToEmail::"+response.User.Id, email)
 		log.Println("saving email:", "["+email+"]", "["+response.User.Id+"]")
-		return outputsusers.LoginOutput{User: response.User, Session: response.Session, PrivateKey: privKey}, nil
+		return outputsusers.LoginOutput{User: response.User, Session: response.Session, PrivateKey: priKey}, nil
 	} else {
 		return nil, errors.New("username already exist")
 	}

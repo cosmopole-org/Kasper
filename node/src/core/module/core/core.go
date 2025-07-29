@@ -26,6 +26,7 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/info"
 	"kasper/src/abstract/models/input"
+	packetmodel "kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/models/worker"
@@ -36,7 +37,6 @@ import (
 	mach_model "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
-	packetmodel "kasper/src/abstract/models/packet"
 	"math"
 	"slices"
 
@@ -231,7 +231,9 @@ func (c *Core) ClearAppPendingTrxs() {
 
 func (c *Core) SignPacket(data []byte) string {
 	hashed := sha256.Sum256(data)
-	signature, err := rsa.SignPKCS1v15(rand.Reader, c.privKey, cryp.SHA256, hashed[:])
+	signature, err := rsa.SignPSS(rand.Reader, c.privKey, cryp.SHA256, hashed[:], &rsa.PSSOptions{
+		SaltLength: rsa.PSSSaltLengthEqualsHash,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -240,7 +242,9 @@ func (c *Core) SignPacket(data []byte) string {
 
 func (c *Core) SignPacketAsOwner(data []byte) string {
 	hashed := sha256.Sum256(data)
-	signature, err := rsa.SignPKCS1v15(rand.Reader, c.ownerPrivKey, cryp.SHA256, hashed[:])
+	signature, err := rsa.SignPSS(rand.Reader, c.ownerPrivKey, cryp.SHA256, hashed[:], &rsa.PSSOptions{
+		SaltLength: rsa.PSSSaltLengthEqualsHash,
+	})
 	if err != nil {
 		panic(err)
 	}

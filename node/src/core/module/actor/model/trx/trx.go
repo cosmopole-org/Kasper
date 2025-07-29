@@ -2,15 +2,13 @@ package module_trx
 
 import (
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
-	"fmt"
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/models/update"
+	"kasper/src/shell/utils/crypto"
 	"log"
 	"sort"
 	"strings"
@@ -480,21 +478,7 @@ func (tw *TrxWrapper) GetPriKey(key string) *rsa.PrivateKey {
 	if res == "" {
 		return nil
 	} else {
-		pemData := "-----BEGIN PRIVATE KEY-----\n" + res + "\n-----END PRIVATE KEY-----\n"
-		block, _ := pem.Decode([]byte(pemData))
-		if block == nil || block.Type != "PRIVATE KEY" {
-			log.Fatal("Failed to decode PEM block or block type is not 'PRIVATE KEY'")
-		}
-		parsedKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-		if err != nil {
-			log.Fatalf("Failed to parse PKCS#8 private key: %v", err)
-		}
-		privateKey, ok := parsedKey.(*rsa.PrivateKey)
-		if !ok {
-			log.Fatal("Parsed key is not an RSA private key. It might be another type (e.g., ECDSA).")
-		}
-		fmt.Println("PKCS#8 Private Key parsed successfully.")
-		return privateKey
+		return crypto.ParsePrivateKey([]byte(res))
 	}
 }
 
@@ -503,24 +487,7 @@ func (tw *TrxWrapper) GetPubKey(key string) *rsa.PublicKey {
 	if res == "" {
 		return nil
 	} else {
-		pemData := "-----BEGIN PUBLIC KEY-----\n" + res + "\n-----END PUBLIC KEY-----\n"
-		block, _ := pem.Decode([]byte(pemData))
-		if block == nil {
-			log.Println("Failed to decode PEM block.")
-			return nil
-		}
-		parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
-		if err != nil {
-			log.Println(err)
-			log.Println("Parsed key is not an RSA public key.")
-			return nil
-		}
-		publicKey, ok := parsedKey.(*rsa.PublicKey)
-		if !ok {
-			log.Fatal("Parsed key is not an RSA public key.")
-		}
-		fmt.Println("RSA Public Key extracted successfully!")
-		return publicKey
+		return crypto.ParsePublicKey([]byte(res))
 	}
 }
 
