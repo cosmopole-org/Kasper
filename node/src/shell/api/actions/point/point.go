@@ -209,6 +209,7 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 	if point.IsPublic {
 		result := map[string]any{
 			"id":       point.Id,
+			"parentId": point.ParentId,
 			"isPublic": point.IsPublic,
 			"persHist": point.PersHist,
 		}
@@ -227,6 +228,7 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 	}
 	result := map[string]any{
 		"id":       point.Id,
+		"parentId": point.ParentId,
 		"isPublic": point.IsPublic,
 		"persHist": point.PersHist,
 	}
@@ -254,6 +256,7 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 	for _, point := range points {
 		result := map[string]any{
 			"id":       point.Id,
+			"parentId": point.ParentId,
 			"isPublic": point.IsPublic,
 			"persHist": point.PersHist,
 		}
@@ -331,6 +334,7 @@ func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, 
 	for _, point := range points {
 		result := map[string]any{
 			"id":       point.Id,
+			"parentId": point.ParentId,
 			"isPublic": point.IsPublic,
 			"persHist": point.PersHist,
 		}
