@@ -125,19 +125,21 @@ func (sm *Security) AuthWithSignature(userId string, packet []byte, signatureBas
 		log.Println(err)
 		return false, "", false
 	}
-	hashed := sha256.Sum256(packet)
-	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed[:], signature)
+	hash := sha256.Sum256(packet)
+	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hash[:], signature)
 	if err != nil {
+		fmt.Println("Verification failed:", err)
+		log.Println(err)
 		return false, "", false
-	} else {
-		var userType = ""
-		var isGod = false
-		sm.app.ModifyState(true, func(trx trx.ITrx) {
-			userType = string(trx.GetColumn("User", userId, "type"))
-			isGod = (trx.GetString("god::"+userId) == "true")
-		})
-		return true, userType, isGod
 	}
+	fmt.Println("Signature verified successfully!")
+	var userType = ""
+	var isGod = false
+	sm.app.ModifyState(true, func(trx trx.ITrx) {
+		userType = string(trx.GetColumn("User", userId, "type"))
+		isGod = (trx.GetString("god::"+userId) == "true")
+	})
+	return true, userType, isGod
 }
 
 func (sm *Security) HasAccessToPoint(userId string, pointId string) bool {

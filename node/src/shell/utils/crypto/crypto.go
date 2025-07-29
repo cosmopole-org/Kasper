@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/google/uuid"
@@ -22,42 +21,61 @@ func SecureUniqueId(fed string) string {
 
 func SecureKeyPairs(savePath string) ([]byte, []byte) {
 
-	os.MkdirAll(savePath, os.ModePerm)
+	if savePath != "" {
+		os.MkdirAll(savePath, os.ModePerm)
+	}
+
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		log.Fatalf("Failed to generate RSA private key: %v", err)
+		panic(err)
 	}
 	publicKey := &privateKey.PublicKey
-	fmt.Println("RSA Key Pair generated successfully.")
-	fmt.Println("\n--- Step 2.1: Convert Private Key to PKCS#8 PEM String ---")
-	pkcs8PrivateKeyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
-	if err != nil {
-		log.Fatalf("Failed to marshal private key to PKCS#8 DER: %v", err)
-	}
-	pkcs8PrivateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: pkcs8PrivateKeyDER,
-	})
-	fmt.Println("Generated PKCS#8 Private Key (PEM):")
-	fmt.Println(string(pkcs8PrivateKeyPEM))
-	fmt.Println("\n--- Step 2.2: Convert Public Key to SPKI PEM String ---")
-	spkiPublicKeyDER, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		log.Fatalf("Failed to marshal public key to SPKI DER: %v", err)
-	}
-	spkiPublicKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY", // The standard PEM block type for SPKI public keys
-		Bytes: spkiPublicKeyDER,
-	})
-	fmt.Println("Generated SPKI Public Key (PEM):")
-	fmt.Println(string(spkiPublicKeyPEM))
-	err = os.WriteFile(savePath+"/public.pem", spkiPublicKeyPEM, 0644)
+
+	privBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
 	if err != nil {
 		panic(err)
 	}
-	err = os.WriteFile(savePath+"/private.pem", pkcs8PrivateKeyPEM, 0644)
+	privPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+
+	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
 	if err != nil {
 		panic(err)
 	}
-	return spkiPublicKeyPEM, pkcs8PrivateKeyPEM
+	pubPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
+
+	fmt.Println("Private Key PEM:\n", string(privPEM))
+	fmt.Println("Public Key PEM:\n", string(pubPEM))
+
+	if savePath != "" {
+		err = os.WriteFile(savePath+"/public.pem", pubPEM, 0644)
+		if err != nil {
+			panic(err)
+		}
+		err = os.WriteFile(savePath+"/private.pem", privPEM, 0644)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	return privPEM, pubPEM
+}
+
+func ParsePrivateKey(data []byte) *rsa.PrivateKey {
+	parsedPrivBlock, _ := pem.Decode(data)
+	parsedPrivKeyIface, err := x509.ParsePKCS8PrivateKey(parsedPrivBlock.Bytes)
+	if err != nil {
+		panic(err)
+	}
+	parsedPrivKey := parsedPrivKeyIface.(*rsa.PrivateKey)
+	return parsedPrivKey
+}
+
+func ParsePublicKey(data []byte) *rsa.PublicKey {
+	parsedPubBlock, _ := pem.Decode(data)
+	parsedPubKeyIface, err := x509.ParsePKIXPublicKey(parsedPubBlock.Bytes)
+	if err != nil {
+		panic(err)
+	}
+	parsedPubKey := parsedPubKeyIface.(*rsa.PublicKey)
+	return parsedPubKey
 }
