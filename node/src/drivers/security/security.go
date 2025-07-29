@@ -126,7 +126,9 @@ func (sm *Security) AuthWithSignature(userId string, packet []byte, signatureBas
 		return false, "", false
 	}
 	hash := sha256.Sum256(packet)
-	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hash[:], signature)
+	err = rsa.VerifyPSS(publicKey, crypto.SHA256, hash[:], signature, &rsa.PSSOptions{
+		SaltLength: rsa.PSSSaltLengthEqualsHash,
+	})
 	if err != nil {
 		fmt.Println("Verification failed:", err)
 		log.Println(err)
