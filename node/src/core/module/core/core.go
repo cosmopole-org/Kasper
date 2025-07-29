@@ -715,6 +715,10 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 	return ""
 }
 
+func (c *Core) Close() {
+	c.tools.Storage().KvDb().Close()
+}
+
 func (c *Core) Load(gods []string, args map[string]interface{}) {
 	c.gods = gods
 

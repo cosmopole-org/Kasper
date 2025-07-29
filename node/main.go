@@ -66,6 +66,10 @@ func main() {
 		},
 	)
 
+	defer func ()  {
+		app.Close()
+	}()
+
 	portStr := os.Getenv("CLIENT_TCP_API_PORT")
 	port, _ := strconv.ParseInt(portStr, 10, 64)
 	portStr2 := os.Getenv("CLIENT_WS_API_PORT")

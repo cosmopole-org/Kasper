@@ -24,6 +24,7 @@ type ICore interface {
 	Tools() tools.ITools
 	Actor() action.IActor
 	Load([]string, map[string]interface{})
+	Close()
 	PlantChainTrigger(count int, userId string, tag string, machineId string, pointId string, input string)
 	ExecAppletRequestOnChain(pointId string, machineId string, key string, payload []byte, signature string, userId string, tag string, tokenId string, callback func([]byte, int, error))
 	ExecAppletResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update)
