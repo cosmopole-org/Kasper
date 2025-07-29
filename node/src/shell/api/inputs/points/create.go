@@ -3,6 +3,7 @@ package inputs_points
 type CreateInput struct {
 	IsPublic *bool  `json:"isPublic" validate:"required"`
 	PersHist *bool  `json:"persHist" validate:"required"`
+	ParentId string `json:"parentId"`
 	Orig     string `json:"orig"`
 	Metadata any    `json:"metadata"`
 }

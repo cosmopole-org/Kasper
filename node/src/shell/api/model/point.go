@@ -8,6 +8,7 @@ import (
 
 type Point struct {
 	Id       string `json:"id"`
+	ParentId string `json:"parentId"`
 	PersHist bool   `json:"persHist"`
 	IsPublic bool   `json:"isPublic"`
 }
@@ -26,6 +27,7 @@ func (d Point) Push(trx trx.ITrx) {
 		b2 = byte(0x01)
 	}
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
+		"parentId": []byte(d.ParentId),
 		"isPublic": {b},
 		"persHist": {b2},
 	})
@@ -34,6 +36,7 @@ func (d Point) Push(trx trx.ITrx) {
 func (d Point) Pull(trx trx.ITrx) Point {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {
+		d.ParentId = string(m["parentId"])
 		d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 		d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 	}
@@ -67,6 +70,7 @@ func (d Point) List(trx trx.ITrx, prefix string, positional ...int) ([]Point, er
 		if len(m) > 0 {
 			d := Point{}
 			d.Id = id
+			d.ParentId = string(m["parentId"])
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)
@@ -86,6 +90,7 @@ func (d Point) All(trx trx.ITrx, offset int64, count int64, query map[string]str
 		if len(m) > 0 {
 			d := Point{}
 			d.Id = id
+			d.ParentId = string(m["parentId"])
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)

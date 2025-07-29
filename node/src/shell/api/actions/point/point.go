@@ -90,7 +90,19 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	if input.Origin() == "global" {
 		orig = "global"
 	}
-	point := model.Point{Id: a.App.Tools().Storage().GenId(trx, orig), IsPublic: *input.IsPublic, PersHist: *input.PersHist}
+	if input.ParentId != "" {
+		if !trx.HasObj("Point", input.ParentId) {
+			err := errors.New("parent point does not exist")
+			log.Println(err)
+			return nil, err
+		}
+		if trx.GetLink("admin::"+input.ParentId+"::"+state.Info().UserId()) != "true" {
+			err := errors.New("access to point denied")
+			log.Println(err)
+			return nil, err
+		}
+	}
+	point := model.Point{Id: a.App.Tools().Storage().GenId(trx, orig), IsPublic: *input.IsPublic, PersHist: *input.PersHist, ParentId: input.ParentId}
 	point.Push(trx)
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
@@ -113,7 +125,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		log.Println(err)
 		return nil, err
 	}
- 	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
+	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
 	return outputs_points.CreateOutput{Point: point}, nil
 }
 
@@ -134,7 +146,7 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, true)
 	}
 	point.Push(trx)
-		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+	meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
 	if err != nil {
 		log.Println(err)
 		return nil, err
