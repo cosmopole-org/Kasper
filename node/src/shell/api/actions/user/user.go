@@ -214,28 +214,36 @@ func (a *Actions) Login(state state.IState, input inputsusers.LoginInput) (any, 
 		if err != nil {
 			log.Fatalf("Failed to generate RSA private key: %v", err)
 		}
-		fmt.Println("RSA Key Pair generated successfully!")
 		publicKey := &privateKey.PublicKey
-		pkcs8PrivateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+		fmt.Println("RSA Key Pair generated successfully.")
+		fmt.Println("\n--- Step 2.1: Convert Private Key to PKCS#8 PEM String ---")
+		pkcs8PrivateKeyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
 		if err != nil {
-			log.Fatalf("Failed to marshal private key to PKCS#8: %v", err)
+			log.Fatalf("Failed to marshal private key to PKCS#8 DER: %v", err)
 		}
-		pkcs8Pem := pem.EncodeToMemory(&pem.Block{
+		pkcs8PrivateKeyPEM := pem.EncodeToMemory(&pem.Block{
 			Type:  "PRIVATE KEY",
-			Bytes: pkcs8PrivateKeyBytes,
+			Bytes: pkcs8PrivateKeyDER,
 		})
-		spkiPublicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+		fmt.Println("Generated PKCS#8 Private Key (PEM):")
+		fmt.Println(string(pkcs8PrivateKeyPEM))
+		fmt.Println("\n--- Step 2.2: Convert Public Key to SPKI PEM String ---")
+		spkiPublicKeyDER, err := x509.MarshalPKIXPublicKey(publicKey)
 		if err != nil {
-			log.Fatalf("Failed to marshal public key to SPKI: %v", err)
+			log.Fatalf("Failed to marshal public key to SPKI DER: %v", err)
 		}
-		spkiPem := pem.EncodeToMemory(&pem.Block{
-			Type:  "PUBLIC KEY",
-			Bytes: spkiPublicKeyBytes,
+		spkiPublicKeyPEM := pem.EncodeToMemory(&pem.Block{
+			Type:  "PUBLIC KEY", // The standard PEM block type for SPKI public keys
+			Bytes: spkiPublicKeyDER,
 		})
-		pubKey := string(pkcs8Pem)
+		fmt.Println("Generated SPKI Public Key (PEM):")
+		fmt.Println(string(spkiPublicKeyPEM))
+		
+		pubKey := string(spkiPublicKeyPEM)
 		pubKey = pubKey[len("-----BEGIN PUBLIC KEY-----\n") : len(pubKey)-len("\n-----END PUBLIC KEY-----\n")]
-		privKey := string(spkiPem)
+		privKey := string(pkcs8PrivateKeyPEM)
 		privKey = privKey[len("-----BEGIN PRIVATE KEY-----\n") : len(privKey)-len("\n-----END PRIVATE KEY-----\n")]
+		
 		req := inputsusers.CreateInput{
 			Username:  input.Username,
 			PublicKey: pubKey,
