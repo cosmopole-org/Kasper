@@ -482,7 +482,7 @@ func (tw *TrxWrapper) GetPriKey(key string) *rsa.PrivateKey {
 	} else {
 		pemData := "-----BEGIN PRIVATE KEY-----\n" + res + "\n-----END PRIVATE KEY-----\n"
 		block, _ := pem.Decode([]byte(pemData))
-		if block == nil || block.Type != "PRIVATE KEY" { // Check for "PRIVATE KEY" type for PKCS#8
+		if block == nil || block.Type != "PRIVATE KEY" {
 			log.Fatal("Failed to decode PEM block or block type is not 'PRIVATE KEY'")
 		}
 		parsedKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
@@ -505,17 +505,17 @@ func (tw *TrxWrapper) GetPubKey(key string) *rsa.PublicKey {
 	} else {
 		pemData := "-----BEGIN PUBLIC KEY-----\n" + res + "\n-----END PUBLIC KEY-----\n"
 		block, _ := pem.Decode([]byte(pemData))
-		if block == nil || block.Type != "PUBLIC KEY" {
-			log.Fatal("Failed to decode PEM block or block type is not 'PUBLIC KEY'")
+		if block == nil {
+			log.Println("Failed to decode PEM block.")
+			return nil
 		}
-		parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+		publicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
 		if err != nil {
-			log.Fatalf("Failed to parse SPKI public key: %v", err)
+			log.Println(err)
+			log.Println("Parsed key is not an RSA public key.")
+			return nil
 		}
-		publicKey, ok := parsedKey.(*rsa.PublicKey)
-		if !ok {
-			log.Fatal("Parsed key is not an RSA public key. It might be another type (e.g., ECDSA).")
-		}
+		fmt.Println("RSA Public Key extracted successfully!")
 		return publicKey
 	}
 }
