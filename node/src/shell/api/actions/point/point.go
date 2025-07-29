@@ -177,7 +177,7 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 		return nil, errors.New("you are not admin")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
-	trx.DelKey("obj::Point::" + point.Id + "::|")
+	point.Delete(trx)
 	members, _ := trx.GetLinksList("member::"+point.Id+"::", 0, 0)
 	usersList := []string{}
 	for _, member := range members {

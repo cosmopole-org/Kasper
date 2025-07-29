@@ -33,6 +33,15 @@ func (d Point) Push(trx trx.ITrx) {
 	})
 }
 
+func (d Point) Delete(trx trx.ITrx) {
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::|")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::id")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::parentId")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::isPublic")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::persHist")
+	trx.DelJson("PointMeta::"+d.Id, "metadata")
+}
+
 func (d Point) Pull(trx trx.ITrx) Point {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {
