@@ -509,11 +509,15 @@ func (tw *TrxWrapper) GetPubKey(key string) *rsa.PublicKey {
 			log.Println("Failed to decode PEM block.")
 			return nil
 		}
-		publicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+		parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
 		if err != nil {
 			log.Println(err)
 			log.Println("Parsed key is not an RSA public key.")
 			return nil
+		}
+		publicKey, ok := parsedKey.(*rsa.PublicKey)
+		if !ok {
+			log.Fatal("Parsed key is not an RSA public key.")
 		}
 		fmt.Println("RSA Public Key extracted successfully!")
 		return publicKey
