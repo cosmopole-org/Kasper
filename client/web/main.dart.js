@@ -62375,7 +62375,7 @@ o=f.d
 n=t.hQ
 if(A.eB(a,!1,n).a===B.m)m=$.ax.P().a===B.m?B.bM:B.c3
 else m=$.ax.P().a===B.m?B.F:B.i
-l=f.f?A.vL(new A.aL(0,0)):new A.cG(new A.aL(48,48),new A.aL(48,48),B.Q,B.Q)
+l=f.f?A.vL(new A.aL(0,0)):new A.cG(new A.aL(30,30),new A.aL(30,30),B.Q,B.Q)
 if(A.eB(a,!1,n).a===B.m){n=$.ax.P().a===B.m?B.iI:B.hb
 n=A.c([n,$.ax.P().a===B.m?B.rh:B.rm],t.t_)}else{n=$.ax.P().a===B.m?B.bu:B.bg
 n=A.c([n,$.ax.P().a===B.m?B.dg:B.cT],t.t_)}k=$.fU
