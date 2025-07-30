@@ -128,7 +128,6 @@ function processPacket(data) {
   });
 }
 
-// Utility Functions
 function sign(message) {
   if (privateKey) {
     const signature = crypto.sign(null, message, {

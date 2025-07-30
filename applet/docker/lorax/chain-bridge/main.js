@@ -130,13 +130,14 @@ function processPacket(data) {
   });
 }
 
-// Utility Functions
-function sign(b) {
+function sign(message) {
   if (privateKey) {
-    var sign = crypto.createSign("RSA-SHA256");
-    sign.update(b, "utf8");
-    var signature = sign.sign(privateKey, "base64");
-    return signature;
+    const signature = crypto.sign(null, message, {
+      key: privateKey,
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: 32,
+    });
+    return signature.toString('base64');
   } else {
     return "";
   }
@@ -228,12 +229,7 @@ async function consumeLock(req, res) {
 
 // Server Setup
 async function runServer() {
-  privateKey = Buffer.from(
-    "-----BEGIN RSA PRIVATE KEY-----\n" +
-    USER_PRIVATEKEY +
-    "\n-----END RSA PRIVATE KEY-----\n",
-    "utf-8"
-  );
+  privateKey = USER_PRIVATEKEY;
 
   await sendRequest(USER_ID, "authenticate", {});
   await sleep(3000);
