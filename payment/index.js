@@ -346,9 +346,9 @@ async function handleWebhook(request, response) {
 // Server Setup
 async function runServer() {
   privateKey = Buffer.from(
-    "-----BEGIN RSA PRIVATE KEY-----\n" +
+    "-----BEGIN PRIVATE KEY-----\n" +
       GOD_USER_PRIVATEKEY +
-      "\n-----END RSA PRIVATE KEY-----\n",
+      "\n-----END PRIVATE KEY-----\n",
     "utf-8"
   );
 
