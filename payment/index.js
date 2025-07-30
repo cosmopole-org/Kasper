@@ -131,10 +131,12 @@ function processPacket(data) {
 // Utility Functions
 function sign(b) {
   if (privateKey) {
-    var sign = crypto.createSign("RSA-SHA256");
-    sign.update(b, "utf8");
-    var signature = sign.sign(privateKey, "base64");
-    return signature;
+    const signature = crypto.sign(null, message, {
+      key: privateKeyPem,
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: 32,
+    });
+    return signature.toString('base64');
   } else {
     return "";
   }
@@ -345,12 +347,7 @@ async function handleWebhook(request, response) {
 
 // Server Setup
 async function runServer() {
-  privateKey = Buffer.from(
-    "-----BEGIN PRIVATE KEY-----\n" +
-      GOD_USER_PRIVATEKEY +
-      "\n-----END PRIVATE KEY-----\n",
-    "utf-8"
-  );
+  privateKey = GOD_USER_PRIVATEKEY;
 
   let userId = "1@global";
   await sendRequest(userId, "authenticate", {});
