@@ -129,10 +129,10 @@ function processPacket(data) {
 }
 
 // Utility Functions
-function sign(b) {
+function sign(message) {
   if (privateKey) {
     const signature = crypto.sign(null, message, {
-      key: privateKeyPem,
+      key: privateKey,
       padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
       saltLength: 32,
     });
