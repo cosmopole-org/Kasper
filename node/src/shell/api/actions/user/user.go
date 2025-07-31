@@ -10,7 +10,6 @@ import (
 	"kasper/src/abstract/state"
 	"kasper/src/core/module/actor/model/base"
 	mainstate "kasper/src/core/module/actor/model/state"
-	inputs_users "kasper/src/shell/api/inputs/users"
 	inputsusers "kasper/src/shell/api/inputs/users"
 	models "kasper/src/shell/api/model"
 	outputsusers "kasper/src/shell/api/outputs/users"
@@ -270,10 +269,10 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	return outputsusers.CreateOutput{User: user, Session: session}, nil
 }
 
-// Update /users/update check [ false false false ] access [ true false false false POST ]
+// Update /users/update check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any, error) {
 	trx := state.Trx()
-	trx.PutJson("UserMeta::"+state.Info().UserId(), "metadata", input.Metadata, false)
+	trx.PutJson("UserMeta::"+state.Info().UserId(), "metadata", input.Metadata, true)
 	meta, err := trx.GetJson("UserMeta::"+state.Info().UserId(), "metadata.public.profile")
 	if err != nil {
 		log.Println(err)
@@ -288,7 +287,7 @@ func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any
 }
 
 // Meta /users/meta check [ true false false ] access [ true false false false GET ]
-func (a *Actions) Meta(state state.IState, input inputs_users.MetaInput) (any, error) {
+func (a *Actions) Meta(state state.IState, input inputsusers.MetaInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("User", input.UserId) {
 		return nil, errors.New("user not found")
