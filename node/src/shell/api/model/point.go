@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"kasper/src/abstract/models/trx"
 	"log"
+	"sort"
 )
 
 type Point struct {
@@ -85,6 +86,9 @@ func (d Point) List(trx trx.ITrx, prefix string, positional ...int) ([]Point, er
 			entities = append(entities, d)
 		}
 	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].Id < entities[j].Id
+	})
 	return entities, nil
 }
 
@@ -105,5 +109,8 @@ func (d Point) All(trx trx.ITrx, offset int64, count int64, query map[string]str
 			entities = append(entities, d)
 		}
 	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].Id < entities[j].Id
+	})
 	return entities, nil
 }

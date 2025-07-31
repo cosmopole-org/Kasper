@@ -1,7 +1,7 @@
 package inputs_users
 
 type UpdateInput struct {
-	Metadata  any    `json:"metadata"`
+	Metadata any `json:"metadata"`
 }
 
 func (d UpdateInput) GetData() any {

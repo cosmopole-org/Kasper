@@ -10,11 +10,13 @@ import (
 	"kasper/src/abstract/state"
 	"kasper/src/core/module/actor/model/base"
 	mainstate "kasper/src/core/module/actor/model/state"
+	inputs_users "kasper/src/shell/api/inputs/users"
 	inputsusers "kasper/src/shell/api/inputs/users"
 	models "kasper/src/shell/api/model"
 	outputsusers "kasper/src/shell/api/outputs/users"
 	"kasper/src/shell/utils/crypto"
 	"log"
+	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
@@ -283,6 +285,23 @@ func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any
 		return nil, err
 	}
 	return map[string]any{}, nil
+}
+
+// Meta /users/meta check [ true false false ] access [ true false false false GET ]
+func (a *Actions) Meta(state state.IState, input inputs_users.MetaInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("User", input.UserId) {
+		return nil, errors.New("user not found")
+	}
+	if (state.Info().UserId() != input.UserId) && strings.HasPrefix(input.Path, "private.") {
+		return nil, errors.New("access denied")
+	}
+	metadata, err := trx.GetJson("UserMeta::"+input.UserId, "metadata."+input.Path)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"metadata": metadata}, nil
 }
 
 // Get /users/get check [ true false false ] access [ true false false false GET ]

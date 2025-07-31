@@ -199,6 +199,24 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 	return outputs_points.DeleteOutput{Point: point}, nil
 }
 
+// Meta /points/meta check [ true false false ] access [ true false false false GET ]
+func (a *Actions) Meta(state state.IState, input inputs_points.MetaInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("Point", input.PointId) {
+		return nil, errors.New("point not found")
+	}
+	isMember := a.App.Tools().Security().HasAccessToPoint(state.Info().PointId(), input.PointId)
+	if !isMember && strings.HasPrefix(input.Path, "private.") {
+		return nil, errors.New("access denied")
+	}
+	metadata, err := trx.GetJson("PointMeta::"+input.PointId, "metadata."+input.Path)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"metadata": metadata}, nil
+}
+
 // Get /points/get check [ true false false ] access [ true false false false GET ]
 func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, error) {
 	trx := state.Trx()

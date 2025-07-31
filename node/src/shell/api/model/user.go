@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"kasper/src/abstract/models/trx"
 	"log"
+	"sort"
 )
 
 type User struct {
@@ -67,6 +68,9 @@ func (d User) List(trx trx.ITrx, prefix string) ([]User, error) {
 			entities = append(entities, d)
 		}
 	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].Id < entities[j].Id
+	})
 	return entities, nil
 }
 
@@ -88,5 +92,8 @@ func (d User) All(trx trx.ITrx, offset int64, count int64, query map[string]stri
 			entities = append(entities, d)
 		}
 	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].Id < entities[j].Id
+	})
 	return entities, nil
 }

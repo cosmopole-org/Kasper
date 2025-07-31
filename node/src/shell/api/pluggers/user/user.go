@@ -50,6 +50,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Update)
 		}
 		
+		func (c *Plugger) Meta() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Meta)
+		}
+		
 		func (c *Plugger) Get() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Get)
 		}

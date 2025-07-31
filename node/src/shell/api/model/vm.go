@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"kasper/src/abstract/models/trx"
 	"log"
+	"sort"
 )
 
 type App struct {
@@ -52,6 +53,9 @@ func (d App) All(trx trx.ITrx, offset int64, count int64) ([]App, error) {
 			entities = append(entities, d)
 		}
 	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].Id < entities[j].Id
+	})
 	return entities, nil
 }
 
@@ -103,5 +107,8 @@ func (d Vm) All(trx trx.ITrx, offset int64, count int64) ([]Vm, error) {
 			entities = append(entities, d)
 		}
 	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].MachineId < entities[j].MachineId
+	})
 	return entities, nil
 }
