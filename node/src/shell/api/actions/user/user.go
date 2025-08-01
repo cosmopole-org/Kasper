@@ -266,7 +266,7 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 		log.Println(err)
 		return nil, err
 	}
-	trx.PutIndex("User", "name", "id", user.Id+"->"+meta["name"].(string), []byte(state.Info().UserId()))
+	trx.PutIndex("User", "name", "id", user.Id+"->"+meta["name"].(string), []byte(user.Id))
 	return outputsusers.CreateOutput{User: user, Session: session}, nil
 }
 
