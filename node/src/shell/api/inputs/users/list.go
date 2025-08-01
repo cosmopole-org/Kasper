@@ -1,8 +1,9 @@
 package inputs_users
 
 type ListInput struct {
-	Offset int64 `json:"offset"`
-	Count  int64 `json:"count"`
+	Offset int64  `json:"offset"`
+	Count  int64  `json:"count"`
+	Query  string `json:"query"`
 }
 
 func (d ListInput) GetData() any {

@@ -96,6 +96,10 @@ func (tw *TrxWrapper) PutIndex(typ string, fromColumn string, toColumn string, f
 	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal, Val: toColumnVal})
 }
 
+func (tw *TrxWrapper) DelIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) {
+	tw.DelKey("index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal)
+}
+
 func (tw *TrxWrapper) HasIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) bool {
 	_, e := tw.dbTrx.Get([]byte("index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal))
 	return e == nil
@@ -469,6 +473,53 @@ func (tw *TrxWrapper) GetLinksList(p string, offset int, count int) ([]string, e
 		item := it.Item()
 		itemKey := item.Key()
 		m = append(m, string(itemKey)[len("link::"):])
+	}
+	return m, nil
+}
+
+func (tw *TrxWrapper) SearchLinkValsList(typ string, fromColumn string, toColumn string, word string, filter map[string]string, offset int64, count int64) ([]string, error) {
+	prefix := []byte("index::" + typ + "::" + fromColumn + "::" + toColumn + "::")
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = true
+	opts.Prefix = prefix
+	it := tw.dbTrx.NewIterator(opts)
+	defer it.Close()
+	m := []string{}
+	counter := int64(0)
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		item := it.Item()
+		itemKey := item.Key()
+		if strings.Contains(string(itemKey[len(prefix):]), word) {
+			if counter < offset {
+				counter++
+				continue
+			}
+			if counter >= (offset + count) {
+				break
+			}
+			var itemVal []byte
+			err := item.Value(func(v []byte) error {
+				itemVal = v
+				return nil
+			})
+			if err != nil {
+				log.Println(err)
+				return nil, err
+			}
+			matched := true
+			if len(filter) > 0 {
+				for k, v := range filter {
+					if string(tw.GetColumn(typ, string(itemVal), k)) != v {
+						matched = false
+						break
+					}
+				}
+			}
+			if matched {
+				m = append(m, string(itemVal))
+			}
+			counter++
+		}
 	}
 	return m, nil
 }

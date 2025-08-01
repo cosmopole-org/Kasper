@@ -114,3 +114,31 @@ func (d Point) All(trx trx.ITrx, offset int64, count int64, query map[string]str
 	})
 	return entities, nil
 }
+
+func (d Point) Search(trx trx.ITrx, offset int64, count int64, word string, filter map[string]string) ([]Point, error) {
+	links, err := trx.SearchLinkValsList("Point", "title", "id", word, filter, offset, count)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	objs, err := trx.GetObjList("Point", links, map[string]string{})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	entities := []Point{}
+	for id, m := range objs {
+		if len(m) > 0 {
+			d := Point{}
+			d.Id = id
+			d.ParentId = string(m["parentId"])
+			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
+			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
+			entities = append(entities, d)
+		}
+	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].Id < entities[j].Id
+	})
+	return entities, nil
+}

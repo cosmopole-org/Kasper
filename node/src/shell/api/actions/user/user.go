@@ -266,14 +266,21 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 		log.Println(err)
 		return nil, err
 	}
+	trx.PutIndex("User", "name", "id", user.Id+"->"+meta["name"].(string), []byte(state.Info().UserId()))
 	return outputsusers.CreateOutput{User: user, Session: session}, nil
 }
 
 // Update /users/update check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any, error) {
 	trx := state.Trx()
-	trx.PutJson("UserMeta::"+state.Info().UserId(), "metadata", input.Metadata, true)
 	meta, err := trx.GetJson("UserMeta::"+state.Info().UserId(), "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	trx.DelIndex("User", "name", "id", state.Info().UserId()+"->"+meta["name"].(string))
+	trx.PutJson("UserMeta::"+state.Info().UserId(), "metadata", input.Metadata, true)
+	meta, err = trx.GetJson("UserMeta::"+state.Info().UserId(), "metadata.public.profile")
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -283,6 +290,7 @@ func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any
 		log.Println(err)
 		return nil, err
 	}
+	trx.PutIndex("User", "name", "id", state.Info().UserId()+"->"+meta["name"].(string), []byte(state.Info().UserId()))
 	return map[string]any{}, nil
 }
 
@@ -359,7 +367,7 @@ func (a *Actions) Find(state state.IState, input inputsusers.FindInput) (any, er
 // List /users/list check [ true false false ] access [ true false false false GET ]
 func (a *Actions) List(state state.IState, input inputsusers.ListInput) (any, error) {
 	trx := state.Trx()
-	users, err := models.User{}.All(trx, input.Offset, input.Count, map[string]string{"type": "human"})
+	users, err := models.User{}.Search(trx, input.Offset, input.Count, input.Query, map[string]string{"type": "human"})
 	if err != nil {
 		log.Println(err)
 		return nil, err

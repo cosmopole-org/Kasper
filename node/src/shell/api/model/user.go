@@ -97,3 +97,32 @@ func (d User) All(trx trx.ITrx, offset int64, count int64, query map[string]stri
 	})
 	return entities, nil
 }
+
+func (d User) Search(trx trx.ITrx, offset int64, count int64, word string, filter map[string]string) ([]User, error) {
+	links, err := trx.SearchLinkValsList("User", "name", "id", word, filter, offset, count)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	objs, err := trx.GetObjList("User", links, map[string]string{})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	entities := []User{}
+	for id, m := range objs {
+		if len(m) > 0 {
+			d := User{}
+			d.Id = id
+			d.Typ = string(m["type"])
+			d.Username = string(m["username"])
+			d.PublicKey = string(m["publicKey"])
+			d.Balance = int64(binary.LittleEndian.Uint64(m["balance"]))
+			entities = append(entities, d)
+		}
+	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].Id < entities[j].Id
+	})
+	return entities, nil
+}

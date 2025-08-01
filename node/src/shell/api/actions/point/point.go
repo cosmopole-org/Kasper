@@ -125,6 +125,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		log.Println(err)
 		return nil, err
 	}
+	trx.PutIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string), []byte(point.Id))
 	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
 	return outputs_points.CreateOutput{Point: point}, nil
 }
@@ -143,7 +144,14 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 		point.PersHist = *input.PersHist
 	}
 	if input.Metadata != nil {
+		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		trx.DelIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string))
 		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, true)
+		trx.PutIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string), []byte(point.Id))
 	}
 	point.Push(trx)
 	meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
@@ -177,6 +185,12 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 		return nil, errors.New("you are not admin")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	trx.DelIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string))
 	point.Delete(trx)
 	members, _ := trx.GetLinksList("member::"+point.Id+"::", 0, 0)
 	usersList := []string{}
@@ -343,7 +357,7 @@ func (a *Actions) History(state state.IState, input inputs_points.HistoryInput) 
 // List /points/list check [ true false false ] access [ true false false false GET ]
 func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, error) {
 	trx := state.Trx()
-	points, err := model.Point{}.All(trx, input.Offset, input.Count, map[string]string{"isPublic": string([]byte{0x01})})
+	points, err := model.Point{}.Search(trx, input.Offset, input.Count, input.Query, map[string]string{"isPublic": string([]byte{0x01})})
 	if err != nil {
 		log.Println(err)
 		return nil, err
