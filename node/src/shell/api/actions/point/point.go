@@ -151,6 +151,11 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 		}
 		trx.DelIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string))
 		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, true)
+		meta, err = trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
 		trx.PutIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string), []byte(point.Id))
 	}
 	point.Push(trx)
