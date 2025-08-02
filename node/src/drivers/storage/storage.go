@@ -44,7 +44,7 @@ func (sm *StorageManager) ReadPointLogs(pointId string) []packet.LogPacket {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	scanner := sm.tsdb.Query(`SELECT id, user_id, data FROM storage WHERE point_id = ?`, pointId).WithContext(ctx).Iter().Scanner()
+	scanner := sm.tsdb.Query(`SELECT id, user_id, data FROM storage WHERE point_id = ? ALLOW FILTERING`, pointId).WithContext(ctx).Iter().Scanner()
 	var err error
 	logs := []packet.LogPacket{}
 	for scanner.Next() {
