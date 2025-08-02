@@ -34,7 +34,7 @@ func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data str
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data) VALUES (?, ?, ?)`,
+	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data) VALUES (?, ?, ?, ?)`,
 		gocql.TimeUUID(), pointId, userId, data).WithContext(ctx).Exec(); err != nil {
 		log.Fatal(err)
 	}
