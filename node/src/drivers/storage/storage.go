@@ -55,7 +55,7 @@ func (sm *StorageManager) ReadPointLogs(pointId string) []packet.LogPacket {
 		if err != nil {
 			log.Fatal(err)
 		}
-		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data})
+		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId})
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
