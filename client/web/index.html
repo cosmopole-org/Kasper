@@ -37,6 +37,9 @@
     type="text/javascript"></script>
   <script type="text/javascript">
     let vms = {};
+    function _destroyVm(appId) {
+       vms[appId] && vms[appId].dispose();
+    }   
     async function _runJsCode(appId, id, code) {
       let vm;
       if (vms[appId]) vm = vms[appId];
@@ -46,7 +49,6 @@
         vms[appId] = vm;
         const fnHandle = vm.newFunction("hostFunction", (...args) => {
           const nativeArgs = args.map(vm.dump);
-          console.log(...nativeArgs);
           window.hostFunction(appId, nativeArgs[0], nativeArgs[1]);
         })
         vm.setProp(vm.global, "hostFunction", fnHandle)
