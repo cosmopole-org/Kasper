@@ -2,7 +2,7 @@ package inputs_points
 
 type HistoryInput struct {
 	PointId  string `json:"pointId" validate:"required"`
-	BeforeId string `json:"beforeId" validate:"required"`
+	BeforeId string `json:"beforeId"`
 	Count    int    `json:"count" validate:"required"`
 }
 
