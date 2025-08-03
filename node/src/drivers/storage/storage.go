@@ -46,15 +46,15 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	uuid, err := gocql.ParseUUID(beforeTime)
-	if err != nil {
-		fmt.Println("Invalid UUID:", err)
-		return []packet.LogPacket{}
-	}
 	var scanner gocql.Scanner
 	if beforeTime == "" {
 		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time FROM storage WHERE point_id = ? limit ? ALLOW FILTERING`, pointId, count).WithContext(ctx).Iter().Scanner()
 	} else {
+		uuid, err := gocql.ParseUUID(beforeTime)
+		if err != nil {
+			fmt.Println("Invalid UUID:", err)
+			return []packet.LogPacket{}
+		}
 		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time FROM storage WHERE point_id = ? and id < ? limit ? ALLOW FILTERING`, pointId, uuid, count).WithContext(ctx).Iter().Scanner()
 	}
 	logs := []packet.LogPacket{}
@@ -63,7 +63,7 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count
 		var userId string
 		var data string
 		var timeVal int64
-		err = scanner.Scan(&id, &userId, &data, &timeVal)
+		err := scanner.Scan(&id, &userId, &data, &timeVal)
 		if err != nil {
 			log.Fatal(err)
 		}
