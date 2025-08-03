@@ -374,8 +374,9 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 	if input.Type == "broadcast" {
 		var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
 		if point.PersHist {
-			a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
+			insertedId := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
 			trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", map[string]any{
+				"id":     insertedId,
 				"data":   input.Data,
 				"userId": state.Info().UserId(),
 				"time":   t,
@@ -387,8 +388,9 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 		if trx.GetLink("member::"+point.Id+"::"+input.UserId) == "true" {
 			var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data, Time: t}
 			if point.PersHist {
-				a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
+				insertedId := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
 				trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", map[string]any{
+					"id":     insertedId,
 					"data":   input.Data,
 					"userId": state.Info().UserId(),
 					"time":   t,

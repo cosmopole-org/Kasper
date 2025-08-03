@@ -30,14 +30,16 @@ func (sm *StorageManager) KvDb() *badger.DB {
 	return sm.kvdb
 }
 
-func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string, timeVal int64) {
+func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string, timeVal int64) string {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
+	id := gocql.TimeUUID()
 	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data, time) VALUES (?, ?, ?, ?, ?)`,
-		gocql.TimeUUID(), pointId, userId, data, timeVal).WithContext(ctx).Exec(); err != nil {
+		id, pointId, userId, data, timeVal).WithContext(ctx).Exec(); err != nil {
 		log.Fatal(err)
 	}
+	return id.String()
 }
 
 func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count int) []packet.LogPacket {
