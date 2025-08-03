@@ -30,12 +30,12 @@ func (sm *StorageManager) KvDb() *badger.DB {
 	return sm.kvdb
 }
 
-func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string) {
+func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string, timeVal int64) {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data) VALUES (?, ?, ?, ?)`,
-		gocql.TimeUUID(), pointId, userId, data).WithContext(ctx).Exec(); err != nil {
+	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data, time) VALUES (?, ?, ?, ?, ?)`,
+		gocql.TimeUUID(), pointId, userId, data, timeVal).WithContext(ctx).Exec(); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -44,18 +44,19 @@ func (sm *StorageManager) ReadPointLogs(pointId string) []packet.LogPacket {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	scanner := sm.tsdb.Query(`SELECT id, user_id, data FROM storage WHERE point_id = ? ALLOW FILTERING`, pointId).WithContext(ctx).Iter().Scanner()
+	scanner := sm.tsdb.Query(`SELECT id, user_id, data, time FROM storage WHERE point_id = ? ALLOW FILTERING`, pointId).WithContext(ctx).Iter().Scanner()
 	var err error
 	logs := []packet.LogPacket{}
 	for scanner.Next() {
 		var id gocql.UUID
 		var userId string
 		var data string
-		err = scanner.Scan(&id, &userId, &data)
+		var timeVal int64
+		err = scanner.Scan(&id, &userId, &data, &timeVal)
 		if err != nil {
 			log.Fatal(err)
 		}
-		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId})
+		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal})
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
