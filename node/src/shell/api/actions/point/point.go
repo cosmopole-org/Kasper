@@ -372,32 +372,30 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	t := time.Now().UnixMilli()
 	if input.Type == "broadcast" {
-		var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
 		if point.PersHist {
-			insertedId := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
-			trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", map[string]any{
-				"id":     insertedId,
-				"data":   input.Data,
-				"userId": state.Info().UserId(),
-				"time":   t,
-			}, false)
+			packet := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
+			trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", packet, false)
+			var p = updates_points.Send{Id: packet.Id, Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
+			a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+			return outputs_points.SignalOutput{Passed: true, Packet: packet}, nil
+		} else {
+			var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
+			a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+			return outputs_points.SignalOutput{Passed: true}, nil
 		}
-		a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
-		return outputs_points.SignalOutput{Passed: true}, nil
 	} else if input.Type == "single" {
 		if trx.GetLink("member::"+point.Id+"::"+input.UserId) == "true" {
-			var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data, Time: t}
 			if point.PersHist {
-				insertedId := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
-				trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", map[string]any{
-					"id":     insertedId,
-					"data":   input.Data,
-					"userId": state.Info().UserId(),
-					"time":   t,
-				}, false)
+				packet := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
+				trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", packet, false)
+				var p = updates_points.Send{Id: packet.Id, Action: "single", Point: point, User: user, Data: input.Data, Time: t}
+				a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
+				return outputs_points.SignalOutput{Passed: true, Packet: packet}, nil
+			} else {
+				var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data, Time: t}
+				a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
+				return outputs_points.SignalOutput{Passed: true}, nil
 			}
-			a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
-			return outputs_points.SignalOutput{Passed: true}, nil
 		}
 	}
 	return outputs_points.SignalOutput{Passed: false}, nil

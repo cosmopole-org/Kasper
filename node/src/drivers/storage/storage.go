@@ -30,7 +30,7 @@ func (sm *StorageManager) KvDb() *badger.DB {
 	return sm.kvdb
 }
 
-func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string, timeVal int64) string {
+func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string, timeVal int64) packet.LogPacket {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
@@ -39,7 +39,7 @@ func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data str
 		id, pointId, userId, data, timeVal).WithContext(ctx).Exec(); err != nil {
 		log.Fatal(err)
 	}
-	return id.String()
+	return packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal}
 }
 
 func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count int) []packet.LogPacket {
