@@ -34,25 +34,30 @@ func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data str
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data, time) VALUES (?, ?, ?, ?, ?)`,
+	if err := sm.tsdb.Query(`INSERT INTO storage(id, message_id, point_id, user_id, data, time) VALUES (?, ?, ?, ?, ?, ?)`,
 		gocql.TimeUUID(), pointId, userId, data, timeVal).WithContext(ctx).Exec(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func (sm *StorageManager) ReadPointLogs(pointId string) []packet.LogPacket {
+func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count int) []packet.LogPacket {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	scanner := sm.tsdb.Query(`SELECT id, user_id, data, time FROM storage WHERE point_id = ? ALLOW FILTERING`, pointId).WithContext(ctx).Iter().Scanner()
-	var err error
+	uuid, err := gocql.ParseUUID(beforeTime)
+	if err != nil {
+		fmt.Println("Invalid UUID:", err)
+		return []packet.LogPacket{}
+	}
+	scanner := sm.tsdb.Query(`SELECT id, message_id, user_id, data, time FROM storage WHERE point_id = ? and id < ? limit ? ALLOW FILTERING`, pointId, uuid, count).WithContext(ctx).Iter().Scanner()
 	logs := []packet.LogPacket{}
 	for scanner.Next() {
 		var id gocql.UUID
 		var userId string
 		var data string
 		var timeVal int64
-		err = scanner.Scan(&id, &userId, &data, &timeVal)
+		var messageId int64
+		err = scanner.Scan(&id, &messageId, &userId, &data, &timeVal)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -82,7 +87,7 @@ func (sm *StorageManager) GenId(t trx.ITrx, origin string) string {
 		return fmt.Sprintf("%d@%s", counter, origin)
 	} else {
 		trx := sm.kvdb.NewTransaction(true)
-		defer trx.Commit()	
+		defer trx.Commit()
 		item, err := trx.Get([]byte("localIdCounter"))
 		var counter int64 = 0
 		if err != nil {

@@ -381,7 +381,7 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 
 // History /points/history check [ true true true ] access [ true false false false POST ]
 func (a *Actions) History(state state.IState, input inputs_points.HistoryInput) (any, error) {
-	return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().ReadPointLogs(state.Info().PointId())}, nil
+	return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().ReadPointLogs(state.Info().PointId(), input.BeforeId, input.Count)}, nil
 }
 
 // List /points/list check [ true false false ] access [ true false false false GET ]

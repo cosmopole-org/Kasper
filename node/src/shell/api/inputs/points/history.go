@@ -1,7 +1,9 @@
 package inputs_points
 
 type HistoryInput struct {
-	PointId string `json:"pointId" validate:"required"`
+	PointId  string `json:"pointId" validate:"required"`
+	BeforeId string `json:"beforeId" validate:"required"`
+	Count    int    `json:"count" validate:"required"`
 }
 
 func (d HistoryInput) GetData() any {

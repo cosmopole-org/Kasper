@@ -115,24 +115,25 @@ func (t *Tools) Firectl() firectl.IFirectl {
 }
 
 type Core struct {
-	lock           sync.Mutex
-	triggerLock    sync.Mutex
-	ownerId        string
-	ownerPrivKey   *rsa.PrivateKey
-	id             string
-	tools          tools.ITools
-	gods           []string
-	chain          chan any
-	chainCallbacks map[string]*chain.ChainCallback
-	Ip             string
-	elections      []chain.Election
-	elecReg        bool
-	elecStarter    string
-	elecStartTime  int64
-	executors      map[string]bool
-	appPendingTrxs []*worker.Trx
-	actionStore    iaction.IActor
-	privKey        *rsa.PrivateKey
+	lock             sync.Mutex
+	triggerLock      sync.Mutex
+	ownerId          string
+	ownerPrivKey     *rsa.PrivateKey
+	id               string
+	tools            tools.ITools
+	gods             []string
+	chain            chan any
+	chainCallbacks   map[string]*chain.ChainCallback
+	Ip               string
+	elections        []chain.Election
+	elecReg          bool
+	elecStarter      string
+	elecStartTime    int64
+	executors        map[string]bool
+	appPendingTrxs   []*worker.Trx
+	actionStore      iaction.IActor
+	privKey          *rsa.PrivateKey
+	messageCallbacks map[string]*chain.MessageCallback
 }
 
 var MAX_VALIDATOR_COUNT = 5
@@ -148,17 +149,18 @@ func NewCore(ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
 	execs := map[string]bool{}
 	execs["172.77.5.1"] = true
 	return &Core{
-		ownerId:        ownerId,
-		ownerPrivKey:   ownerPrivateKey,
-		id:             id,
-		gods:           make([]string, 0),
-		chain:          nil,
-		chainCallbacks: map[string]*chain.ChainCallback{},
-		Ip:             localAddr,
-		elections:      nil,
-		elecReg:        false,
-		executors:      execs,
-		actionStore:    actor.NewActor(),
+		ownerId:          ownerId,
+		ownerPrivKey:     ownerPrivateKey,
+		id:               id,
+		gods:             make([]string, 0),
+		chain:            nil,
+		chainCallbacks:   map[string]*chain.ChainCallback{},
+		messageCallbacks: map[string]*chain.MessageCallback{},
+		Ip:               localAddr,
+		elections:        nil,
+		elecReg:          false,
+		executors:        execs,
+		actionStore:      actor.NewActor(),
 	}
 }
 
@@ -303,6 +305,18 @@ func (c *Core) ExecBaseRequestOnChain(key string, payload []byte, signature stri
 	}, false)
 }
 
+func (c *Core) SendMessageOnChain(key string, payload []byte, signature string, userId string, receivers []string, ReplyTo string, callback func(string, []byte)) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	callbackId := crypto.SecureUniqueString()
+	if callback != nil {
+		c.messageCallbacks[callbackId] = &chain.MessageCallback{Id: callbackId, Fn: callback}
+	}
+	future.Async(func() {
+		c.chain <- chain.ChainMessage{Key: key, Recievers: receivers, Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Payload: payload}
+	}, false)
+}
+
 func (c *Core) ExecBaseResponseOnChain(callbackId string, packet []byte, signature string, resCode int, e string, updates []update.Update, tag string, toUserId string) {
 	future.Async(func() {
 		sort.Slice(updates, func(i, j int) bool {
@@ -316,6 +330,73 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	switch typ {
+	case "message":
+		{
+			packet := chain.ChainMessage{}
+			err := json.Unmarshal(trxPayload, &packet)
+			if err != nil {
+				log.Println(err)
+				return ""
+			}
+			if !slices.Contains(packet.Recievers, c.id) {
+				return ""
+			}
+			if packet.Key == "genGlobalId" {
+				input := map[string]any{}
+				err := json.Unmarshal(packet.Payload, &input)
+				if err != nil {
+					log.Println(err)
+					return ""
+				}
+				pointIdRaw, ok := input["pointId"]
+				if !ok {
+					log.Println("pointId not set in chain message")
+					return ""
+				}
+				pointId, ok := pointIdRaw.(string)
+				if !ok {
+					log.Println("pointId in chain message is not string")
+					return ""
+				}
+				namespaceRaw, ok := input["namespace"]
+				if !ok {
+					log.Println("namespace not set in chain message")
+					return ""
+				}
+				namespace, ok := namespaceRaw.(string)
+				if !ok {
+					log.Println("namespace in chain message is not string")
+					return ""
+				}
+				var newValue int64
+				c.ModifyState(false, func(trx trx.ITrx) {
+					val := trx.GetBytes(pointId + "::" + namespace)
+					if len(val) == 0 {
+						newValue = 0
+					} else {
+						value := binary.LittleEndian.Uint64(val)
+						newValue = int64(value) + 1
+					}
+					newVal := make([]byte, 8)
+					binary.LittleEndian.PutUint64(newVal, uint64(newValue))
+					trx.PutBytes(pointId+"::"+namespace, newVal)
+				})
+				res, _ := json.Marshal(map[string]any{
+					"globalId":  newValue,
+					"pointId":   pointId,
+					"namespace": namespace,
+				})
+				signature := c.SignPacketAsOwner(res)
+				c.SendMessageOnChain("globalIdGened", res, signature, c.ownerId, []string{packet.Submitter}, packet.RequestId, nil)
+			} else if packet.Key == "globalIdGened" {
+				cb, ok := c.messageCallbacks[packet.ReplyTo]
+				if !ok {
+					return ""
+				}
+				cb.Fn(packet.Key, packet.Payload)
+			}
+			break
+		}
 	case "election":
 		{
 			packet := chain.ChainElectionPacket{}
@@ -806,6 +887,11 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 			case chain.ChainElectionPacket:
 				{
 					typ = "election"
+					break
+				}
+			case chain.ChainMessage:
+				{
+					typ = "message"
 					break
 				}
 			}

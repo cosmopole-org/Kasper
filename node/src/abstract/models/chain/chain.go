@@ -2,6 +2,17 @@ package chain
 
 import "kasper/src/abstract/models/update"
 
+type ChainMessage struct {
+	Key        string
+	Author     string
+	Submitter  string
+	Payload    []byte
+	Signatures []string
+	RequestId  string
+	Recievers  []string
+	ReplyTo    string
+}
+
 type ChainBaseRequest struct {
 	Key        string
 	Author     string
@@ -56,6 +67,11 @@ type ChainCallback struct {
 	Executors map[string]bool
 	Responses map[string]string
 	Tag       string
+}
+
+type MessageCallback struct {
+	Id string
+	Fn func(string, []byte)
 }
 
 type Effects struct {
