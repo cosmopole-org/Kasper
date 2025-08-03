@@ -102,7 +102,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 			return nil, err
 		}
 	}
-	point := model.Point{Id: a.App.Tools().Storage().GenId(trx, orig), IsPublic: *input.IsPublic, PersHist: *input.PersHist, ParentId: input.ParentId}
+	point := model.Point{Id: a.App.Tools().Storage().GenId(trx, orig), Tag: input.Tag, IsPublic: *input.IsPublic, PersHist: *input.PersHist, ParentId: input.ParentId}
 	point.Push(trx)
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
@@ -249,6 +249,7 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 			"parentId": point.ParentId,
 			"isPublic": point.IsPublic,
 			"persHist": point.PersHist,
+			"tag":      point.Tag,
 		}
 		if input.IncludeMeta {
 			metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
@@ -268,6 +269,7 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 		"parentId": point.ParentId,
 		"isPublic": point.IsPublic,
 		"persHist": point.PersHist,
+		"tag":      point.Tag,
 	}
 	if input.IncludeMeta {
 		metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
@@ -296,6 +298,7 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 			"parentId": point.ParentId,
 			"isPublic": point.IsPublic,
 			"persHist": point.PersHist,
+			"tag":      point.Tag,
 		}
 		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
 		if err != nil {
@@ -374,6 +377,7 @@ func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, 
 			"parentId": point.ParentId,
 			"isPublic": point.IsPublic,
 			"persHist": point.PersHist,
+			"tag":      point.Tag,
 		}
 		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
 		if err != nil {
