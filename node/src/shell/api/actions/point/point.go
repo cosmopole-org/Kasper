@@ -107,6 +107,26 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
 	trx.PutLink("admin::"+point.Id+"::"+state.Info().UserId(), "true")
+	if input.Tag == "1-to-1" {
+		if len(input.Members) > 2 {
+			return nil, errors.New("1-to-1 chat can not have more than 2 members")
+		} else if len(input.Members) == 2 && !input.Members[state.Info().UserId()] {
+			return nil, errors.New("1-to-1 chat can not have more than 2 members")
+		} else if len(input.Members) == 1 && input.Members[state.Info().UserId()] {
+			return nil, errors.New("1-to-1 chat can not have more than 2 members")
+		} else if len(input.Members) == 0 {
+			return nil, errors.New("1-to-1 chat can not have more than 2 members")
+		}
+	}
+	if input.Members != nil {
+		for userId, isAdmin := range input.Members {
+			trx.PutLink("memberof::"+userId+"::"+point.Id, "true")
+			trx.PutLink("member::"+point.Id+"::"+userId, "true")
+			if isAdmin {
+				trx.PutLink("admin::"+point.Id+"::"+userId, "true")
+			}
+		}
+	}
 	if input.Metadata != nil {
 		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, false)
 	}
