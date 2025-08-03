@@ -285,12 +285,18 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 	if trx.GetLink("member::"+input.PointId+"::"+state.Info().UserId()) != "true" {
 		return nil, errors.New("access to private point denied")
 	}
+	lastPacket := map[string]any{}
+	lpData, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.lastPacket")
+	if err == nil {
+		lastPacket = lpData
+	}
 	result := map[string]any{
-		"id":       point.Id,
-		"parentId": point.ParentId,
-		"isPublic": point.IsPublic,
-		"persHist": point.PersHist,
-		"tag":      point.Tag,
+		"id":         point.Id,
+		"parentId":   point.ParentId,
+		"isPublic":   point.IsPublic,
+		"persHist":   point.PersHist,
+		"tag":        point.Tag,
+		"lastPacket": lastPacket,
 	}
 	if input.IncludeMeta {
 		metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
@@ -314,12 +320,18 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 	}
 	results := []map[string]any{}
 	for _, point := range points {
+		lastPacket := map[string]any{}
+		lpData, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.lastPacket")
+		if err == nil {
+			lastPacket = lpData
+		}
 		result := map[string]any{
-			"id":       point.Id,
-			"parentId": point.ParentId,
-			"isPublic": point.IsPublic,
-			"persHist": point.PersHist,
-			"tag":      point.Tag,
+			"id":         point.Id,
+			"parentId":   point.ParentId,
+			"isPublic":   point.IsPublic,
+			"persHist":   point.PersHist,
+			"tag":        point.Tag,
+			"lastPacket": lastPacket,
 		}
 		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
 		if err != nil {
@@ -363,6 +375,11 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 		var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
 		if point.PersHist {
 			a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
+			trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", map[string]any{
+				"data":   input.Data,
+				"userId": state.Info().UserId(),
+				"time":   t,
+			}, false)
 		}
 		a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
 		return outputs_points.SignalOutput{Passed: true}, nil
@@ -371,6 +388,11 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 			var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data, Time: t}
 			if point.PersHist {
 				a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
+				trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", map[string]any{
+					"data":   input.Data,
+					"userId": state.Info().UserId(),
+					"time":   t,
+				}, false)
 			}
 			a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
 			return outputs_points.SignalOutput{Passed: true}, nil
