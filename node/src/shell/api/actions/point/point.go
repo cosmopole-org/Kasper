@@ -162,7 +162,10 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		return nil, err
 	}
 	trx.PutIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string), []byte(point.Id))
-	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
+	for memberId := range input.Members {
+		a.App.Tools().Signaler().JoinGroup(point.Id, memberId)
+	}
+	a.App.Tools().Signaler().SignalGroup("points/create", point.Id, updates_points.Delete{Point: point}, true, []string{})
 	return outputs_points.CreateOutput{Point: point}, nil
 }
 
