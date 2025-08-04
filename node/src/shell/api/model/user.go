@@ -13,6 +13,7 @@ type User struct {
 	Username  string `json:"username"`
 	PublicKey string `json:"publicKey"`
 	Balance   int64  `json:"balance"`
+	Name      string `json:"name"`
 }
 
 func (d User) Type() string {
@@ -31,13 +32,21 @@ func (d User) Push(trx trx.ITrx) {
 	trx.PutIndex("User", "username", "id", d.Username, []byte(d.Id))
 }
 
-func (d User) Pull(trx trx.ITrx) User {
+func (d User) Pull(trx trx.ITrx, flags ...bool) User {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {
 		d.Typ = string(m["type"])
 		d.Username = string(m["username"])
 		d.PublicKey = string(m["publicKey"])
 		d.Balance = int64(binary.LittleEndian.Uint64(m["balance"]))
+		if len(flags) > 0 {
+			if flags[0] {
+				if metadata, err := trx.GetJson("PointMeta::"+d.Id, "metadata.public.profile"); err == nil {
+					d.Name = metadata["name"].(string)
+				}
+			}
+		}
+
 	}
 	return d
 }

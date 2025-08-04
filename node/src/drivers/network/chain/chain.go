@@ -1037,7 +1037,7 @@ func (b *Blockchain) GetNodeOwnerId(origin string) string {
 
 func (b *Blockchain) GetValidatorsOfMachineShard(machineId string) []string {
 	result := []string{}
-	b.app.ModifyState(true, func(trx trx.ITrx) {
+	b.app.ModifyState(true, func(trx trx.ITrx) error {
 		vm := model.Vm{MachineId: machineId}.Pull(trx)
 		app := model.App{Id: vm.AppId}.Pull(trx)
 		c, _ := b.chains.Get(fmt.Sprintf("%d", app.ChainId))
@@ -1046,6 +1046,7 @@ func (b *Blockchain) GetValidatorsOfMachineShard(machineId string) []string {
 		for k := range sc.peers {
 			result = append(result, k)
 		}
+		return nil
 	})
 	return result
 }

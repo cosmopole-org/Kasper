@@ -10,16 +10,16 @@ import (
 type Func func(state state.IState, input input.IInput) (any, error)
 
 type Action struct {
-	modifier func(bool, func(trx.ITrx))
+	modifier func(bool, func(trx.ITrx) error)
 	key      string
 	Func     Func
 }
 
-func NewAction(modifier func(bool, func(trx.ITrx)), key string, fn Func) action.IAction {
+func NewAction(modifier func(bool, func(trx.ITrx) error), key string, fn Func) action.IAction {
 	return &Action{modifier: modifier, key: key, Func: fn}
 }
 
-func (a *Action) StateModifier() func(bool, func(trx.ITrx)) {
+func (a *Action) StateModifier() func(bool, func(trx.ITrx) error) {
 	return a.modifier
 }
 

@@ -13,9 +13,6 @@ import (
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
-const updatePrefix = "update "
-const responsePrefix = "response "
-
 type Signaler struct {
 	lock           sync.Mutex
 	app            core.ICore
@@ -69,8 +66,9 @@ func (p *Signaler) SignalUser(key string, listenerId string, data any, pack bool
 		return
 	}
 	username := ""
-	p.app.ModifyState(true, func(trx trx.ITrx) {
+	p.app.ModifyState(true, func(trx trx.ITrx) error {
 		username = string(trx.GetColumn("User", listenerId, "username"))
+		return nil
 	})
 	if username == "" {
 		return
@@ -139,8 +137,9 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 		for t := range group.Points.IterBuffered() {
 			userId := t.Val
 			username := ""
-			p.app.ModifyState(true, func(trx trx.ITrx) {
+			p.app.ModifyState(true, func(trx trx.ITrx) error {
 				username = string(trx.GetColumn("User", userId, "username"))
+				return nil
 			})
 			if username == "" {
 				continue

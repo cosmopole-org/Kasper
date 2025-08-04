@@ -291,7 +291,7 @@ func (t *Socket) processPacket(packet []byte) {
 		if success {
 			lis = t.connectListener(userId)
 			var pointIds []string
-			t.app.ModifyState(true, func(trx trx.ITrx) {
+			t.app.ModifyState(true, func(trx trx.ITrx) error {
 				pIds, err := trx.GetLinksList("memberof::"+userId+"::", -1, -1)
 				if err != nil {
 					log.Println(err)
@@ -299,6 +299,7 @@ func (t *Socket) processPacket(packet []byte) {
 				} else {
 					pointIds = pIds
 				}
+				return nil
 			})
 			for _, pointId := range pointIds {
 				t.app.Tools().Signaler().JoinGroup(pointId, userId)

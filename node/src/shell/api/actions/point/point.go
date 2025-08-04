@@ -368,8 +368,8 @@ func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, 
 // Signal /points/signal check [ true true true ] access [ true false false false POST ]
 func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (any, error) {
 	trx := state.Trx()
-	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
-	user := model.User{Id: state.Info().UserId()}.Pull(trx)
+	point := model.Point{Id: state.Info().PointId()}.Pull(trx, true)
+	user := model.User{Id: state.Info().UserId()}.Pull(trx, true)
 	t := time.Now().UnixMilli()
 	if input.Type == "broadcast" {
 		if point.PersHist {

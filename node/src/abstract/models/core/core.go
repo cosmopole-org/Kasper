@@ -33,9 +33,9 @@ type ICore interface {
 	OnChainPacket(typ string, trxPayload []byte) string
 	AppPendingTrxs()
 	IpAddr() string
-	ModifyState(bool, func(trx.ITrx))
-	ModifyStateSecurlyWithSource(readonly bool, info info.IInfo, src string, fn func(state.IState))
-	ModifyStateSecurly(readonly bool, info info.IInfo, fn func(state.IState))
+	ModifyState(bool, func(trx.ITrx) error)
+	ModifyStateSecurlyWithSource(readonly bool, info info.IInfo, src string, fn func(state.IState) error)
+	ModifyStateSecurly(readonly bool, info info.IInfo, fn func(state.IState) error)
 	SignPacket(data []byte) string
 	SignPacketAsOwner(data []byte) string
 }

@@ -11,7 +11,7 @@ type IActions interface {
 }
 
 type IAction interface {
-	StateModifier() func(bool, func(trx.ITrx))
+	StateModifier() func(bool, func(trx.ITrx) error)
 	Key() string
 	Act(state.IState, input.IInput) (int, any, error)
 }

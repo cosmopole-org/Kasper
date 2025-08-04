@@ -168,24 +168,45 @@ func (c *Core) Actor() iaction.IActor {
 	return c.actionStore
 }
 
-func (c *Core) ModifyStateSecurlyWithSource(readonly bool, info info.IInfo, src string, fn func(state.IState)) {
+func (c *Core) ModifyStateSecurlyWithSource(readonly bool, info info.IInfo, src string, fn func(state.IState) error) {
 	trx := module_trx.NewTrx(c, c.Tools().Storage(), readonly)
-	defer trx.Commit()
+	var err error
+	defer func() {
+		if err == nil {
+			trx.Commit()
+		} else {
+			trx.Discard()
+		}
+	}()
 	s := mainstate.NewState(info, trx, src)
-	fn(s)
+	err = fn(s)
 }
 
-func (c *Core) ModifyStateSecurly(readonly bool, info info.IInfo, fn func(state.IState)) {
+func (c *Core) ModifyStateSecurly(readonly bool, info info.IInfo, fn func(state.IState) error) {
 	trx := module_trx.NewTrx(c, c.Tools().Storage(), readonly)
-	defer trx.Commit()
+	var err error
+	defer func() {
+		if err == nil {
+			trx.Commit()
+		} else {
+			trx.Discard()
+		}
+	}()
 	s := mainstate.NewState(info, trx)
-	fn(s)
+	err = fn(s)
 }
 
-func (c *Core) ModifyState(readonly bool, fn func(trx.ITrx)) {
+func (c *Core) ModifyState(readonly bool, fn func(trx.ITrx) error) {
 	trx := module_trx.NewTrx(c, c.Tools().Storage(), readonly)
-	defer trx.Commit()
-	fn(trx)
+	var err error
+	defer func() {
+		if err == nil {
+			trx.Commit()
+		} else {
+			trx.Discard()
+		}
+	}()
+	err = fn(trx)
 }
 
 func (c *Core) Tools() tools.ITools {
@@ -256,7 +277,7 @@ func (c *Core) SignPacketAsOwner(data []byte) string {
 func (c *Core) PlantChainTrigger(count int, userId string, tag string, machineId string, pointId string, attachment string) {
 	c.triggerLock.Lock()
 	defer c.triggerLock.Unlock()
-	c.ModifyState(false, func(trx trx.ITrx) {
+	c.ModifyState(false, func(trx trx.ITrx) error {
 		tail := crypto.SecureUniqueString()
 		found := (len(trx.GetByPrefix("chainCallback::"+userId+"_"+tag+"|>")) > 0)
 		trx.PutBytes("chainCallback::"+userId+"_"+tag+"|>"+tail, []byte{0x01})
@@ -271,6 +292,7 @@ func (c *Core) PlantChainTrigger(count int, userId string, tag string, machineId
 			binary.BigEndian.PutUint32(tempCountB, uint32(0))
 			trx.PutBytes("chainCallback::"+userId+"_"+tag+"::tempCount", tempCountB)
 		}
+		return nil
 	})
 }
 
@@ -280,9 +302,10 @@ func (c *Core) ExecAppletRequestOnChain(pointId string, machineId string, key st
 	callbackId := crypto.SecureUniqueString()
 	c.chainCallbacks[callbackId] = &chain.ChainCallback{Tag: tag, Fn: callback, Executors: map[string]bool{}, Responses: map[string]string{}}
 	var runtimeType string
-	c.ModifyState(true, func(trx trx.ITrx) {
+	c.ModifyState(true, func(trx trx.ITrx) error {
 		vm := mach_model.Vm{MachineId: machineId}.Pull(trx)
 		runtimeType = vm.Runtime
+		return nil
 	})
 	future.Async(func() {
 		c.chain <- chain.ChainAppletRequest{TokenId: tokenId, Tag: tag, Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload, Runtime: runtimeType}
@@ -369,7 +392,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 					return ""
 				}
 				var newValue int64
-				c.ModifyState(false, func(trx trx.ITrx) {
+				c.ModifyState(false, func(trx trx.ITrx) error {
 					val := trx.GetBytes(pointId + "::" + namespace)
 					if len(val) == 0 {
 						newValue = 0
@@ -380,6 +403,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 					newVal := make([]byte, 8)
 					binary.LittleEndian.PutUint64(newVal, uint64(newValue))
 					trx.PutBytes(pointId+"::"+namespace, newVal)
+					return nil
 				})
 				res, _ := json.Marshal(map[string]any{
 					"globalId":  newValue,
@@ -672,19 +696,21 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 							log.Println(e)
 							break
 						}
-						c.ModifyState(false, func(trx trx.ITrx) {
+						c.ModifyState(false, func(trx trx.ITrx) error {
 							user := mach_model.User{Id: tokenData.TokenOwnerId}.Pull(trx)
 							if user.Balance < tokenData.Amount {
-								log.Println(errors.New("your balance is not enough"))
-								return
+								err := errors.New("your balance is not enough")
+								log.Println(err)
+								return err
 							}
 							if m, e := trx.GetJson("Json::User::"+tokenData.TokenOwnerId, "lockedTokens."+tokenData.TokenId); e == nil {
 								amount := int64(m["amount"].(float64))
 								validators := []string{}
 								json.Unmarshal([]byte(m["validators"].(string)), &validators)
 								if !slices.Contains(validators, packet.Executor) {
-									log.Println(errors.New("you are not validator"))
-									return
+									err := errors.New("you are not validator")
+									log.Println(err)
+									return err
 								}
 								if amount >= tokenData.Amount {
 									for _, orig := range validators {
@@ -696,13 +722,15 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 									}
 									user.Balance += (amount - tokenData.Amount)
 									user.Push(trx)
+									return nil
 								} else {
-									log.Println(errors.New("invalid cost value"))
-									return
+									err := errors.New("invalid cost value")
+									log.Println(err)
+									return err
 								}
 							} else {
 								log.Println(e)
-								return
+								return e
 							}
 						})
 						break
@@ -711,7 +739,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 
 				if !callback.Executors[c.Ip] {
 					kvstoreKeyword := "applet: "
-					c.ModifyState(false, func(trx trx.ITrx) {
+					c.ModifyState(false, func(trx trx.ITrx) error {
 						for _, ef := range packet.Effects.DbUpdates {
 							if (len(ef.Val) > len(kvstoreKeyword)) && (string(ef.Val[0:len(kvstoreKeyword)]) == kvstoreKeyword) {
 								c.tools.Wasm().ExecuteChainEffects(string(ef.Val[len(kvstoreKeyword):]))
@@ -723,6 +751,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 								}
 							}
 						}
+						return nil
 					})
 				}
 				delete(c.chainCallbacks, packet.RequestId)
@@ -732,7 +761,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 						tempCount := int32(0)
 						targetCount := int32(-1)
 						keys := []string{}
-						c.ModifyState(false, func(trx trx.ITrx) {
+						c.ModifyState(false, func(trx trx.ITrx) error {
 							keys = trx.GetByPrefix("chainCallback::" + packet.ToUserId + "_" + packet.Tag + "|>")
 							if len(keys) > 0 {
 								keyParts := strings.Split(keys[0], "|>")
@@ -747,12 +776,13 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 								trx.PutBytes(key+"::tempCount", countBNext)
 								trx.PutBytes(fmt.Sprintf(key+"::collected_%d", tempCount), packet.Payload)
 							}
+							return nil
 						})
 						if tempCount == targetCount {
 							pointIds := []string{}
 							attachments := []string{}
 							payloadsArr := [][]string{}
-							c.ModifyState(false, func(trx trx.ITrx) {
+							c.ModifyState(false, func(trx trx.ITrx) error {
 								for _, keyRaw := range keys {
 									log.Println(keyRaw)
 									keyParts := strings.Split(keyRaw, "|>")
@@ -773,6 +803,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 									trx.DelKey(keyParts[0] + "::targetCount")
 									trx.DelKey(keyParts[0] + "::tempCount")
 								}
+								return nil
 							})
 							for i := 0; i < len(attachments); i++ {
 								input := map[string]any{

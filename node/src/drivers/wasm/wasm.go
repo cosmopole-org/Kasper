@@ -15,12 +15,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/adapters/docker"
 	"kasper/src/abstract/adapters/file"
 	"kasper/src/abstract/adapters/signaler"
 	"kasper/src/abstract/adapters/storage"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/models/update"
 	"kasper/src/abstract/models/worker"
@@ -83,9 +83,10 @@ type ChainDbOp struct {
 func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
 	point := model.Point{Id: pointId}
 	isMemberOfPoint := false
-	wm.app.ModifyState(true, func(trx trx.ITrx) {
+	wm.app.ModifyState(true, func(trx trx.ITrx) error {
 		point.Pull(trx)
 		isMemberOfPoint = (trx.GetLink("memberof::"+machineId+"::"+pointId) == "true")
+		return nil
 	})
 	if !isMemberOfPoint {
 		return
@@ -127,10 +128,11 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		found := false
-		wm.app.ModifyState(true, func(trx trx.ITrx) {
+		wm.app.ModifyState(true, func(trx trx.ITrx) error {
 			if trx.GetLink("member::"+pointId+"::"+machineId) == "true" {
 				found = true
 			}
+			return nil
 		})
 		if !found {
 			err := errors.New("access denied")
@@ -271,13 +273,14 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		gasLimit := int64(0)
-		wm.app.ModifyState(true, func(trx trx.ITrx) {
+		wm.app.ModifyState(true, func(trx trx.ITrx) error {
 			if trx.GetString("Temp::User::"+tokenOwnerId+"::consumedTokens::"+tokenId) == "true" {
-				return
+				return nil
 			}
 			if m, e := trx.GetJson("Json::User::"+tokenOwnerId, "lockedTokens."+tokenId); e == nil {
 				gasLimit = int64(m["amount"].(float64))
 			}
+			return nil
 		})
 		jsn, _ := json.Marshal(map[string]any{"gasLimit": gasLimit})
 		return string(jsn)
@@ -324,8 +327,9 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		}
 		trxInp := packet.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost), TokenOwnerId: tokenOwnerId}
 		i, _ := json.Marshal(trxInp)
-		wm.app.ModifyState(false, func(trx trx.ITrx) {
+		wm.app.ModifyState(false, func(trx trx.ITrx) error {
 			trx.PutString("Temp::User::"+tokenOwnerId+"::consumedTokens::"+tokenId, "true")
+			return nil
 		})
 		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), "#appletsign", int(resCode), e, []update.Update{{Val: []byte("consumeToken: " + string(i))}, {Val: []byte("applet: " + changes)}})
 	} else if key == "submitOnchainTrx" {
@@ -491,13 +495,14 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		wm.app.ModifyStateSecurly(false, base.NewInfo(machineId, pointId), func(s state.IState) {
-			wm.app.Actor().FetchAction("/points/signal").Act(s, inputs_points.SignalInput{
+		wm.app.ModifyStateSecurly(false, base.NewInfo(machineId, pointId), func(s state.IState) error {
+			_, _, err := wm.app.Actor().FetchAction("/points/signal").Act(s, inputs_points.SignalInput{
 				Type:    typ,
 				Data:    data,
 				PointId: pointId,
 				UserId:  userId,
 			})
+			return err
 		})
 	}
 

@@ -114,8 +114,9 @@ func (sm *Security) Decrypt(tag string, cipherText string) string {
 
 func (sm *Security) AuthWithSignature(userId string, packet []byte, signatureBase64 string) (bool, string, bool) {
 	var publicKey *rsa.PublicKey
-	sm.app.ModifyState(true, func(trx trx.ITrx) {
+	sm.app.ModifyState(true, func(trx trx.ITrx) error {
 		publicKey = trx.GetPubKey(userId)
+		return nil
 	})
 	if publicKey == nil {
 		return false, "", false
@@ -137,9 +138,10 @@ func (sm *Security) AuthWithSignature(userId string, packet []byte, signatureBas
 	fmt.Println("Signature verified successfully!")
 	var userType = ""
 	var isGod = false
-	sm.app.ModifyState(true, func(trx trx.ITrx) {
+	sm.app.ModifyState(true, func(trx trx.ITrx) error {
 		userType = string(trx.GetColumn("User", userId, "type"))
 		isGod = (trx.GetString("god::"+userId) == "true")
+		return nil
 	})
 	return true, userType, isGod
 }
@@ -149,10 +151,11 @@ func (sm *Security) HasAccessToPoint(userId string, pointId string) bool {
 		return false
 	}
 	found := false
-	sm.app.ModifyState(true, func(trx trx.ITrx) {
+	sm.app.ModifyState(true, func(trx trx.ITrx) error {
 		if trx.GetLink("memberof::"+userId+"::"+pointId) == "true" {
 			found = true
 		}
+		return nil
 	})
 	return found
 }

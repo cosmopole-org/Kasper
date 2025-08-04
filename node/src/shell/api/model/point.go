@@ -13,6 +13,8 @@ type Point struct {
 	ParentId string `json:"parentId"`
 	PersHist bool   `json:"persHist"`
 	IsPublic bool   `json:"isPublic"`
+	Title    string `json:"title"`
+	Avatar   string `json:"avatar"`
 }
 
 func (d Point) Type() string {
@@ -46,13 +48,21 @@ func (d Point) Delete(trx trx.ITrx) {
 	trx.DelJson("PointMeta::"+d.Id, "metadata")
 }
 
-func (d Point) Pull(trx trx.ITrx) Point {
+func (d Point) Pull(trx trx.ITrx, flags ...bool) Point {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {
 		d.Tag = string(m["tag"])
 		d.ParentId = string(m["parentId"])
 		d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 		d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
+		if len(flags) > 0 {
+			if flags[0] {
+				if metadata, err := trx.GetJson("PointMeta::"+d.Id, "metadata.public.profile"); err == nil {
+					d.Title = metadata["title"].(string)
+					d.Avatar = metadata["avatar"].(string)
+				}
+			}
+		}
 	}
 	return d
 }

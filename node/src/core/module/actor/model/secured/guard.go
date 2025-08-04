@@ -36,8 +36,9 @@ func (g *Guard) CheckValidityForChain(app core.ICore, packet []byte, signature s
 	}
 	if signature == "#appletsign" {
 		typ := ""
-		app.ModifyState(true, func(trx trx.ITrx) {
+		app.ModifyState(true, func(trx trx.ITrx) error {
 			typ = string(trx.GetColumn("User", userId, "type"))
+			return nil
 		})
 		if typ == "machine" {
 			if !g.IsInSpace {

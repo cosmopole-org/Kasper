@@ -38,7 +38,7 @@ func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBin
 		data := []byte("{}")
 		a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), 403, "authorization failed", []update.Update{}, tag, userId)
 	} else {
-		a.core.ModifyStateSecurlyWithSource(false, info, origin, func(s state.IState) {
+		a.core.ModifyStateSecurlyWithSource(false, info, origin, func(s state.IState) error {
 			sc, res, err := a.Act(s, input)
 			if err != nil {
 				data := []byte("{}")
@@ -47,6 +47,7 @@ func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBin
 				data, _ := json.Marshal(res)
 				a.core.ExecBaseResponseOnChain(packetId, data, a.core.SignPacket(data), sc, "", s.Trx().Updates(), tag, userId)
 			}
+			return err
 		})
 	}
 }
@@ -80,9 +81,10 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 			var sc int
 			var res any
 			var err error
-			a.core.ModifyStateSecurly(false, info, func(s state.IState) {
+			a.core.ModifyStateSecurly(false, info, func(s state.IState) error {
 				s.SetSource(origin)
 				sc, res, err = a.Act(s, input)
+				return err
 			})
 			return sc, res, err
 		}
@@ -121,7 +123,7 @@ func (a *SecureAction) SecurelyActFed(userId string, packetBinary []byte, packet
 	var sc int
 	var res any
 	var err error
-	a.core.ModifyStateSecurly(false, info, func(s state.IState) {
+	a.core.ModifyStateSecurly(false, info, func(s state.IState) error {
 		s.SetSource(input.Origin())
 		sc, res, err = a.Act(s, input)
 		if res != nil {
@@ -132,6 +134,7 @@ func (a *SecureAction) SecurelyActFed(userId string, packetBinary []byte, packet
 				err = e
 			}
 		}
+		return err
 	})
 	return sc, res, err
 }

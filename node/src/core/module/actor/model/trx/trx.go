@@ -42,6 +42,10 @@ func (tw *TrxWrapper) GetColumn(typ string, objId string, columnName string) []b
 	}
 }
 
+func (tw *TrxWrapper) Discard() {
+	tw.dbTrx.Discard()
+}
+
 func (tw *TrxWrapper) Commit() {
 	e := tw.dbTrx.Commit()
 	if e != nil {

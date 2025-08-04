@@ -37,4 +37,5 @@ type ITrx interface {
 	GetPubKey(string) *rsa.PublicKey
 	Updates() []update.Update
 	Commit()
+	Discard()
 }
