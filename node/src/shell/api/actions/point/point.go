@@ -412,7 +412,7 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 	user := model.User{Id: state.Info().UserId()}.Pull(trx, true)
 	t := time.Now().UnixMilli()
 	if input.Type == "broadcast" {
-		if point.PersHist {
+		if point.PersHist && !input.Temp {
 			packet := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
 			trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", packet, false)
 			var p = updates_points.Send{Id: packet.Id, Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
@@ -425,7 +425,7 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 		}
 	} else if input.Type == "single" {
 		if trx.GetLink("member::"+point.Id+"::"+input.UserId) == "true" {
-			if point.PersHist {
+			if point.PersHist && !input.Temp {
 				packet := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
 				trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", packet, false)
 				var p = updates_points.Send{Id: packet.Id, Action: "single", Point: point, User: user, Data: input.Data, Time: t}
