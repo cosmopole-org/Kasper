@@ -1,6 +1,6 @@
 #!/bin/bash
 
-docker create --name=node1 \
+docker create -p 8077:8079 8078:8080 --name=node1 \
     --ulimit nofile=65535:65535 \
     --net=kasper \
     --ip=172.77.5.1 \
