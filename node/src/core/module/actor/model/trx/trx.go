@@ -33,11 +33,7 @@ func (tw *TrxWrapper) GetColumn(typ string, objId string, columnName string) []b
 	if e != nil {
 		return []byte{}
 	} else {
-		res := []byte{}
-		item.Value(func(val []byte) error {
-			res = val
-			return nil
-		})
+		res, _ := item.ValueCopy(nil)
 		return res
 	}
 }
@@ -86,11 +82,7 @@ func (tw *TrxWrapper) GetIndex(typ string, fromColumn string, toColumn string, f
 	if e != nil {
 		return ""
 	} else {
-		var value []byte
-		item.Value(func(val []byte) error {
-			value = val
-			return nil
-		})
+		value, _ := item.ValueCopy(nil)
 		return string(value)
 	}
 }
@@ -114,11 +106,7 @@ func (tw *TrxWrapper) GetLink(key string) string {
 	if e != nil {
 		return ""
 	} else {
-		var value []byte
-		item.Value(func(val []byte) error {
-			value = val
-			return nil
-		})
+		value, _ := item.ValueCopy(nil)
 		return string(value)
 	}
 }
@@ -136,11 +124,7 @@ func (tw *TrxWrapper) PutBytes(key string, value []byte) {
 func (tw *TrxWrapper) GetBytes(key string) []byte {
 	item, e := tw.dbTrx.Get([]byte(key))
 	if e == nil {
-		var value []byte
-		item.Value(func(val []byte) error {
-			value = val
-			return nil
-		})
+		value, _ := item.ValueCopy(nil)
 		return value
 	}
 	return []byte{}
@@ -156,11 +140,7 @@ func (tw *TrxWrapper) GetString(key string) string {
 	if e != nil {
 		return ""
 	} else {
-		var value []byte
-		item.Value(func(val []byte) error {
-			value = val
-			return nil
-		})
+		value, _ := item.ValueCopy(nil)
 		return string(value)
 	}
 }
@@ -192,15 +172,8 @@ func (tw *TrxWrapper) GetObj(typ string, key string) map[string][]byte {
 	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 		item := it.Item()
 		itemKey := item.Key()
-		var itemVal []byte
-		err := item.Value(func(v []byte) error {
-			itemVal = v
-			return nil
-		})
+		itemVal, _ := item.ValueCopy(nil)
 		m[string(itemKey[len(prefix):])] = itemVal
-		if err != nil {
-			return map[string][]byte{}
-		}
 	}
 	return m
 }
@@ -292,11 +265,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 				item := it.Item()
 				itemKey := item.Key()
 				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
-				var itemVal []byte
-				err := item.Value(func(v []byte) error {
-					itemVal = v
-					return nil
-				})
+				itemVal, _ := item.ValueCopy(nil)
 				if tempId != id {
 					matched := true
 					if len(queryMap) > 0 {
@@ -313,9 +282,6 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					tempId = id
 				}
 				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
-				if err != nil {
-					return nil, err
-				}
 			}
 			matched := true
 			if len(queryMap) > 0 {
@@ -337,11 +303,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 				item := it.Item()
 				itemKey := item.Key()
 				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
-				var itemVal []byte
-				err := item.Value(func(v []byte) error {
-					itemVal = v
-					return nil
-				})
+				itemVal, _ := item.ValueCopy(nil)
 				if tempId != id {
 					matched := true
 					if len(queryMap) > 0 {
@@ -357,9 +319,6 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							temp = map[string][]byte{}
 							tempId = id
 							temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
-							if err != nil {
-								return nil, err
-							}
 							continue
 						}
 						index++
@@ -369,9 +328,6 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					tempId = id
 				}
 				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
-				if err != nil {
-					return nil, err
-				}
 			}
 			matched := true
 			if len(queryMap) > 0 {
@@ -396,11 +352,7 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 				item := it.Item()
 				itemKey := item.Key()
 				id := strings.Split(string(itemKey[len(prefix):]), "::")[0]
-				var itemVal []byte
-				err := item.Value(func(v []byte) error {
-					itemVal = v
-					return nil
-				})
+				itemVal, _ := item.ValueCopy(nil)
 				log.Println("parsing field...", tempId, id, itemKey)
 				if tempId != id {
 					log.Println("id before", id, tempId, index, offset, count)
@@ -421,9 +373,6 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 							temp = map[string][]byte{}
 							tempId = id
 							temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
-							if err != nil {
-								return nil, err
-							}
 							continue
 						}
 						if index >= (offset + count) {
@@ -437,9 +386,6 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 					tempId = id
 				}
 				temp[string(itemKey)[len(string(prefix))+len(id)+len("::"):]] = itemVal
-				if err != nil {
-					return nil, err
-				}
 			}
 			matched := true
 			if len(queryMap) > 0 {
@@ -501,15 +447,7 @@ func (tw *TrxWrapper) SearchLinkValsList(typ string, fromColumn string, toColumn
 			if counter >= (offset + count) {
 				break
 			}
-			var itemVal []byte
-			err := item.Value(func(v []byte) error {
-				itemVal = v
-				return nil
-			})
-			if err != nil {
-				log.Println(err)
-				return nil, err
-			}
+			itemVal, _ := item.ValueCopy(nil)
 			matched := true
 			if len(filter) > 0 {
 				for k, v := range filter {
