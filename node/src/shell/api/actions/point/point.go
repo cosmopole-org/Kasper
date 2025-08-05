@@ -10,6 +10,7 @@ import (
 	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/future"
 	"log"
+	"slices"
 	"strings"
 	"time"
 )
@@ -106,6 +107,30 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	if input.Origin() == "global" {
 		orig = "global"
 	}
+	if input.Tag == "1-to-1" {
+		if len(input.Members) > 2 {
+			return nil, errors.New("1-to-1 chat can not have more than 2 members")
+		} else if len(input.Members) == 2 && !input.Members[state.Info().UserId()] {
+			return nil, errors.New("1-to-1 chat can not have more than 2 members")
+		} else if len(input.Members) == 1 && input.Members[state.Info().UserId()] {
+			return nil, errors.New("1-to-1 chat can not have more than 2 members")
+		} else if len(input.Members) == 0 {
+			return nil, errors.New("1-to-1 chat can not have more than 2 members")
+		}
+		for k := range input.Members {
+			input.Members[k] = true
+		}
+		input.Members[state.Info().UserId()] = true
+		ids := []string{}
+		for k := range input.Members {
+			ids = append(ids, k)
+		}
+		slices.Sort(ids)
+		if pointId := trx.GetLink("1-to-1-map::" + ids[0] + "<->" + ids[1]); pointId != "" {
+			point := model.Point{Id: pointId}.Pull(trx, true)
+			return outputs_points.CreateOutput{Point: point}, nil
+		}
+	}
 	if input.ParentId != "" {
 		if !trx.HasObj("Point", input.ParentId) {
 			err := errors.New("parent point does not exist")
@@ -123,17 +148,6 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
 	trx.PutLink("admin::"+point.Id+"::"+state.Info().UserId(), "true")
-	if input.Tag == "1-to-1" {
-		if len(input.Members) > 2 {
-			return nil, errors.New("1-to-1 chat can not have more than 2 members")
-		} else if len(input.Members) == 2 && !input.Members[state.Info().UserId()] {
-			return nil, errors.New("1-to-1 chat can not have more than 2 members")
-		} else if len(input.Members) == 1 && input.Members[state.Info().UserId()] {
-			return nil, errors.New("1-to-1 chat can not have more than 2 members")
-		} else if len(input.Members) == 0 {
-			return nil, errors.New("1-to-1 chat can not have more than 2 members")
-		}
-	}
 	if input.Members != nil {
 		for userId, isAdmin := range input.Members {
 			trx.PutLink("memberof::"+userId+"::"+point.Id, "true")
@@ -162,6 +176,14 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		return nil, err
 	}
 	trx.PutIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string), []byte(point.Id))
+	if input.Tag == "1-to-1" {
+		ids := []string{}
+		for k := range input.Members {
+			ids = append(ids, k)
+		}
+		slices.Sort(ids)
+		trx.PutLink("1-to-1-map::"+ids[0]+"<->"+ids[1], point.Id)
+	}
 	for memberId := range input.Members {
 		a.App.Tools().Signaler().JoinGroup(point.Id, memberId)
 	}
