@@ -6,7 +6,9 @@ import (
 	kasper "kasper/src/shell"
 	plugger_api "kasper/src/shell/api/main"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/joho/godotenv"
 )
@@ -66,8 +68,13 @@ func main() {
 		},
 	)
 
-	defer func ()  {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		<-c
 		app.Close()
+		os.Exit(0)
 	}()
 
 	portStr := os.Getenv("CLIENT_TCP_API_PORT")
