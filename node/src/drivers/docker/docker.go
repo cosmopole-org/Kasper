@@ -265,26 +265,65 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName string) error {
 	ctx := context.Background()
 
+	buf := new(bytes.Buffer)
+	tw := tar.NewWriter(buf)
+	defer tw.Close()
+
+	dockerFileReader, err := os.Open(dockerfile + "/Dockerfile")
+	if err != nil {
+		return err
+	}
+	defer dockerFileReader.Close()
+	readDockerFile, err := ioutil.ReadAll(dockerFileReader)
+	if err != nil {
+		return err
+	}
+	tarHeader := &tar.Header{
+		Name: dockerfile + "/Dockerfile",
+		Size: int64(len(readDockerFile)),
+	}
+	err = tw.WriteHeader(tarHeader)
+	if err != nil {
+		return err
+	}
+	_, err = tw.Write(readDockerFile)
+	if err != nil {
+		return err
+	}
+
 	files, err := ioutil.ReadDir(dockerfile)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-
-	inputFiles := map[string]string{}
 	for _, file := range files {
-		inputFiles[dockerfile  + "/" + file.Name()] = file.Name()
+		reader, err := os.Open(dockerfile + "/" + file.Name())
+		if err != nil {
+			return err
+		}
+		defer reader.Close()
+		readFile, err := ioutil.ReadAll(reader)
+		if err != nil {
+			return err
+		}
+		tarHeader := &tar.Header{
+			Name: dockerfile + "/" + file.Name(),
+			Size: int64(len(readFile)),
+		}
+		err = tw.WriteHeader(tarHeader)
+		if err != nil {
+			return err
+		}
+		_, err = tw.Write(readFile)
+		if err != nil {
+			return err
+		}
 	}
 
-	targetFile := WriteToTar(inputFiles)
-	contextReader, err := os.Open(targetFile)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
+	dockerFileTarReader := bytes.NewReader(buf.Bytes())
 
 	buildOptions := types.ImageBuildOptions{
-		Context:    contextReader,
+		Context:    dockerFileTarReader,
 		Dockerfile: dockerfile + "/Dockerfile",
 		Remove:     true,
 		Tags:       []string{strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName},
@@ -292,7 +331,7 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 
 	imageBuildResponse, err := wm.client.ImageBuild(
 		ctx,
-		contextReader,
+		dockerFileTarReader,
 		buildOptions,
 	)
 
