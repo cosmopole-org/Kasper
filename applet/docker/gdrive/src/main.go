@@ -12,7 +12,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
-	"google.golang.org/api/googleapi"
+	// "google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -74,6 +74,8 @@ func saveToken(path string, token *oauth2.Token) {
 }
 
 func main() {
+	var command string
+	flag.StringVar(&command, "command", "", "")
 	var authCode string
 	flag.StringVar(&authCode, "authCode", "", "")
 	ctx := context.Background()
@@ -106,23 +108,23 @@ func main() {
 			fmt.Printf("%s (%s)\n", i.Name, i.Id)
 		}
 	}
-	filename := "./sample.txt"
-	file, err := os.Open(filename)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	stat, err := file.Stat()
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer file.Close()
-	res, err := srv.Files.Create(
-		&drive.File{
-			Name: "sample.txt",
-		},
-	).Media(file, googleapi.ChunkSize(int(stat.Size()))).Do()
-	if err != nil {
-		log.Fatalln(err)
-	}
-	fmt.Printf("%s\n", res.Id)
+	// filename := "./sample.txt"
+	// file, err := os.Open(filename)
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+	// stat, err := file.Stat()
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+	// defer file.Close()
+	// res, err := srv.Files.Create(
+	// 	&drive.File{
+	// 		Name: "sample.txt",
+	// 	},
+	// ).Media(file, googleapi.ChunkSize(int(stat.Size()))).Do()
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+	// fmt.Printf("%s\n", res.Id)
 }

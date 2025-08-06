@@ -112,7 +112,7 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 				return nil, err2
 			}
 		}
-		err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", vm.MachineId, in)
+		err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath, vm.MachineId, in)
 		if err3 != nil {
 			log.Println(err3)
 			return nil, err3

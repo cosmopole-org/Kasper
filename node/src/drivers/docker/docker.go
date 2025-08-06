@@ -265,39 +265,26 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName string) error {
 	ctx := context.Background()
 
-	buf := new(bytes.Buffer)
-	tw := tar.NewWriter(buf)
-	defer tw.Close()
-
-	dockerFileReader, err := os.Open(dockerfile)
+	files, err := ioutil.ReadDir(dockerfile)
 	if err != nil {
+		log.Println(err)
 		return err
 	}
 
-	readDockerFile, err := ioutil.ReadAll(dockerFileReader)
+	inputFiles := map[string]string{}
+	for _, file := range files {
+		inputFiles[dockerfile  + "/" + file.Name()] = file.Name()
+	}
+
+	targetFile := WriteToTar(inputFiles)
+	contextReader, err := os.Open(targetFile)
 	if err != nil {
+		log.Println(err)
 		return err
 	}
-
-	tarHeader := &tar.Header{
-		Name: dockerfile,
-		Size: int64(len(readDockerFile)),
-	}
-
-	err = tw.WriteHeader(tarHeader)
-	if err != nil {
-		return err
-	}
-
-	_, err = tw.Write(readDockerFile)
-	if err != nil {
-		return err
-	}
-
-	dockerFileTarReader := bytes.NewReader(buf.Bytes())
 
 	buildOptions := types.ImageBuildOptions{
-		Context:    dockerFileTarReader,
+		Context:    contextReader,
 		Dockerfile: dockerfile,
 		Remove:     true,
 		Tags:       []string{strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName},
@@ -305,7 +292,7 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 
 	imageBuildResponse, err := wm.client.ImageBuild(
 		ctx,
-		dockerFileTarReader,
+		contextReader,
 		buildOptions,
 	)
 
