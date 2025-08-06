@@ -297,25 +297,32 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 		return err
 	}
 	for _, file := range files {
-		reader, err := os.Open(dockerfile + "/" + file.Name())
+		err := func() error {
+			reader, err := os.Open(dockerfile + "/" + file.Name())
+			if err != nil {
+				return err
+			}
+			defer reader.Close()
+			readFile, err := ioutil.ReadAll(reader)
+			if err != nil {
+				return err
+			}
+			tarHeader := &tar.Header{
+				Name: file.Name(),
+				Size: int64(len(readFile)),
+			}
+			err = tw.WriteHeader(tarHeader)
+			if err != nil {
+				return err
+			}
+			_, err = tw.Write(readFile)
+			if err != nil {
+				return err
+			}
+			return nil
+		}()
 		if err != nil {
-			return err
-		}
-		defer reader.Close()
-		readFile, err := ioutil.ReadAll(reader)
-		if err != nil {
-			return err
-		}
-		tarHeader := &tar.Header{
-			Name: dockerfile + "/" + file.Name(),
-			Size: int64(len(readFile)),
-		}
-		err = tw.WriteHeader(tarHeader)
-		if err != nil {
-			return err
-		}
-		_, err = tw.Write(readFile)
-		if err != nil {
+			log.Println(err)
 			return err
 		}
 	}

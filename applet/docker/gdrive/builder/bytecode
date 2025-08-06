@@ -4,11 +4,13 @@ WORKDIR /app
 
 COPY . .
 
-RUN ls
+RUN mkdir /app/input
+RUN touch /app/output
 
+WORKDIR /app/app/storage/machines/7@global/gdrive
 RUN go mod tidy
 RUN go build -o gdrive
 
-RUN mkdir /app/input
+RUN echo hello
 
-ENTRYPOINT [ "bash", "/app/run.sh" ]
+ENTRYPOINT [ "bash", "/app/app/storage/machines/7@global/gdrive/run.sh" ]
