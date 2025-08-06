@@ -210,6 +210,38 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		return output
+	} else if key == "copyToDocker" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		imageName, err := checkField(input, "imageName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		containerName, err := checkField(input, "containerName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		fileName, err := checkField(input, "fileName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		content, err := checkField(input, "content", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		err = wm.docker.CopyToContainer(machineId, imageName, containerName, fileName, content)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		return ""
 	} else if key == "log" {
 		_, err := checkField(input, "text", "")
 		if err != nil {

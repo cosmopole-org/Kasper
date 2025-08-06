@@ -83,10 +83,34 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 		if !ok2 {
 			return nil, errors.New("image name is not string")
 		}
+		filesRaw, ok := input.Metadata["files"]
+		if !ok {
+			return nil, errors.New("files not provided")
+		}
+		files, ok2 := filesRaw.(map[string]any)
+		if !ok2 {
+			return nil, errors.New("files is not map")
+		}
 		dockerfileFolderPath := a.App.Tools().Storage().StorageRoot() + pluginsTemplateName + vm.MachineId + "/" + in
 		err2 := a.App.Tools().File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
 		if err2 != nil {
 			return nil, err2
+		}
+		for k, v := range files {
+			dataStr, ok := v.(string)
+			if !ok {
+				err := errors.New("file bytecode not string")
+				log.Println(err)
+				return nil, err
+			}
+			data, err := base64.StdEncoding.DecodeString(dataStr)
+			if err != nil {
+				return nil, err
+			}
+			err2 := a.App.Tools().File().SaveDataToGlobalStorage(dockerfileFolderPath, data, k, true)
+			if err2 != nil {
+				return nil, err2
+			}
 		}
 		err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath+"/Dockerfile", vm.MachineId, in)
 		if err3 != nil {

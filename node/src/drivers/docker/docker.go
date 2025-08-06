@@ -90,6 +90,30 @@ func WriteToTar(inputFiles map[string]string) string {
 	return tarId
 }
 
+func WriteToTarDirectly(inputFiles map[string][]byte) string {
+	tarId := crypto.SecureUniqueString()
+	buf, err := os.Create(tarId)
+	if err != nil {
+		log.Println(err)
+		return ""
+	}
+	tw := tar.NewWriter(buf)
+	defer func() {
+		tw.Close()
+		buf.Close()
+	}()
+	for name, content := range inputFiles {
+		h := new(tar.Header)
+		h.Typeflag = tar.TypeReg
+		h.Name = name
+		h.Size = int64(len(content))
+		h.Mode = int64(0600)
+		_ = tw.WriteHeader(h)
+		_, _ = tw.Write(content)
+	}
+	return tarId
+}
+
 func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, pointId string) (*models.File, error) {
 	header, err := tr.Next()
 
@@ -119,6 +143,25 @@ func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, pointId string) 
 	err2 := errors.New("not a file")
 	log.Println(err2)
 	return nil, err2
+}
+
+func (wm *Docker) CopyToContainer(machineId string, imageName string, containerName string, fileName string, content string) error {
+	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
+	tarId := WriteToTar(map[string]string{fileName: content})
+	tarStream, err := os.Open(tarId)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	ctx := context.Background()
+	err = wm.client.CopyToContainer(ctx, cn, "/app/input", tarStream, container.CopyToContainerOptions{
+		AllowOverwriteDirWithFile: true,
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
 }
 
 func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string) (*models.File, error) {
@@ -297,44 +340,44 @@ func (wm *Docker) ExecContainer(machineId string, imageName string, containerNam
 	}
 	execId := res.ID
 
-    resp, err := wm.client.ContainerExecAttach(ctx, execId, container.ExecAttachOptions{})
-    if err != nil {
-        return "", err
-    }
-    defer resp.Close()
+	resp, err := wm.client.ContainerExecAttach(ctx, execId, container.ExecAttachOptions{})
+	if err != nil {
+		return "", err
+	}
+	defer resp.Close()
 
-    var outBuf, errBuf bytes.Buffer
-    outputDone := make(chan error)
+	var outBuf, errBuf bytes.Buffer
+	outputDone := make(chan error)
 
-    go func() {
-        // StdCopy demultiplexes the stream into two buffers
-        _, err = stdcopy.StdCopy(&outBuf, &errBuf, resp.Reader)
-        outputDone <- err
-    }()
+	go func() {
+		// StdCopy demultiplexes the stream into two buffers
+		_, err = stdcopy.StdCopy(&outBuf, &errBuf, resp.Reader)
+		outputDone <- err
+	}()
 
-    select {
-    case err := <-outputDone:
-        if err != nil {
-            return "", err
-        }
-        break
+	select {
+	case err := <-outputDone:
+		if err != nil {
+			return "", err
+		}
+		break
 
-    case <-ctx.Done():
-        return "", ctx.Err()
-    }
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 
-    stdout, err := ioutil.ReadAll(&outBuf)
-    if err != nil {
-        return "", err
-    }
+	stdout, err := ioutil.ReadAll(&outBuf)
+	if err != nil {
+		return "", err
+	}
 	stderr, err := ioutil.ReadAll(&errBuf)
-    if err != nil {
-        return "", err
-    }
+	if err != nil {
+		return "", err
+	}
 
 	log.Println("output of exec :", string(stdout))
 
-    return string(stdout) + string(stderr), nil
+	return string(stdout) + string(stderr), nil
 }
 
 func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, file file.IFile) docker.IDocker {
