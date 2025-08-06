@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -12,45 +14,43 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/googleapi"
+
 	// "google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
-// Retrieve a token, saves the token, then returns the generated client.
-func getClient(config *oauth2.Config, authCode string) *http.Client {
-	// The file token.json stores the user's access and refresh tokens, and is
-	// created automatically when the authorization flow completes for the first
-	// time.
-	tokFile := "token.json"
+var tokFile = "token.json"
+
+func getClient(config *oauth2.Config) *http.Client {
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok = getTokenFromWeb(config, authCode)
-		saveToken(tokFile, tok)
+		getTokenFromWeb(config)
+		return nil
+	} else {
+		return config.Client(context.Background(), tok)
 	}
-	return config.Client(context.Background(), tok)
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(config *oauth2.Config, authCode string) *oauth2.Token {
-	// config.RedirectURL = "http://localhost:8080"
-	// config.Scopes = append(config.Scopes, "https://www.googleapis.com/auth/drive.file")
-	// authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	// fmt.Printf("Go to the following link in your browser then type the "+
-	// 	"authorization code: \n%v\n", authURL)
+func getTokenFromWeb(config *oauth2.Config) {
+	config.RedirectURL = "http://localhost:8080"
+	config.Scopes = append(config.Scopes, "https://www.googleapis.com/auth/drive.file")
+	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	fmt.Printf("Go to the following link in your browser then type the "+
+		"authorization code: \n%v\n", authURL)
+}
 
-	// var authCode string
-	// if _, err := fmt.Scan(&authCode); err != nil {
-	// 	log.Fatalf("Unable to read authorization code %v", err)
-	// }
-
+func authorizeAndGEtToken(userId string, authCode string) *http.Client {
+	config := configs[userId]
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
 		log.Fatalf("Unable to retrieve token from web %v", err)
 	}
-	return tok
+	saveToken(tokFile, tok)
+	return config.Client(context.Background(), tok)
 }
 
-// Retrieves a token from a local file.
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	if err != nil {
@@ -62,7 +62,6 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	return tok, err
 }
 
-// Saves a token to a file path.
 func saveToken(path string, token *oauth2.Token) {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
@@ -73,58 +72,155 @@ func saveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
+var clients = map[string]*http.Client{}
+var configs = map[string]*oauth2.Config{}
+var services = map[string]*drive.Service{}
+
+func runHttpServer() {
+	http.HandleFunc("/api/createStorage", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("userId")
+		b, err := os.ReadFile("credentials.json")
+		if err != nil {
+			log.Fatalf("Unable to read client secret file: %v", err)
+		}
+		config, err := google.ConfigFromJSON(b, drive.DriveMetadataReadonlyScope)
+		if err != nil {
+			log.Fatalf("Unable to parse client secret file to config: %v", err)
+		}
+		client := getClient(config)
+		if client != nil {
+			clients[userId] = client
+			ctx := context.Background()
+			srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
+			if err != nil {
+				log.Fatalf("Unable to retrieve Drive client: %v", err)
+			}
+			services[userId] = srv
+		}
+		configs[userId] = config
+		res, _ := json.Marshal(map[string]any{"success": true})
+		w.Write(res)
+	})
+	http.HandleFunc("/api/authorizeStorage", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("userId")
+		authCode := r.Header.Get("authCode")
+		client := authorizeAndGEtToken(userId, authCode)
+		if client != nil {
+			clients[userId] = client
+			ctx := context.Background()
+			srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
+			if err != nil {
+				log.Fatalf("Unable to retrieve Drive client: %v", err)
+			}
+			services[userId] = srv
+		}
+		res, _ := json.Marshal(map[string]any{"success": true})
+		w.Write(res)
+	})
+	http.HandleFunc("/api/listFiles", func(w http.ResponseWriter, req *http.Request) {
+		userId := req.Header.Get("userId")
+		srv := services[userId]
+		r, err := srv.Files.List().PageSize(10).
+			Fields("nextPageToken, files(id, name)").Do()
+		if err != nil {
+			log.Fatalf("Unable to retrieve files: %v", err)
+		}
+		fmt.Println("Files:")
+		if len(r.Files) == 0 {
+			fmt.Println("No files found.")
+		} else {
+			for _, i := range r.Files {
+				fmt.Printf("%s (%s)\n", i.Name, i.Id)
+			}
+		}
+		res, _ := json.Marshal(map[string]any{"success": true})
+		w.Write(res)
+	})
+	http.HandleFunc("/api/upload", func(w http.ResponseWriter, req *http.Request) {
+		userId := req.Header.Get("userId")
+		body := req.Body
+		arr := make([]byte, 1024)
+		length, err := body.Read(arr)
+		if err != nil {
+			log.Println(err)
+		}
+		srv := services[userId]
+		filename := req.Header.Get("fileName")
+		res, err := srv.Files.Create(
+			&drive.File{
+				Name: filename,
+			},
+		).Media(bytes.NewBuffer(arr[:length]), googleapi.ChunkSize(int(length))).Do()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		fmt.Printf("%s\n", res.Id)
+		resp, _ := json.Marshal(map[string]any{"success": true})
+		w.Write(resp)
+	})
+	http.ListenAndServe(":3000", nil)
+}
+
 func main() {
 	var command string
 	flag.StringVar(&command, "command", "", "")
 	var authCode string
 	flag.StringVar(&authCode, "authCode", "", "")
-	ctx := context.Background()
-	b, err := os.ReadFile("credentials.json")
-	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
-	}
+	var userId string
+	flag.StringVar(&userId, "userId", "", "")
+	flag.Parse()
 
-	config, err := google.ConfigFromJSON(b, drive.DriveMetadataReadonlyScope)
-	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
-	}
-	client := getClient(config, authCode)
-
-	srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
-	if err != nil {
-		log.Fatalf("Unable to retrieve Drive client: %v", err)
-	}
-
-	r, err := srv.Files.List().PageSize(10).
-		Fields("nextPageToken, files(id, name)").Do()
-	if err != nil {
-		log.Fatalf("Unable to retrieve files: %v", err)
-	}
-	fmt.Println("Files:")
-	if len(r.Files) == 0 {
-		fmt.Println("No files found.")
-	} else {
-		for _, i := range r.Files {
-			fmt.Printf("%s (%s)\n", i.Name, i.Id)
+	if command == "adminInit" {
+		runHttpServer()
+	} else if command == "createStorage" {
+		req, _ := http.NewRequest("POST", "http://localhost:3000/api/createStorage", bytes.NewBuffer([]byte("{}")))
+		req.Header.Set("userId", userId)
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			panic(err)
 		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Println(string(body))
+	} else if command == "authorizeStorage" {
+		req, _ := http.NewRequest("POST", "http://localhost:3000/api/authorizeStorage", bytes.NewBuffer([]byte("{}")))
+		req.Header.Set("userId", userId)
+		req.Header.Set("authCode", authCode)
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Println(string(body))
+	} else if command == "listFiles" {
+		req, _ := http.NewRequest("POST", "http://localhost:3000/api/listFiles", bytes.NewBuffer([]byte("{}")))
+		req.Header.Set("userId", userId)
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Println(string(body))
+	} else if command == "upload" {
+		req, _ := http.NewRequest("POST", "http://localhost:3000/api/upload", bytes.NewBuffer([]byte("hello keyhan !")))
+		req.Header.Set("userId", userId)
+		req.Header.Set("fileName", "test.txt")
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Println(string(body))
 	}
-	// filename := "./sample.txt"
-	// file, err := os.Open(filename)
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-	// stat, err := file.Stat()
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-	// defer file.Close()
-	// res, err := srv.Files.Create(
-	// 	&drive.File{
-	// 		Name: "sample.txt",
-	// 	},
-	// ).Media(file, googleapi.ChunkSize(int(stat.Size()))).Do()
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-	// fmt.Printf("%s\n", res.Id)
 }

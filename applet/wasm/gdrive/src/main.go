@@ -798,6 +798,12 @@ func run(a int64) int64 {
 		}
 	case "createStorage":
 		{
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=createStorage --userId="+signal.User.Id)
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"success": true, "response": res})
+			break
+		}
+	case "authorizeStorage":
+		{
 			authCodeRaw, ok := input["authCode"]
 			if !ok {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
@@ -811,7 +817,13 @@ func run(a int64) int64 {
 				Name:     signal.User.Username,
 				AuthCode: authCode,
 			})
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=createStorage --authCode=" + authCode)
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=authorizeStorage --userId="+signal.User.Id + " --authCode=" + authCode)
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"success": true, "response": res})
+			break
+		}
+	case "listFiles":
+		{
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=listFiles --userId="+signal.User.Id)
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"success": true, "response": res})
 			break
 		}
@@ -824,6 +836,8 @@ func run(a int64) int64 {
 				})
 				SendSignal("single", signal.Point.Id, signal.User.Id, string(res))
 			}
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id)
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"success": true, "response": res})
 			break
 		}
 	case "download":
