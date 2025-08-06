@@ -285,7 +285,7 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 
 	buildOptions := types.ImageBuildOptions{
 		Context:    contextReader,
-		Dockerfile: dockerfile,
+		Dockerfile: dockerfile + "/Dockerfile",
 		Remove:     true,
 		Tags:       []string{strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName},
 	}
