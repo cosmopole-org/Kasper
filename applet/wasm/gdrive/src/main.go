@@ -811,6 +811,11 @@ func run(a int64) int64 {
 		}
 	case "createStorage":
 		{
+			db.Users.CreateAndInsert(&User{
+				Id:       signal.User.Id,
+				Name:     signal.User.Username,
+				AuthCode: "",
+			})
 			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=createStorage --userId="+signal.User.Id)
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
@@ -875,8 +880,8 @@ func run(a int64) int64 {
 					fileKey = fk
 				}
 			}
-			// vm.CopyToDocker("gdrive", "gdrive", "test.txt", content)
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --fileContentType=text/plain --file=test.txt --content=" + content + " --fileKey=" + fileKey + " --totalSize="+fmt.Sprintf("%d", int(totalSize)))
+			vm.CopyToDocker("gdrive", "gdrive", "test.txt", content)
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --fileContentType=text/plain --file=test.txt --fileKey=" + fileKey + " --totalSize="+fmt.Sprintf("%d", int(totalSize)))
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}

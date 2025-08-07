@@ -30,6 +30,7 @@ import (
 	inputs_storage "kasper/src/shell/api/inputs/storage"
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
+	"kasper/src/shell/utils/future"
 	"log"
 	"net/http"
 	"strings"
@@ -52,7 +53,9 @@ func (wm *Wasm) Assign(machineId string) {
 			data := string(a.([]byte))
 			if key == "points/signal" {
 				input := C.CString(data)
-				C.wasmRunVm(astPath, input, machId)
+				future.Async(func() {
+					C.wasmRunVm(astPath, input, machId)
+				}, false)
 			}
 		},
 	})
@@ -95,7 +98,9 @@ func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
 	astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
 	b, _ := json.Marshal(updates_points.Send{User: model.User{}, Point: point, Action: "single", Data: data})
 	input := C.CString(string(b))
-	C.wasmRunVm(astPath, input, machId)
+	future.Async(func() {
+		C.wasmRunVm(astPath, input, machId)
+	}, false)
 }
 
 func (wm *Wasm) WasmCallback(dataRaw string) string {

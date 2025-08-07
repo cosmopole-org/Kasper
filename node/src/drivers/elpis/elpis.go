@@ -15,6 +15,7 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/worker"
 	inputs_points "kasper/src/shell/api/inputs/points"
+	"kasper/src/shell/utils/future"
 	"log"
 )
 
@@ -40,7 +41,9 @@ func (wm *Elpis) Assign(machineId string) {
 				userId := C.CString(inp.UserId)
 				sendType := C.CString(inp.Type)
 				inputData := C.CString(inp.Data)
-				C.runVm(astPath, sendType, pointId, userId, inputData)
+				future.Async(func() {
+					C.runVm(astPath, sendType, pointId, userId, inputData)
+				}, false)
 			}
 		},
 	})

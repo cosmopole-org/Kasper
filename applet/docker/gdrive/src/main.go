@@ -56,6 +56,7 @@ func authorizeAndGEtToken(userId string, authCode string) *http.Client {
 	return config.Client(context.Background(), tok)
 }
 
+
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	if err != nil {
@@ -164,12 +165,11 @@ func runHttpServer() {
 		fileId := r.Header.Get("fileId")
 		key := r.Header.Get("fileKey")
 		filename := r.Header.Get("fileName")
-		// fileReader, err := os.Open("/app/input/" + file)
-		// if err != nil {
-		// 	log.Println(err)
-		// }
-		// defer fileReader.Close()
-		fileReader := bytes.NewBuffer([]byte(r.Header.Get("content")))
+		fileReader, err := os.Open("/app/input/" + file)
+		if err != nil {
+			log.Println(err)
+		}
+		defer fileReader.Close()
 
 		totalHeader := r.Header.Get("X-Total-Size")
 		var total *int64
@@ -220,8 +220,10 @@ func runHttpServer() {
 			sessionsMu.Unlock()
 		}
 
+		fi, _ := fileReader.Stat()
+
 		// Step 2: Upload chunk via PUT to session URI
-		chunkSize := int64(len([]byte(r.Header.Get("content"))))
+		chunkSize := fi.Size()
 		end := sess.Uploaded + chunkSize - 1
 		totalStr := "*"
 		if sess.TotalSize != nil {
@@ -255,32 +257,35 @@ func runHttpServer() {
 			return
 		}
 
-		// Parse the response to extract file ID
-		var metadata map[string]interface{}
-		if err := json.Unmarshal(buf.Bytes(), &metadata); err != nil {
-			http.Error(w, "Failed to parse response JSON: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if id, ok := metadata["id"].(string); ok {
-			sess.FileID = id
-			fmt.Fprintf(w, "File uploaded successfully. File ID: %s\n", id)
-		} else {
-			http.Error(w, "File ID not found in response", http.StatusInternalServerError)
-			return
-		}
+		result := buf.Bytes()
+		log.Println(string(result))
 
 		sess.Uploaded += chunkSize
 		fmt.Fprintf(w, "Uploaded total: %d bytes\n", sess.Uploaded)
-
-		if sess.FileID != "" {
-			response, _ := json.Marshal(map[string]any{"success": true, "fileId": sess.FileID})
-			w.Write(response)
-		} else {
-			response, _ := json.Marshal(map[string]any{"success": true, "key": key})
-			w.Write(response)
-		}
 		os.Remove("/app/input/" + file)
+
+		// Parse the response to extract file ID
+		var metadata map[string]interface{}
+		if err := json.Unmarshal(result, &metadata); err != nil {
+			response, _ := json.Marshal(map[string]any{"success": true})
+			w.Write(response)
+			return
+		} else {
+			if id, ok := metadata["id"].(string); ok {
+				sess.FileID = id
+				fmt.Fprintf(w, "File uploaded successfully. File ID: %s\n", id)
+			} else {
+				http.Error(w, "File ID not found in response", http.StatusInternalServerError)
+				return
+			}
+			if sess.FileID != "" {
+				response, _ := json.Marshal(map[string]any{"success": true, "fileId": sess.FileID})
+				w.Write(response)
+			} else {
+				response, _ := json.Marshal(map[string]any{"success": true, "key": key})
+				w.Write(response)
+			}
+		}
 	})
 	http.HandleFunc("/api/download", func(w http.ResponseWriter, req *http.Request) {
 		userId := req.Header.Get("userId")
@@ -314,8 +319,6 @@ func main() {
 	flag.StringVar(&fileId, "fileId", "", "")
 	var fileKey string
 	flag.StringVar(&fileKey, "fileKey", "", "")
-	var content string
-	flag.StringVar(&content, "content", "", "")
 	var fileCT string
 	flag.StringVar(&fileCT, "fileContentType", "", "")
 	var totalSize int
@@ -367,7 +370,6 @@ func main() {
 		req.Header.Set("file", file)
 		req.Header.Set("fileName", file)
 		req.Header.Set("fileKey", fileKey)
-		req.Header.Set("content", content)
 		req.Header.Set("fileContentType", fileCT)
 		req.Header.Set("X-Total-Size", fmt.Sprintf("%d", totalSize))
 		req.Header.Set("Content-Type", "application/json")

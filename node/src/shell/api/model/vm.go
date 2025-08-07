@@ -91,24 +91,47 @@ func (d Vm) Pull(trx trx.ITrx) Vm {
 }
 
 func (d Vm) All(trx trx.ITrx, offset int64, count int64) ([]Vm, error) {
-	objs, err := trx.GetObjList("Vm", []string{"*"}, map[string]string{}, offset, count)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	entities := []Vm{}
-	for id, m := range objs {
-		if len(m) > 0 {
-			d := Vm{}
-			d.MachineId = id
-			d.AppId = string(m["appId"])
-			d.Runtime = string(m["runtime"])
-			d.Path = string(m["path"])
-			entities = append(entities, d)
+	if count == -1 {
+		objs, err := trx.GetObjList("Vm", []string{"*"}, map[string]string{})
+		if err != nil {
+			log.Println(err)
+			return nil, err
 		}
+		entities := []Vm{}
+		for id, m := range objs {
+			if len(m) > 0 {
+				d := Vm{}
+				d.MachineId = id
+				d.AppId = string(m["appId"])
+				d.Runtime = string(m["runtime"])
+				d.Path = string(m["path"])
+				entities = append(entities, d)
+			}
+		}
+		sort.Slice(entities, func(i, j int) bool {
+			return entities[i].MachineId < entities[j].MachineId
+		})
+		return entities, nil
+	} else {
+		objs, err := trx.GetObjList("Vm", []string{"*"}, map[string]string{}, offset, count)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		entities := []Vm{}
+		for id, m := range objs {
+			if len(m) > 0 {
+				d := Vm{}
+				d.MachineId = id
+				d.AppId = string(m["appId"])
+				d.Runtime = string(m["runtime"])
+				d.Path = string(m["path"])
+				entities = append(entities, d)
+			}
+		}
+		sort.Slice(entities, func(i, j int) bool {
+			return entities[i].MachineId < entities[j].MachineId
+		})
+		return entities, nil
 	}
-	sort.Slice(entities, func(i, j int) bool {
-		return entities[i].MachineId < entities[j].MachineId
-	})
-	return entities, nil
 }

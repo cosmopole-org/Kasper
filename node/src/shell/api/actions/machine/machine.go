@@ -4,10 +4,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/state"
 	inputs_machiner "kasper/src/shell/api/inputs/machine"
 	"kasper/src/shell/api/model"
 	outputs_machiner "kasper/src/shell/api/outputs/plugin"
+	"kasper/src/shell/utils/future"
 	"log"
 )
 
@@ -18,6 +20,20 @@ type Actions struct {
 }
 
 func Install(a *Actions) error {
+	a.App.ModifyState(true, func(trx trx.ITrx) error {
+		vms, err := model.Vm{}.All(trx, -1, -1)
+		if err != nil {
+			panic(err)
+		}
+		for _, vm := range vms {
+			if vm.Runtime == "wasm" {
+				a.App.Tools().Wasm().Assign(vm.MachineId)
+			} else if vm.Runtime == "elpis" {
+				a.App.Tools().Elpis().Assign(vm.MachineId)
+			}
+		}
+		return nil
+	})
 	return nil
 }
 
@@ -112,11 +128,12 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 				return nil, err2
 			}
 		}
-		err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath, vm.MachineId, in)
-		if err3 != nil {
-			log.Println(err3)
-			return nil, err3
-		}
+		future.Async(func() {
+			err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath, vm.MachineId, in)
+			if err3 != nil {
+				log.Println(err3)
+			}
+		}, false)
 	} else {
 		err2 := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/", data, "module", true)
 		if err2 != nil {
