@@ -32,6 +32,10 @@ func runDocker(k int32, kl int32, v int32, lv int32, c int32, cv int32) int64
 func execDocker(k int32, kl int32, v int32, lv int32, c int32, cv int32) int64
 
 //go:module env
+//export copyToDocker
+func copyToDocker(k int32, kl int32, v int32, lv int32, c int32, cv int32, con int32, conv int32) int64
+
+//go:module env
 //export put
 func put(k int32, kl int32, v int32, lv int32) int32
 
@@ -654,6 +658,14 @@ func (vm *Vm) ExecDocker(imageName string, containerName string, command string)
 	return result["data"].(string)
 }
 
+func (vm *Vm) CopyToDocker(imageName string, containerName string, fileName string, content string) {
+	kp, kl := bytesToPointer([]byte(imageName))
+	cp, cl := bytesToPointer([]byte(containerName))
+	cop, col := bytesToPointer([]byte(fileName))
+	conp, conl := bytesToPointer([]byte(content))
+	copyToDocker(kp, kl, cp, cl, cop, col, conp, conl)
+}
+
 func SendSignal(typ string, pointId string, userId string, data string) {
 	kp, kl := bytesToPointer([]byte(typ))
 	cp, cl := bytesToPointer([]byte(pointId))
@@ -793,13 +805,16 @@ func run(a int64) int64 {
 	switch act {
 	case "adminInit":
 		{
-			vm.RunDocker("gdrive", "gdrive", map[string]string{})
+			go func() {
+				vm.RunDocker("gdrive", "gdrive", map[string]string{})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"response": "initialized successfully"})
+			}()
 			break
 		}
 	case "createStorage":
 		{
 			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=createStorage --userId="+signal.User.Id)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"success": true, "response": res})
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
 	case "authorizeStorage":
@@ -807,48 +822,69 @@ func run(a int64) int64 {
 			authCodeRaw, ok := input["authCode"]
 			if !ok {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
+				return 0
 			}
 			authCode, ok := authCodeRaw.(string)
 			if !ok {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
+				return 0
 			}
 			db.Users.CreateAndInsert(&User{
 				Id:       signal.User.Id,
 				Name:     signal.User.Username,
 				AuthCode: authCode,
 			})
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=authorizeStorage --userId="+signal.User.Id + " --authCode=" + authCode)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"success": true, "response": res})
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=authorizeStorage --userId="+signal.User.Id+" --authCode="+authCode)
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
 	case "listFiles":
 		{
 			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=listFiles --userId="+signal.User.Id)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"success": true, "response": res})
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
 	case "upload":
 		{
 			user := db.Users.FindById(signal.User.Id)
 			if user.Id == "" {
-				res, _ := json.Marshal(map[string]any{
-					"success": false,
-				})
-				SendSignal("single", signal.Point.Id, signal.User.Id, string(res))
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
+				return 0
 			}
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"success": true, "response": res})
+			contentRaw := input["content"]
+			if contentRaw == nil {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
+				return 0
+			}
+			content, ok := contentRaw.(string)
+			if !ok {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 5})
+				return 0
+			}
+			vm.CopyToDocker("gdrive", "gdrive", "test.txt", content)
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id + " --file=test.txt")
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
 	case "download":
 		{
 			user := db.Users.FindById(signal.User.Id)
 			if user.Id == "" {
-				res, _ := json.Marshal(map[string]any{
-					"success": false,
-				})
-				SendSignal("single", signal.Point.Id, signal.User.Id, string(res))
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
+				return 0
 			}
+			fileIdRaw := input["fileId"]
+			if fileIdRaw == nil {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
+				return 0
+			}
+			fileId, ok := fileIdRaw.(string)
+			if !ok {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 5})
+				return 0
+			}
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+signal.User.Id + " --fileId=" + fileId)
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
 	}

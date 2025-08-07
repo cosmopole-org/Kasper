@@ -22,23 +22,23 @@ import (
 
 var tokFile = "token.json"
 
-func getClient(config *oauth2.Config) *http.Client {
+func getClient(config *oauth2.Config) any {
 	tok, err := tokenFromFile(tokFile)
+	config.RedirectURL = "http://localhost:8080"
+	config.Scopes = append(config.Scopes, "https://www.googleapis.com/auth/drive.file")
 	if err != nil {
-		getTokenFromWeb(config)
-		return nil
+		return getTokenFromWeb(config)
 	} else {
 		return config.Client(context.Background(), tok)
 	}
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(config *oauth2.Config) {
-	config.RedirectURL = "http://localhost:8080"
-	config.Scopes = append(config.Scopes, "https://www.googleapis.com/auth/drive.file")
+func getTokenFromWeb(config *oauth2.Config) string {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
+	return authURL
 }
 
 func authorizeAndGEtToken(userId string, authCode string) *http.Client {
@@ -88,18 +88,22 @@ func runHttpServer() {
 			log.Fatalf("Unable to parse client secret file to config: %v", err)
 		}
 		client := getClient(config)
-		if client != nil {
-			clients[userId] = client
+		if httpClient, ok := client.(*http.Client); ok {
+			clients[userId] = httpClient
 			ctx := context.Background()
-			srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
+			srv, err := drive.NewService(ctx, option.WithHTTPClient(httpClient))
 			if err != nil {
 				log.Fatalf("Unable to retrieve Drive client: %v", err)
 			}
 			services[userId] = srv
+			configs[userId] = config
+			res, _ := json.Marshal(map[string]any{"success": true})
+			w.Write(res)
+		} else if authUrl, ok := client.(string); ok {
+			res, _ := json.Marshal(map[string]any{"success": true, "authUrl": authUrl})
+			configs[userId] = config
+			w.Write(res)
 		}
-		configs[userId] = config
-		res, _ := json.Marshal(map[string]any{"success": true})
-		w.Write(res)
 	})
 	http.HandleFunc("/api/authorizeStorage", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("userId")
@@ -126,36 +130,60 @@ func runHttpServer() {
 			log.Fatalf("Unable to retrieve files: %v", err)
 		}
 		fmt.Println("Files:")
+		list := []map[string]any{}
 		if len(r.Files) == 0 {
 			fmt.Println("No files found.")
 		} else {
 			for _, i := range r.Files {
 				fmt.Printf("%s (%s)\n", i.Name, i.Id)
+				list = append(list, map[string]any{"fileName": i.Name, "fileId": i.Id})
 			}
 		}
-		res, _ := json.Marshal(map[string]any{"success": true})
+		res, _ := json.Marshal(map[string]any{"success": true, "list": list})
 		w.Write(res)
 	})
 	http.HandleFunc("/api/upload", func(w http.ResponseWriter, req *http.Request) {
 		userId := req.Header.Get("userId")
-		body := req.Body
-		arr := make([]byte, 1024)
-		length, err := body.Read(arr)
+		file := req.Header.Get("file")
+		srv := services[userId]
+		filename := req.Header.Get("fileName")
+		fileReader, err := os.Open("/app/input/" + file)
 		if err != nil {
 			log.Println(err)
 		}
-		srv := services[userId]
-		filename := req.Header.Get("fileName")
+		defer fileReader.Close()
+		info, err := fileReader.Stat()
+		if err != nil {
+			log.Println(err)
+		}
+		size := info.Size()
 		res, err := srv.Files.Create(
 			&drive.File{
 				Name: filename,
 			},
-		).Media(bytes.NewBuffer(arr[:length]), googleapi.ChunkSize(int(length))).Do()
+		).Media(fileReader, googleapi.ChunkSize(int(size))).Do()
 		if err != nil {
 			log.Fatalln(err)
 		}
 		fmt.Printf("%s\n", res.Id)
-		resp, _ := json.Marshal(map[string]any{"success": true})
+		resp, _ := json.Marshal(map[string]any{"success": true, "fileId": res.Id})
+		w.Write(resp)
+		os.Remove("/app/input/" + file)
+	})
+	http.HandleFunc("/api/download", func(w http.ResponseWriter, req *http.Request) {
+		userId := req.Header.Get("userId")
+		fileId := req.Header.Get("fileId")
+		srv := services[userId]
+		res, err := srv.Files.Get(fileId).Download()
+		if err != nil {
+			log.Fatalf("Could not download file: %v", err)
+		}
+		defer res.Body.Close()
+		data, err := io.ReadAll(res.Body)
+		if err != nil {
+			log.Fatalf("Failed to read downloaded data: %v", err)
+		}
+		resp, _ := json.Marshal(map[string]any{"success": true, "data": string(data)})
 		w.Write(resp)
 	})
 	http.ListenAndServe(":3000", nil)
@@ -168,6 +196,10 @@ func main() {
 	flag.StringVar(&authCode, "authCode", "", "")
 	var userId string
 	flag.StringVar(&userId, "userId", "", "")
+	var file string
+	flag.StringVar(&file, "file", "", "")
+	var fileId string
+	flag.StringVar(&fileId, "fileId", "", "")
 	flag.Parse()
 
 	if command == "adminInit" {
@@ -179,11 +211,11 @@ func main() {
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		log.Println(string(body))
 	} else if command == "authorizeStorage" {
 		req, _ := http.NewRequest("POST", "http://localhost:3000/api/authorizeStorage", bytes.NewBuffer([]byte("{}")))
 		req.Header.Set("userId", userId)
@@ -196,7 +228,7 @@ func main() {
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		log.Println(string(body))
 	} else if command == "listFiles" {
 		req, _ := http.NewRequest("POST", "http://localhost:3000/api/listFiles", bytes.NewBuffer([]byte("{}")))
 		req.Header.Set("userId", userId)
@@ -204,23 +236,37 @@ func main() {
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		log.Println(string(body))
 	} else if command == "upload" {
-		req, _ := http.NewRequest("POST", "http://localhost:3000/api/upload", bytes.NewBuffer([]byte("hello keyhan !")))
+		req, _ := http.NewRequest("POST", "http://localhost:3000/api/upload", bytes.NewBuffer([]byte("{}")))
 		req.Header.Set("userId", userId)
-		req.Header.Set("fileName", "test.txt")
+		req.Header.Set("file", file)
+		req.Header.Set("fileName", file)
 		req.Header.Set("Content-Type", "application/json")
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		log.Println(string(body))
+	} else if command == "download" {
+		req, _ := http.NewRequest("POST", "http://localhost:3000/api/download", bytes.NewBuffer([]byte("{}")))
+		req.Header.Set("userId", userId)
+		req.Header.Set("fileId", fileId)
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		log.Println(string(body))
 	}
 }

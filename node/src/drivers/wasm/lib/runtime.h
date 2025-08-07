@@ -557,7 +557,7 @@ void WasmMac::registerHost(std::string modPath)
     this->registerFunction(HostMod, "httpPost", httpPost, Params12, 6, Returns12);
     WasmEdge_ValType Params13[8] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
     WasmEdge_ValType Returns13[1] = {WasmEdge_ValTypeGenI64()};
-    this->registerFunction(HostMod, "copyToDocker", copyToDocker, Params11, 8, Returns11);
+    this->registerFunction(HostMod, "copyToDocker", copyToDocker, Params13, 8, Returns13);
 
     auto Res = WasmEdge_VMRegisterModuleFromImport(VMCxt, HostMod);
     if (!WasmEdge_ResultOK(Res))

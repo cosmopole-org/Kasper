@@ -36,11 +36,12 @@ type Docker struct {
 	client      *client.Client
 }
 
-func (wm *Docker) SaRContainer(containerName string) error {
+func (wm *Docker) SaRContainer(machineId string, imageName string, containerName string) error {
+	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
 	ctx := context.Background()
 
-	if err := wm.client.ContainerStop(ctx, containerName, container.StopOptions{}); err != nil {
-		log.Println("Unable to stop container ", containerName, err.Error())
+	if err := wm.client.ContainerStop(ctx, cn, container.StopOptions{}); err != nil {
+		log.Println("Unable to stop container ", cn, err.Error())
 	}
 
 	removeOptions := container.RemoveOptions{
@@ -48,7 +49,7 @@ func (wm *Docker) SaRContainer(containerName string) error {
 		Force:         true,
 	}
 
-	if err := wm.client.ContainerRemove(ctx, containerName, removeOptions); err != nil {
+	if err := wm.client.ContainerRemove(ctx, cn, removeOptions); err != nil {
 		log.Println("Unable to remove container: ", err.Error())
 		return err
 	}
@@ -175,7 +176,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 		Env:   []string{},
 	}
 
-	cont, err := wm.client.ContainerCreate(
+	_, err := wm.client.ContainerCreate(
 		ctx,
 		config,
 		&container.HostConfig{
@@ -193,7 +194,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 		log.Println(err)
 		return nil, err
 	}
-	defer wm.SaRContainer(cont.ID)
+	defer wm.SaRContainer(machineId, imageName, containerName)
 	future.Async(func() {
 		time.Sleep(60 * time.Minute)
 		// wm.SaRContainer(cn)

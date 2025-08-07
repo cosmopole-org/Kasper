@@ -5,7 +5,7 @@ import (
 )
 
 type IDocker interface {
-	SaRContainer(containerName string) error
+	SaRContainer(machineId string, imageName string, containerName string) error
 	RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string) (*models.File, error)
 	BuildImage(dockerfile string, machineId string, imageName string) error
 	ExecContainer(machineId string, imageName string, containerName string, command string) (string, error)

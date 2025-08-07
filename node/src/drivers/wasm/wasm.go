@@ -170,6 +170,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
+		wm.docker.SaRContainer(machineId, imageName, containerName)
 		outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles)
 		if err != nil {
 			log.Println(err)
