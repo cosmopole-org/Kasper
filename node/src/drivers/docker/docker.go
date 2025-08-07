@@ -148,7 +148,7 @@ func (wm *Docker) readFromTar(tr *tar.Reader, machineId string, pointId string) 
 
 func (wm *Docker) CopyToContainer(machineId string, imageName string, containerName string, fileName string, content string) error {
 	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
-	tarId := WriteToTar(map[string]string{fileName: content})
+	tarId := WriteToTarDirectly(map[string][]byte{fileName: []byte(content)})
 	tarStream, err := os.Open(tarId)
 	if err != nil {
 		log.Println(err)

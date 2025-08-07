@@ -1337,7 +1337,7 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     WasmEdge_MemoryInstanceGetData(mem, rawContent, contentOffset, contentL);
     for (int i = 0; i < contentL; i++)
     {
-        rawCoC.push_back((char)rawContent[i]);
+        rawContentC.push_back((char)rawContent[i]);
     }
     auto content = std::string(rawContentC.begin(), rawContentC.end());
 

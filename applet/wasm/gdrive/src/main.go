@@ -859,8 +859,24 @@ func run(a int64) int64 {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 5})
 				return 0
 			}
-			vm.CopyToDocker("gdrive", "gdrive", "test.txt", content)
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --file=test.txt")
+			totalSizeRaw := input["totalSize"]
+			if totalSizeRaw == nil {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 6})
+				return 0
+			}
+			totalSize, ok := totalSizeRaw.(float64)
+			if !ok {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 7})
+				return 0
+			}
+			fileKey := ""
+			if fkRaw, ok := input["fileKey"]; ok {
+				if fk, ok := fkRaw.(string); ok {
+					fileKey = fk
+				}
+			}
+			// vm.CopyToDocker("gdrive", "gdrive", "test.txt", content)
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --fileContentType=text/plain --file=test.txt --content=" + content + " --fileKey=" + fileKey + " --totalSize="+fmt.Sprintf("%d", int(totalSize)))
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
