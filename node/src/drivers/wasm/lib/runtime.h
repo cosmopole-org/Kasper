@@ -1342,7 +1342,7 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     auto content = std::string(rawContentC.begin(), rawContentC.end());
 
     json j;
-    j["key"] = "execDocker";
+    j["key"] = "copyToDocker";
     json j2;
     j2["machineId"] = rt->machineId;
     j2["imageName"] = imageName;

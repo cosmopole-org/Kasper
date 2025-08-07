@@ -805,10 +805,8 @@ func run(a int64) int64 {
 	switch act {
 	case "adminInit":
 		{
-			go func() {
-				vm.RunDocker("gdrive", "gdrive", map[string]string{})
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"response": "initialized successfully"})
-			}()
+			vm.RunDocker("gdrive", "gdrive", map[string]string{})
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": "initialized successfully"})
 			break
 		}
 	case "createStorage":
@@ -862,7 +860,7 @@ func run(a int64) int64 {
 				return 0
 			}
 			vm.CopyToDocker("gdrive", "gdrive", "test.txt", content)
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id + " --file=test.txt")
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --file=test.txt")
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
@@ -883,7 +881,7 @@ func run(a int64) int64 {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 5})
 				return 0
 			}
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+signal.User.Id + " --fileId=" + fileId)
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+signal.User.Id+" --fileId="+fileId)
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
