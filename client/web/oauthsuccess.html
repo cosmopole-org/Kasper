@@ -3,7 +3,8 @@
 <script>
     window.onload = () => {
         const url = window.location.href;
-        window.opener.postMessage({ oauth2redirect: url }, window.location.origin);
+        var bc = new BroadcastChannel('oauth2channel');
+        bc.postMessage(url);
         window.close();
     };
 </script>
