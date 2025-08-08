@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<title>Authentication complete</title>
+<script>
+    window.onload = () => {
+        const url = window.location.href;
+        window.opener.postMessage({ oauth2redirect: url }, window.location.origin);
+        window.close();
+    };
+</script>
