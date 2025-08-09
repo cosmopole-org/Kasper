@@ -588,6 +588,7 @@ func (*Db) GetByPrefix(key string) [][]byte {
 	kP, kL := bytesToPointer([]byte(key))
 	val := getByPrefix(kP, kL)
 	data := pointerToBytes(val)
+	logger.Log("first data: " + string(data))
 	type BytesInBytes struct {
 		Data []string `json:"data"`
 	}
@@ -598,6 +599,7 @@ func (*Db) GetByPrefix(key string) [][]byte {
 	}
 	result := [][]byte{}
 	for _, b := range arr.Data {
+		logger.Log("first data: " + string(b))
 		result = append(result, []byte(b))
 	}
 	return result
@@ -1032,7 +1034,7 @@ func run(a int64) int64 {
 			user.Docs.CreateAndInsert(doc)
 			logger.Log("end 2")
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "docId": doc.Id})
-			broadcast(signal.Point.Id, map[string]any{"type": "uploadNotif", "docId": doc.Id})
+			// broadcast(signal.Point.Id, map[string]any{"type": "uploadNotif", "docId": doc.Id})
 			break
 		}
 	case "download":

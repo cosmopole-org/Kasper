@@ -5,6 +5,7 @@ extern "C"
 #endif
     char *wasmCallback(char *);
     void init(char* kvDbPath);
+    void close();
     void wasmRunVm(
         char *astPath,
         char *input,
