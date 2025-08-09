@@ -40,8 +40,23 @@ func Install(a *Actions) error {
 // CreateApp /apps/create check [ true false false ] access [ true false false false POST ]
 func (a *Actions) CreateApp(state state.IState, input inputs_machiner.CreateAppInput) (any, error) {
 	trx := state.Trx()
-	app := model.App{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), OwnerId: state.Info().UserId(), ChainId: input.ChainId}
+	if trx.HasIndex("App", "username", "id", input.Username) {
+		return nil, errors.New("app username already exists")
+	}
+	app := model.App{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Username: input.Username, OwnerId: state.Info().UserId(), ChainId: input.ChainId}
 	app.Push(trx)
+	trx.PutJson("AppMeta::"+app.Id, "metadata", input.Metadata, false)
+	profile, err := trx.GetJson("AppMeta::"+app.Id, "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if profile["title"] == nil {
+		return nil, errors.New("title can not be empty")
+	}
+	if profile["avatar"] == nil {
+		return nil, errors.New("avatar can not be empty")
+	}
 	a.App.Tools().Network().Chain().NotifyNewMachineCreated(input.ChainId, app.Id)
 	return map[string]any{"app": app}, nil
 }
@@ -158,7 +173,29 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 		log.Println(err)
 		return nil, err
 	}
-	return map[string]any{"apps": apps}, nil
+	result := []map[string]any{}
+	for _, app := range apps {
+		profile, err := trx.GetJson("AppMeta::"+app.Id, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			result = append(result, map[string]any{
+				"id":       app.Id,
+				"chainId":  app.ChainId,
+				"username": app.Username,
+				"title":    "untitled",
+				"avatar":   "",
+			})
+			continue
+		}
+		result = append(result, map[string]any{
+			"id":       app.Id,
+			"chainId":  app.ChainId,
+			"username": app.Username,
+			"title":    profile["title"],
+			"avatar":   profile["avatar"],
+		})
+	}
+	return map[string]any{"apps": result}, nil
 }
 
 // ListMachs /machines/list check [ true false false ] access [ true false false false GET ]

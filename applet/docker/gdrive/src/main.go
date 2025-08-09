@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -18,7 +19,6 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 
-	// "google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -26,15 +26,7 @@ var tokFile = "token.json"
 var token = ""
 
 func getClient(config *oauth2.Config) any {
-	tok, err := tokenFromFile(tokFile)
-	config.RedirectURL = "http://localhost:8080"
-	config.Scopes = append(config.Scopes, "https://www.googleapis.com/auth/drive.file")
-	if err != nil {
-		return getTokenFromWeb(config)
-	} else {
-		token = tok.AccessToken
-		return config.Client(context.Background(), tok)
-	}
+	return getTokenFromWeb(config)
 }
 
 // Request a token from the web, then returns the retrieved token.
@@ -54,18 +46,6 @@ func authorizeAndGEtToken(userId string, authCode string) *http.Client {
 	token = tok.AccessToken
 	saveToken(tokFile, tok)
 	return config.Client(context.Background(), tok)
-}
-
-
-func tokenFromFile(file string) (*oauth2.Token, error) {
-	f, err := os.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	tok := &oauth2.Token{}
-	err = json.NewDecoder(f).Decode(tok)
-	return tok, err
 }
 
 func saveToken(path string, token *oauth2.Token) {
@@ -102,6 +82,8 @@ func runHttpServer() {
 			log.Fatalf("Unable to read client secret file: %v", err)
 		}
 		config, err := google.ConfigFromJSON(b, drive.DriveMetadataReadonlyScope)
+		config.RedirectURL = r.Header.Get("redirectUrl")
+		config.Scopes = append(config.Scopes, "https://www.googleapis.com/auth/drive.file")
 		if err != nil {
 			log.Fatalf("Unable to parse client secret file to config: %v", err)
 		}
@@ -163,13 +145,9 @@ func runHttpServer() {
 	http.HandleFunc("/api/upload", func(w http.ResponseWriter, r *http.Request) {
 		file := r.Header.Get("file")
 		fileId := r.Header.Get("fileId")
-		key := r.Header.Get("fileKey")
-		filename := r.Header.Get("fileName")
-		fileReader, err := os.Open("/app/input/" + file)
-		if err != nil {
-			log.Println(err)
-		}
-		defer fileReader.Close()
+
+		payloadB64, _ := os.ReadFile("/app/input/" + file)
+		payload, _ := base64.StdEncoding.DecodeString(string(payloadB64))
 
 		totalHeader := r.Header.Get("X-Total-Size")
 		var total *int64
@@ -179,7 +157,7 @@ func runHttpServer() {
 		}
 
 		sessionsMu.Lock()
-		sess := sessions[key]
+		sess := sessions[file]
 		sessionsMu.Unlock()
 
 		// Step 1: Initiate session if not done yet
@@ -191,7 +169,8 @@ func runHttpServer() {
 				method = "PATCH"
 			}
 
-			meta := `{"name":"` + filename + `"}`
+			metaBytes, _ := json.Marshal(map[string]any{"name": file})
+			meta := string(metaBytes)
 
 			initReq, _ := http.NewRequest(method, endpoint, io.NopCloser(strings.NewReader(meta)))
 			initReq.Header.Set("Authorization", "Bearer "+token)
@@ -216,14 +195,12 @@ func runHttpServer() {
 
 			sess = &SessionInfo{SessionURI: sessionURI, Uploaded: 0, TotalSize: total, FileID: fileId}
 			sessionsMu.Lock()
-			sessions[key] = sess
+			sessions[file] = sess
 			sessionsMu.Unlock()
 		}
 
-		fi, _ := fileReader.Stat()
-
 		// Step 2: Upload chunk via PUT to session URI
-		chunkSize := fi.Size()
+		chunkSize := int64(len(payload))
 		end := sess.Uploaded + chunkSize - 1
 		totalStr := "*"
 		if sess.TotalSize != nil {
@@ -232,7 +209,7 @@ func runHttpServer() {
 
 		ctx := context.Background()
 
-		putReq, _ := http.NewRequest("PUT", sess.SessionURI, fileReader)
+		putReq, _ := http.NewRequest("PUT", sess.SessionURI, bytes.NewBuffer(payload))
 		putReq.Header.Set("Content-Length", fmt.Sprint(chunkSize))
 		putReq.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%s", sess.Uploaded, end, totalStr))
 		putReq = putReq.WithContext(ctx)
@@ -282,7 +259,7 @@ func runHttpServer() {
 				response, _ := json.Marshal(map[string]any{"success": true, "fileId": sess.FileID})
 				w.Write(response)
 			} else {
-				response, _ := json.Marshal(map[string]any{"success": true, "key": key})
+				response, _ := json.Marshal(map[string]any{"success": true, "key": file})
 				w.Write(response)
 			}
 		}
@@ -317,10 +294,10 @@ func main() {
 	flag.StringVar(&file, "file", "", "")
 	var fileId string
 	flag.StringVar(&fileId, "fileId", "", "")
-	var fileKey string
-	flag.StringVar(&fileKey, "fileKey", "", "")
 	var fileCT string
 	flag.StringVar(&fileCT, "fileContentType", "", "")
+	var redirectUrl string
+	flag.StringVar(&redirectUrl, "redirectUrl", "", "")
 	var totalSize int
 	flag.IntVar(&totalSize, "totalSize", 0, "")
 	flag.Parse()
@@ -330,6 +307,7 @@ func main() {
 	} else if command == "createStorage" {
 		req, _ := http.NewRequest("POST", "http://localhost:3000/api/createStorage", bytes.NewBuffer([]byte("{}")))
 		req.Header.Set("userId", userId)
+		req.Header.Set("redirectUrl", redirectUrl)
 		req.Header.Set("Content-Type", "application/json")
 		client := &http.Client{}
 		resp, err := client.Do(req)
@@ -368,8 +346,6 @@ func main() {
 		req, _ := http.NewRequest("POST", "http://localhost:3000/api/upload", bytes.NewBuffer([]byte("{}")))
 		req.Header.Set("userId", userId)
 		req.Header.Set("file", file)
-		req.Header.Set("fileName", file)
-		req.Header.Set("fileKey", fileKey)
 		req.Header.Set("fileContentType", fileCT)
 		req.Header.Set("X-Total-Size", fmt.Sprintf("%d", totalSize))
 		req.Header.Set("Content-Type", "application/json")

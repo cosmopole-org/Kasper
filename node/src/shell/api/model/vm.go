@@ -8,9 +8,10 @@ import (
 )
 
 type App struct {
-	Id      string `json:"id"`
-	ChainId int64  `json:"chainId"`
-	OwnerId string `json:"ownerId"`
+	Id       string `json:"id"`
+	ChainId  int64  `json:"chainId"`
+	OwnerId  string `json:"ownerId"`
+	Username string `json:"username"`
 }
 
 func (m App) Type() string {
@@ -21,9 +22,10 @@ func (d App) Push(trx trx.ITrx) {
 	cidBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(cidBytes, uint64(d.ChainId))
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
-		"id":      []byte(d.Id),
-		"ownerId": []byte(d.OwnerId),
-		"chainId": cidBytes,
+		"id":       []byte(d.Id),
+		"ownerId":  []byte(d.OwnerId),
+		"username": []byte(d.Username),
+		"chainId":  cidBytes,
 	})
 }
 
@@ -31,6 +33,7 @@ func (d App) Pull(trx trx.ITrx) App {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {
 		d.Id = string(m["id"])
+		d.Username = string(m["username"])
 		d.OwnerId = string(m["ownerId"])
 		d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
 	}
@@ -49,6 +52,7 @@ func (d App) All(trx trx.ITrx, offset int64, count int64) ([]App, error) {
 			d := App{}
 			d.Id = id
 			d.OwnerId = string(m["ownerId"])
+			d.Username = string(m["username"])
 			d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
 			entities = append(entities, d)
 		}

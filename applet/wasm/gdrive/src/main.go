@@ -816,7 +816,17 @@ func run(a int64) int64 {
 				Name:     signal.User.Username,
 				AuthCode: "",
 			})
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=createStorage --userId="+signal.User.Id)
+			redirectUrlRaw, ok := input["redirectUrl"]
+			if !ok {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
+				return 0
+			}
+			redirectUrl, ok := redirectUrlRaw.(string)
+			if !ok {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
+				return 0
+			}
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=createStorage --redirectUrl="+redirectUrl+" --userId="+signal.User.Id)
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
@@ -874,14 +884,24 @@ func run(a int64) int64 {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 7})
 				return 0
 			}
+			mimeTypeRaw := input["mimeType"]
+			if mimeTypeRaw == nil {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 8})
+				return 0
+			}
+			mimeType, ok := mimeTypeRaw.(string)
+			if !ok {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 9})
+				return 0
+			}
 			fileKey := ""
 			if fkRaw, ok := input["fileKey"]; ok {
 				if fk, ok := fkRaw.(string); ok {
 					fileKey = fk
 				}
 			}
-			vm.CopyToDocker("gdrive", "gdrive", "test.txt", content)
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --fileContentType=text/plain --file=test.txt --fileKey=" + fileKey + " --totalSize="+fmt.Sprintf("%d", int(totalSize)))
+			vm.CopyToDocker("gdrive", "gdrive", fileKey, content)
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --fileContentType=" + mimeType + " --file="+fileKey+" --totalSize="+fmt.Sprintf("%d", int(totalSize)))
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
 			break
 		}
