@@ -251,6 +251,9 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 		return nil, errors.New("you are not admin")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	if point.Tag == "home" {
+		return nil, errors.New("your home can not be deleted")
+	}
 	meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
 	if err != nil {
 		log.Println(err)
