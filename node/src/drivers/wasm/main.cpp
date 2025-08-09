@@ -20,10 +20,10 @@
 
 using namespace std;
 
-void close()
-{
-  txn_db->Close();
-}
+// void close()
+// {
+//   txn_db->Close();
+// }
 
 void init(char *kvDbPath)
 {
