@@ -54,6 +54,9 @@ func (a *Actions) CreateApp(state state.IState, input inputs_machiner.CreateAppI
 	if profile["title"] == nil {
 		return nil, errors.New("title can not be empty")
 	}
+	if profile["desc"] == nil {
+		return nil, errors.New("description can not be empty")
+	}
 	if profile["avatar"] == nil {
 		return nil, errors.New("avatar can not be empty")
 	}
@@ -101,6 +104,9 @@ func (a *Actions) UpdateApp(state state.IState, input inputs_machiner.UpdateAppI
 	if profile["title"] == nil {
 		return nil, errors.New("title can not be empty")
 	}
+	if profile["desc"] == nil {
+		return nil, errors.New("description can not be empty")
+	}
 	if profile["avatar"] == nil {
 		return nil, errors.New("avatar can not be empty")
 	}
@@ -129,6 +135,7 @@ func (a *Actions) MyCreatedApps(state state.IState, input inputs_machiner.ListIn
 				"machinesCount": app.MachinesCount,
 				"title":         "untitled",
 				"avatar":        "",
+				"dec":           "",
 			})
 			continue
 		}
@@ -140,6 +147,7 @@ func (a *Actions) MyCreatedApps(state state.IState, input inputs_machiner.ListIn
 			"machinesCount": app.MachinesCount,
 			"title":         profile["title"],
 			"avatar":        profile["avatar"],
+			"dec":           profile["desc"],
 		})
 	}
 	return map[string]any{"apps": result}, nil
@@ -300,6 +308,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 				"machinesCount": app.MachinesCount,
 				"title":         "untitled",
 				"avatar":        "",
+				"dec":           "",
 			})
 			continue
 		}
@@ -311,6 +320,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 			"machinesCount": app.MachinesCount,
 			"title":         profile["title"],
 			"avatar":        profile["avatar"],
+			"dec":           profile["desc"],
 		})
 	}
 	return map[string]any{"apps": result}, nil
