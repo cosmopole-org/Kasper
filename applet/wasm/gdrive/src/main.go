@@ -365,7 +365,7 @@ func (eg *EntityGroup[T]) InsertEntity(e *Entity) {
 	eg.Db.Put("table::"+eg.EntityType.Id+"::"+e.Id, b)
 	logger.Log("hello 15")
 	if eg.EntityType.Id != eg.Prefix {
-		logger.Log("hello 16")
+		logger.Log("hello 16 [" + eg.EntityType.Id + "::" + e.Id + "]")
 		eg.Db.Put(eg.Prefix+"::"+e.Id, []byte(eg.EntityType.Id+"::"+e.Id))
 	}
 	logger.Log("hello 17")
@@ -468,6 +468,7 @@ func (eg *EntityGroup[T]) Load() {
 			logger.Log(string(b))
 		}
 	} else {
+		logger.Log("hello 16 [" + eg.Prefix + "]")
 		keys := eg.Db.GetByPrefix(eg.Prefix)
 		for _, keyB := range keys {
 			key := string(keyB)

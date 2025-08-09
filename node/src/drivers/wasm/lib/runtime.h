@@ -1614,11 +1614,10 @@ WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext
     vector<std::string> vals = rt->trx->getByPrefix(rt->machineId + "::" + prefix);
 
     json arrOfS;
-    std::string mainKey = rt->machineId + "::";
     for (int i = 0; i < vals.size(); i++)
     {
         std::string rk = vals[i];
-        arrOfS.push_back(rk.substr(mainKey.length(), rk.length() - mainKey.length()));
+        arrOfS.push_back(rk);
     }
     json j;
     j["data"] = arrOfS;
