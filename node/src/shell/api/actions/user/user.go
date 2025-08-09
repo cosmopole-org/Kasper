@@ -267,6 +267,14 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 		return nil, err
 	}
 	trx.PutIndex("User", "name", "id", user.Id+"->"+meta["name"].(string), []byte(user.Id))
+	point := models.Point{Id: a.App.Tools().Storage().GenId(trx, "global"), Tag: "home", IsPublic: false, PersHist: true, ParentId: ""}
+	point.Push(trx)
+	trx.PutLink("memberof::"+user.Id+"::"+point.Id, "true")
+	trx.PutLink("member::"+point.Id+"::"+user.Id, "true")
+	trx.PutLink("admin::"+point.Id+"::"+user.Id, "true")
+	trx.PutJson("PointMeta::"+point.Id, "metadata", map[string]any{"public": map[string]any{"profile": map[string]any{"title": "home", "avatar": "123"}}}, false)
+	trx.PutIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string), []byte(point.Id))
+	a.App.Tools().Signaler().JoinGroup(point.Id, user.Id)
 	return outputsusers.CreateOutput{User: user, Session: session}, nil
 }
 
