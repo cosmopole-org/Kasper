@@ -169,7 +169,7 @@ func (a *Actions) CreateMachine(state state.IState, input inputs_machiner.Create
 	}
 	user = model.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Balance: 1000, Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
 	session = model.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
-	vm := model.Vm{MachineId: user.Id, AppId: app.Id, Path: input.Path}
+	vm := model.Vm{MachineId: user.Id, AppId: app.Id, Path: input.Path, Runtime: input.Runtime, Comment: input.Comment}
 	app.MachinesCount++
 	app.Push(trx)
 	user.Push(trx)

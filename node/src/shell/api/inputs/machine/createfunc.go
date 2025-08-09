@@ -4,6 +4,8 @@ type CreateMachineInput struct {
 	Username  string `json:"username" validate:"required"`
 	AppId     string `json:"appId" validate:"required"`
 	Path      string `json:"path" validate:"required"`
+	Comment   string `json:"Comment" validate:"required"`
+	Runtime   string `json:"runtime" validate:"required"`
 	PublicKey string `json:"publicKey"`
 }
 
