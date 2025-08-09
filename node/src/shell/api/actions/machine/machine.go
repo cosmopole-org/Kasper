@@ -135,7 +135,7 @@ func (a *Actions) MyCreatedApps(state state.IState, input inputs_machiner.ListIn
 				"machinesCount": app.MachinesCount,
 				"title":         "untitled",
 				"avatar":        "",
-				"dec":           "",
+				"desc":           "",
 			})
 			continue
 		}
@@ -147,7 +147,7 @@ func (a *Actions) MyCreatedApps(state state.IState, input inputs_machiner.ListIn
 			"machinesCount": app.MachinesCount,
 			"title":         profile["title"],
 			"avatar":        profile["avatar"],
-			"dec":           profile["desc"],
+			"desc":           profile["desc"],
 		})
 	}
 	return map[string]any{"apps": result}, nil
@@ -308,7 +308,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 				"machinesCount": app.MachinesCount,
 				"title":         "untitled",
 				"avatar":        "",
-				"dec":           "",
+				"desc":           "",
 			})
 			continue
 		}
@@ -320,7 +320,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 			"machinesCount": app.MachinesCount,
 			"title":         profile["title"],
 			"avatar":        profile["avatar"],
-			"dec":           profile["desc"],
+			"desc":           profile["desc"],
 		})
 	}
 	return map[string]any{"apps": result}, nil
