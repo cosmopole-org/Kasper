@@ -8,10 +8,11 @@ import (
 )
 
 type App struct {
-	Id       string `json:"id"`
-	ChainId  int64  `json:"chainId"`
-	OwnerId  string `json:"ownerId"`
-	Username string `json:"username"`
+	Id            string `json:"id"`
+	ChainId       int64  `json:"chainId"`
+	OwnerId       string `json:"ownerId"`
+	Username      string `json:"username"`
+	MachinesCount int    `json:"machinesCount"`
 }
 
 func (m App) Type() string {
@@ -21,11 +22,14 @@ func (m App) Type() string {
 func (d App) Push(trx trx.ITrx) {
 	cidBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(cidBytes, uint64(d.ChainId))
+	mcBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(mcBytes, uint32(d.MachinesCount))
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
-		"id":       []byte(d.Id),
-		"ownerId":  []byte(d.OwnerId),
-		"username": []byte(d.Username),
-		"chainId":  cidBytes,
+		"id":            []byte(d.Id),
+		"ownerId":       []byte(d.OwnerId),
+		"username":      []byte(d.Username),
+		"chainId":       cidBytes,
+		"machinesCount": mcBytes,
 	})
 }
 
@@ -36,6 +40,7 @@ func (d App) Pull(trx trx.ITrx) App {
 		d.Username = string(m["username"])
 		d.OwnerId = string(m["ownerId"])
 		d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
+		d.MachinesCount = int(binary.LittleEndian.Uint32(m["machinesCount"]))
 	}
 	return d
 }
@@ -45,6 +50,7 @@ func (d App) Delete(trx trx.ITrx) {
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::id")
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::username")
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::chainId")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::machinesCount")
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::ownerId")
 	trx.DelJson("AppMeta::"+d.Id, "metadata")
 }
@@ -71,6 +77,7 @@ func (d App) List(trx trx.ITrx, prefix string) ([]App, error) {
 			d.OwnerId = string(m["ownerId"])
 			d.Username = string(m["username"])
 			d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
+			d.MachinesCount = int(binary.LittleEndian.Uint32(m["machinesCount"]))
 			entities = append(entities, d)
 		}
 	}
@@ -94,6 +101,7 @@ func (d App) All(trx trx.ITrx, offset int64, count int64) ([]App, error) {
 			d.OwnerId = string(m["ownerId"])
 			d.Username = string(m["username"])
 			d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
+			d.MachinesCount = int(binary.LittleEndian.Uint32(m["machinesCount"]))
 			entities = append(entities, d)
 		}
 	}

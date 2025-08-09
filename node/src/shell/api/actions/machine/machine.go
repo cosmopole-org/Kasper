@@ -43,7 +43,7 @@ func (a *Actions) CreateApp(state state.IState, input inputs_machiner.CreateAppI
 	if trx.HasIndex("App", "username", "id", input.Username) {
 		return nil, errors.New("app username already exists")
 	}
-	app := model.App{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Username: input.Username, OwnerId: state.Info().UserId(), ChainId: input.ChainId}
+	app := model.App{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), MachinesCount: 0, Username: input.Username, OwnerId: state.Info().UserId(), ChainId: input.ChainId}
 	app.Push(trx)
 	trx.PutJson("AppMeta::"+app.Id, "metadata", input.Metadata, false)
 	profile, err := trx.GetJson("AppMeta::"+app.Id, "metadata.public.profile")
@@ -122,22 +122,24 @@ func (a *Actions) MyCreatedApps(state state.IState, input inputs_machiner.ListIn
 		if err != nil {
 			log.Println(err)
 			result = append(result, map[string]any{
-				"id":       app.Id,
-				"chainId":  app.ChainId,
-				"username": app.Username,
-				"ownerId":  app.OwnerId,
-				"title":    "untitled",
-				"avatar":   "",
+				"id":            app.Id,
+				"chainId":       app.ChainId,
+				"username":      app.Username,
+				"ownerId":       app.OwnerId,
+				"machinesCount": app.MachinesCount,
+				"title":         "untitled",
+				"avatar":        "",
 			})
 			continue
 		}
 		result = append(result, map[string]any{
-			"id":       app.Id,
-			"chainId":  app.ChainId,
-			"username": app.Username,
-			"ownerId":  app.OwnerId,
-			"title":    profile["title"],
-			"avatar":   profile["avatar"],
+			"id":            app.Id,
+			"chainId":       app.ChainId,
+			"username":      app.Username,
+			"ownerId":       app.OwnerId,
+			"machinesCount": app.MachinesCount,
+			"title":         profile["title"],
+			"avatar":        profile["avatar"],
 		})
 	}
 	return map[string]any{"apps": result}, nil
@@ -160,9 +162,12 @@ func (a *Actions) CreateMachine(state state.IState, input inputs_machiner.Create
 	user = model.User{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), Balance: 1000, Typ: "machine", PublicKey: input.PublicKey, Username: input.Username + "@" + state.Source()}
 	session = model.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
 	vm := model.Vm{MachineId: user.Id, AppId: app.Id, Path: input.Path}
+	app.MachinesCount++
+	app.Push(trx)
 	user.Push(trx)
 	session.Push(trx)
 	vm.Push(trx)
+	trx.PutIndex("Machine", "id", "appId", user.Id, []byte(app.Id))
 	return outputs_machiner.CreateOutput{User: user}, nil
 }
 
@@ -173,6 +178,11 @@ func (a *Actions) DeleteMachine(state state.IState, input inputs_machiner.Delete
 		return nil, errors.New("machine does not exist")
 	}
 	model.User{Id: input.MachineId}.Delete(trx)
+	appId := trx.GetIndex("Machine", "id", "appId", input.MachineId)
+	app := model.App{Id: appId}.Pull(trx)
+	app.MachinesCount--
+	app.Push(trx)
+	trx.DelIndex("Machine", "id", "appId", input.MachineId)
 	return map[string]any{}, nil
 }
 
@@ -283,22 +293,24 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 		if err != nil {
 			log.Println(err)
 			result = append(result, map[string]any{
-				"id":       app.Id,
-				"chainId":  app.ChainId,
-				"username": app.Username,
-				"ownerId":  app.OwnerId,
-				"title":    "untitled",
-				"avatar":   "",
+				"id":            app.Id,
+				"chainId":       app.ChainId,
+				"username":      app.Username,
+				"ownerId":       app.OwnerId,
+				"machinesCount": app.MachinesCount,
+				"title":         "untitled",
+				"avatar":        "",
 			})
 			continue
 		}
 		result = append(result, map[string]any{
-			"id":       app.Id,
-			"chainId":  app.ChainId,
-			"username": app.Username,
-			"ownerId":  app.OwnerId,
-			"title":    profile["title"],
-			"avatar":   profile["avatar"],
+			"id":            app.Id,
+			"chainId":       app.ChainId,
+			"username":      app.Username,
+			"ownerId":       app.OwnerId,
+			"machinesCount": app.MachinesCount,
+			"title":         profile["title"],
+			"avatar":        profile["avatar"],
 		})
 	}
 	return map[string]any{"apps": result}, nil
