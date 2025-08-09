@@ -135,7 +135,7 @@ func (a *Actions) MyCreatedApps(state state.IState, input inputs_machiner.ListIn
 				"machinesCount": app.MachinesCount,
 				"title":         "untitled",
 				"avatar":        "",
-				"desc":           "",
+				"desc":          "",
 			})
 			continue
 		}
@@ -147,7 +147,7 @@ func (a *Actions) MyCreatedApps(state state.IState, input inputs_machiner.ListIn
 			"machinesCount": app.MachinesCount,
 			"title":         profile["title"],
 			"avatar":        profile["avatar"],
-			"desc":           profile["desc"],
+			"desc":          profile["desc"],
 		})
 	}
 	return map[string]any{"apps": result}, nil
@@ -176,6 +176,7 @@ func (a *Actions) CreateMachine(state state.IState, input inputs_machiner.Create
 	session.Push(trx)
 	vm.Push(trx)
 	trx.PutIndex("Machine", "id", "appId", user.Id, []byte(app.Id))
+	trx.PutLink("appMachines::"+app.Id+"::"+vm.MachineId, "true")
 	return outputs_machiner.CreateOutput{User: user}, nil
 }
 
@@ -191,6 +192,7 @@ func (a *Actions) DeleteMachine(state state.IState, input inputs_machiner.Delete
 	app.MachinesCount--
 	app.Push(trx)
 	trx.DelIndex("Machine", "id", "appId", input.MachineId)
+	trx.DelKey("link::appMachines::" + app.Id + "::" + input.MachineId)
 	return map[string]any{}, nil
 }
 
@@ -308,7 +310,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 				"machinesCount": app.MachinesCount,
 				"title":         "untitled",
 				"avatar":        "",
-				"desc":           "",
+				"desc":          "",
 			})
 			continue
 		}
@@ -320,7 +322,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 			"machinesCount": app.MachinesCount,
 			"title":         profile["title"],
 			"avatar":        profile["avatar"],
-			"desc":           profile["desc"],
+			"desc":          profile["desc"],
 		})
 	}
 	return map[string]any{"apps": result}, nil
@@ -330,6 +332,17 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 func (a *Actions) ListMachs(state state.IState, input inputs_machiner.ListInput) (any, error) {
 	trx := state.Trx()
 	machines, err := model.User{}.All(trx, input.Offset, input.Count, map[string]string{"type": "machine"})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"machines": machines}, nil
+}
+
+// ListAppMachs /machines/listAppMachines check [ true false false ] access [ true false false false GET ]
+func (a *Actions) ListAppMachs(state state.IState, input inputs_machiner.ListAppMachsInput) (any, error) {
+	trx := state.Trx()
+	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::")
 	if err != nil {
 		log.Println(err)
 		return nil, err

@@ -54,6 +54,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.ListMachs)
 		}
 		
+		func (c *Plugger) ListAppMachs() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ListAppMachs)
+		}
+		
 	func (c *Plugger) Install(a *actions.Actions) *Plugger {
 		err := actions.Install(a)
 		if err != nil {
