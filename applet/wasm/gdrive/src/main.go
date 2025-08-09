@@ -547,14 +547,16 @@ func (eg *EntityGroup[T]) Read(filterBy string, sortBy string, sortOrder string)
 	for _, v := range eg.Map {
 		list = append(list, v)
 	}
-	if sortOrder == "desc" {
-		sort.Slice(list, func(i, j int) bool {
-			return list[i].Props[sortBy].(int32) > list[j].Props[sortBy].(int32)
-		})
-	} else {
-		sort.Slice(list, func(i, j int) bool {
-			return list[i].Props[sortBy].(int32) < list[j].Props[sortBy].(int32)
-		})
+	if sortBy != "" {
+		if sortOrder == "desc" {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Props[sortBy].(int32) > list[j].Props[sortBy].(int32)
+			})
+		} else {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Props[sortBy].(int32) < list[j].Props[sortBy].(int32)
+			})
+		}
 	}
 	result := []T{}
 	for _, item := range list {
@@ -730,6 +732,7 @@ func SendSignal(typ string, pointId string, userId string, data string) {
 type MyDb struct {
 	BaseDB *Db
 	Users  *EntityGroup[User]
+	Points *EntityGroup[Point]
 	Docs   *EntityGroup[Doc]
 }
 
@@ -737,7 +740,11 @@ type User struct {
 	Id       string
 	Name     string
 	AuthCode string
-	Docs     *EntityGroup[Doc] `json:"-" entity:"Doc"`
+}
+
+type Point struct {
+	Id   string
+	Docs *EntityGroup[Doc] `json:"-"`
 }
 
 type Doc struct {
@@ -754,23 +761,25 @@ func NewMyDb() *MyDb {
 	}
 	docsColl := NewEntityType(db, Doc{})
 	db.EntityTypes[docsColl.Id] = docsColl
+	pointsColl := NewEntityType(db, Point{})
+	db.EntityTypes[pointsColl.Id] = pointsColl
 	usersColl := NewEntityType(db, User{})
 	db.EntityTypes[usersColl.Id] = usersColl
 	return &MyDb{
 		BaseDB: db,
 		Docs:   docsColl.Store,
 		Users:  usersColl.Store,
+		Points: pointsColl.Store,
 	}
 }
 
 func InstantiateEntityGroup(db *Db, id string, prefix string) any {
-	logger.Log("hello 9 " + id)
 	if (id == reflect.TypeOf(User{}).Name()) {
-		logger.Log("hello 10")
 		return NewEntityGroup(prefix, db.EntityTypes[id].(*EntityType[User]), db)
 	} else if (id == reflect.TypeOf(Doc{}).Name()) {
-		logger.Log("hello 11")
 		return NewEntityGroup(prefix, db.EntityTypes[id].(*EntityType[Doc]), db)
+	} else if (id == reflect.TypeOf(Point{}).Name()) {
+		return NewEntityGroup(prefix, db.EntityTypes[id].(*EntityType[Point]), db)
 	}
 	return nil
 }
@@ -839,7 +848,7 @@ func answer(pointId string, userId string, data any) {
 
 func broadcast(pointId string, data any) {
 	res, _ := json.Marshal(data)
-	SendSignal("broadcast", pointId, "", string(res))
+	SendSignal("broadcast", pointId, "-", string(res))
 }
 
 //export run
@@ -973,6 +982,10 @@ func run(a int64) int64 {
 		}
 	case "upload":
 		{
+			trx.Db.Points.CreateAndInsert(&Point{
+				Id: signal.Point.Id,
+			})
+			point := trx.Db.Points.FindById(signal.Point.Id)
 			logger.Log("test 1")
 			user := trx.Db.Users.FindById(signal.User.Id)
 			logger.Log("test 2")
@@ -1029,13 +1042,13 @@ func run(a int64) int64 {
 				PointId:   signal.Point.Id,
 				Title:     fileKey,
 			}
+			point.Docs.Load()
+			point.Docs.CreateAndInsert(doc)
 			logger.Log("end 0")
-			user.Docs.Load()
-			logger.Log("end 1")
-			user.Docs.CreateAndInsert(doc)
-			logger.Log("end 2")
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "docId": doc.Id})
-			// broadcast(signal.Point.Id, map[string]any{"type": "uploadNotif", "docId": doc.Id})
+			logger.Log("end 1")
+			broadcast(signal.Point.Id, map[string]any{"type": "uploadNotif", "docId": doc.Id})
+			logger.Log("end 2")
 			break
 		}
 	case "download":
@@ -1056,14 +1069,36 @@ func run(a int64) int64 {
 				return 0
 			}
 			doc := trx.Db.Docs.FindById(docId)
-			if doc.Id == "" {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 6})
+			if doc.PointId == signal.Point.Id {
+				if doc.Id == "" {
+					answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 6})
+					return 0
+				}
+				res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+doc.CreatorId+" --fileId="+doc.FileId)
+				resObj := map[string]any{}
+				json.Unmarshal([]byte(strings.Join(strings.Split(res, "{")[1:], "{")), &resObj)
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"response": resObj})
+			}
+			break
+		}
+	case "pointFiles":
+		{
+			user := trx.Db.Users.FindById(signal.User.Id)
+			if user.Id == "" {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
 				return 0
 			}
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+doc.CreatorId+" --fileId="+doc.FileId)
-			resObj := map[string]any{}
-			json.Unmarshal([]byte(strings.Join(strings.Split(res, "{")[1:], "{")), &resObj)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": resObj})
+			trx.Db.Points.CreateAndInsert(&Point{
+				Id: signal.Point.Id,
+			})
+			point := trx.Db.Points.FindById(signal.Point.Id)
+			if point.Id == "" {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
+				return 0
+			}
+			point.Docs.Load()
+			docs := point.Docs.Read("all", "", "")
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "pointFilesRes", "docs": docs})
 			break
 		}
 	}
