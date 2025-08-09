@@ -182,6 +182,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 				"id":       app.Id,
 				"chainId":  app.ChainId,
 				"username": app.Username,
+				"ownerId":  app.OwnerId,
 				"title":    "untitled",
 				"avatar":   "",
 			})
@@ -191,6 +192,7 @@ func (a *Actions) ListApps(state state.IState, input inputs_machiner.ListInput) 
 			"id":       app.Id,
 			"chainId":  app.ChainId,
 			"username": app.Username,
+			"ownerId":  app.OwnerId,
 			"title":    profile["title"],
 			"avatar":   profile["avatar"],
 		})
