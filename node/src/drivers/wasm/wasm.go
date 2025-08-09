@@ -572,5 +572,5 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 }
 
 func (wm *Wasm) CloseKVDB() {
-	C.Close()
+	C.close()
 }
