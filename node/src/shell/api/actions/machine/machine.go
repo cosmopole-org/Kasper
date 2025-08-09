@@ -347,5 +347,25 @@ func (a *Actions) ListAppMachs(state state.IState, input inputs_machiner.ListApp
 		log.Println(err)
 		return nil, err
 	}
-	return map[string]any{"machines": machines}, nil
+	vms, err := model.Vm{}.List(trx, "appMachines::"+input.AppId+"::")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	vmMap := map[string]model.Vm{}
+	for _, vm := range vms {
+		vmMap[vm.MachineId] = vm
+	}
+	result := []map[string]any{}
+	for _, macine := range machines {
+		result = append(result, map[string]any{
+			"id":       macine.Id,
+			"type":     macine.Typ,
+			"username": macine.Username,
+			"runtime":  vmMap[macine.Id].Runtime,
+			"path":     vmMap[macine.Id].Path,
+			"comment":  vmMap[macine.Id].Comment,
+		})
+	}
+	return map[string]any{"machines": result}, nil
 }

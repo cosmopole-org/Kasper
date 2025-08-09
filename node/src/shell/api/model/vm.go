@@ -116,6 +116,7 @@ type Vm struct {
 	AppId     string `json:"appId"`
 	Runtime   string `json:"runtime"`
 	Path      string `json:"path"`
+	Comment   string `json:"comment"`
 }
 
 func (m Vm) Type() string {
@@ -128,6 +129,7 @@ func (d Vm) Push(trx trx.ITrx) {
 		"appId":     []byte(d.AppId),
 		"runtime":   []byte(d.Runtime),
 		"path":      []byte(d.Path),
+		"comment":   []byte(d.Comment),
 	})
 }
 
@@ -138,6 +140,7 @@ func (d Vm) Pull(trx trx.ITrx) Vm {
 		d.AppId = string(m["appId"])
 		d.Runtime = string(m["runtime"])
 		d.Path = string(m["path"])
+		d.Comment = string(m["comment"])
 	}
 	return d
 }
@@ -178,6 +181,7 @@ func (d Vm) All(trx trx.ITrx, offset int64, count int64) ([]Vm, error) {
 				d.AppId = string(m["appId"])
 				d.Runtime = string(m["runtime"])
 				d.Path = string(m["path"])
+				d.Comment = string(m["comment"])
 				entities = append(entities, d)
 			}
 		}
@@ -186,4 +190,36 @@ func (d Vm) All(trx trx.ITrx, offset int64, count int64) ([]Vm, error) {
 		})
 		return entities, nil
 	}
+}
+
+func (d Vm) List(trx trx.ITrx, prefix string) ([]Vm, error) {
+	list, err := trx.GetLinksList(prefix, -1, -1)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	for i := 0; i < len(list); i++ {
+		list[i] = list[i][len(prefix):]
+	}
+	objs, err := trx.GetObjList("Vm", list, map[string]string{})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	entities := []Vm{}
+	for id, m := range objs {
+		if len(m) > 0 {
+			d := Vm{}
+			d.MachineId = id
+			d.AppId = string(m["appId"])
+			d.Runtime = string(m["runtime"])
+			d.Path = string(m["path"])
+			d.Comment = string(m["comment"])
+			entities = append(entities, d)
+		}
+	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].MachineId < entities[j].MachineId
+	})
+	return entities, nil
 }
