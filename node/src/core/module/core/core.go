@@ -833,6 +833,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 
 func (c *Core) Close() {
 	c.tools.Storage().KvDb().Close()
+	c.tools.Wasm().CloseKVDB()
 }
 
 func (c *Core) Load(gods []string, args map[string]interface{}) {
