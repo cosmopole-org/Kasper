@@ -32,6 +32,16 @@ func (d User) Push(trx trx.ITrx) {
 	trx.PutIndex("User", "username", "id", d.Username, []byte(d.Id))
 }
 
+func (d User) Delete(trx trx.ITrx) {
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::|")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::id")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::type")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::username")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::publicKey")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::balance")
+	trx.DelJson("UserMeta::"+d.Id, "metadata")
+}
+
 func (d User) Pull(trx trx.ITrx, flags ...bool) User {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {

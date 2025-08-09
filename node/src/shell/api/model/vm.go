@@ -40,6 +40,46 @@ func (d App) Pull(trx trx.ITrx) App {
 	return d
 }
 
+func (d App) Delete(trx trx.ITrx) {
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::|")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::id")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::username")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::chainId")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::ownerId")
+	trx.DelJson("AppMeta::"+d.Id, "metadata")
+}
+
+func (d App) List(trx trx.ITrx, prefix string) ([]App, error) {
+	list, err := trx.GetLinksList(prefix, -1, -1)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	for i := 0; i < len(list); i++ {
+		list[i] = list[i][len(prefix):]
+	}
+	objs, err := trx.GetObjList("App", list, map[string]string{})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	entities := []App{}
+	for id, m := range objs {
+		if len(m) > 0 {
+			d := App{}
+			d.Id = id
+			d.OwnerId = string(m["ownerId"])
+			d.Username = string(m["username"])
+			d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
+			entities = append(entities, d)
+		}
+	}
+	sort.Slice(entities, func(i, j int) bool {
+		return entities[i].Id < entities[j].Id
+	})
+	return entities, nil
+}
+
 func (d App) All(trx trx.ITrx, offset int64, count int64) ([]App, error) {
 	objs, err := trx.GetObjList("App", []string{"*"}, map[string]string{}, offset, count)
 	if err != nil {

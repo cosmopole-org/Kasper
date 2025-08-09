@@ -18,8 +18,28 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.CreateApp)
 		}
 		
+		func (c *Plugger) DeleteApp() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.DeleteApp)
+		}
+		
+		func (c *Plugger) UpdateApp() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateApp)
+		}
+		
+		func (c *Plugger) MyCreatedApps() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.MyCreatedApps)
+		}
+		
 		func (c *Plugger) CreateMachine() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.CreateMachine)
+		}
+		
+		func (c *Plugger) DeleteMachine() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.DeleteMachine)
+		}
+		
+		func (c *Plugger) UpdateMachine() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateMachine)
 		}
 		
 		func (c *Plugger) Deploy() iaction.IAction {

@@ -57,12 +57,94 @@ func (a *Actions) CreateApp(state state.IState, input inputs_machiner.CreateAppI
 	if profile["avatar"] == nil {
 		return nil, errors.New("avatar can not be empty")
 	}
+	trx.PutLink("createdApp::"+state.Info().UserId()+"::"+app.Id, "true")
+	trx.PutIndex("App", "title", "id", app.Id+"->"+profile["title"].(string), []byte(app.Id))
 	a.App.Tools().Network().Chain().NotifyNewMachineCreated(input.ChainId, app.Id)
 	return map[string]any{"app": app}, nil
 }
 
+// DeleteApp /apps/deleteApp check [ true false false ] access [ true false false false POST ]
+func (a *Actions) DeleteApp(state state.IState, input inputs_machiner.DeleteAppInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("App", input.AppId) {
+		return nil, errors.New("app does not exist")
+	}
+	profile, err := trx.GetJson("AppMeta::"+input.AppId, "metadata.public.profile")
+	if err == nil {
+		trx.DelIndex("App", "title", "id", input.AppId+"->"+profile["title"].(string))
+	} else {
+		log.Println(err)
+	}
+	model.App{Id: input.AppId}.Delete(trx)
+	trx.DelKey("link::createdApp::" + state.Info().UserId() + "::" + input.AppId)
+	return map[string]any{}, nil
+}
+
+// UpdateApp /apps/updateApp check [ true false false ] access [ true false false false POST ]
+func (a *Actions) UpdateApp(state state.IState, input inputs_machiner.UpdateAppInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("App", input.AppId) {
+		return nil, errors.New("machine does not exist")
+	}
+	profile, err := trx.GetJson("AppMeta::"+input.AppId, "metadata.public.profile")
+	if err == nil {
+		trx.DelIndex("App", "title", "id", input.AppId+"->"+profile["title"].(string))
+	} else {
+		log.Println(err)
+	}
+	trx.PutJson("AppMeta::"+input.AppId, "metadata", input.Metadata, true)
+	profile, err = trx.GetJson("AppMeta::"+input.AppId, "metadata.public.profile")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if profile["title"] == nil {
+		return nil, errors.New("title can not be empty")
+	}
+	if profile["avatar"] == nil {
+		return nil, errors.New("avatar can not be empty")
+	}
+	trx.PutIndex("App", "title", "id", input.AppId+"->"+profile["title"].(string), []byte(input.AppId))
+	return map[string]any{}, nil
+}
+
+// MyCreatedApps /apps/myCreatedApps check [ true false false ] access [ true false false false GET ]
+func (a *Actions) MyCreatedApps(state state.IState, input inputs_machiner.ListInput) (any, error) {
+	trx := state.Trx()
+	apps, err := model.App{}.List(trx, "createdApp::"+state.Info().UserId()+"::")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	result := []map[string]any{}
+	for _, app := range apps {
+		profile, err := trx.GetJson("AppMeta::"+app.Id, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			result = append(result, map[string]any{
+				"id":       app.Id,
+				"chainId":  app.ChainId,
+				"username": app.Username,
+				"ownerId":  app.OwnerId,
+				"title":    "untitled",
+				"avatar":   "",
+			})
+			continue
+		}
+		result = append(result, map[string]any{
+			"id":       app.Id,
+			"chainId":  app.ChainId,
+			"username": app.Username,
+			"ownerId":  app.OwnerId,
+			"title":    profile["title"],
+			"avatar":   profile["avatar"],
+		})
+	}
+	return map[string]any{"apps": result}, nil
+}
+
 // CreateMachine /machines/create check [ true false false ] access [ true false false false POST ]
-func (a *Actions) CreateMachine(state state.IState, input inputs_machiner.CreateFuncInput) (any, error) {
+func (a *Actions) CreateMachine(state state.IState, input inputs_machiner.CreateMachineInput) (any, error) {
 	var (
 		user    model.User
 		session model.Session
@@ -82,6 +164,28 @@ func (a *Actions) CreateMachine(state state.IState, input inputs_machiner.Create
 	session.Push(trx)
 	vm.Push(trx)
 	return outputs_machiner.CreateOutput{User: user}, nil
+}
+
+// DeleteMachine /apps/deleteMachine check [ true false false ] access [ true false false false POST ]
+func (a *Actions) DeleteMachine(state state.IState, input inputs_machiner.DeleteMachineInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("User", input.MachineId) {
+		return nil, errors.New("machine does not exist")
+	}
+	model.User{Id: input.MachineId}.Delete(trx)
+	return map[string]any{}, nil
+}
+
+// UpdateMachine /apps/updateMachine check [ true false false ] access [ true false false false POST ]
+func (a *Actions) UpdateMachine(state state.IState, input inputs_machiner.UpdateMachineInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("User", input.MachineId) {
+		return nil, errors.New("machine does not exist")
+	}
+	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
+	vm.Path = input.Path
+	vm.Push(trx)
+	return map[string]any{}, nil
 }
 
 // Deploy /machines/deploy check [ true false false ] access [ true false false false POST ]
