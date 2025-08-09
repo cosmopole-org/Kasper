@@ -20,7 +20,7 @@
 
 using namespace std;
 
-void init(char* kvDbPath)
+void init(char *kvDbPath)
 {
   wasmSend = wasmCallback;
   options.create_if_missing = true;
@@ -83,6 +83,6 @@ void wasmRunTrxs(
         item.value()["userId"].template get<std::string>(),
         item.value()["callbackId"].template get<std::string>()));
   }
-  ConcurrentRunner* cr = new ConcurrentRunner(astStorePath, trxs);
+  ConcurrentRunner *cr = new ConcurrentRunner(astStorePath, trxs);
   cr->run();
 }

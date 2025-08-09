@@ -604,6 +604,7 @@ vector<WasmDbOp> WasmMac::finalize()
     {
         this->trx->commitAsOffchain();
     }
+    WasmEdge_VMDelete(this->vm);
     return this->trx->ops;
 }
 
@@ -1492,8 +1493,6 @@ WasmEdge_Result trx_put(void *data, const WasmEdge_CallingFrameContext *, const 
     WasmEdge_MemoryInstanceGetData(mem, rawKey, keyOffset, keyL);
     for (int i = 0; i < keyL; i++)
     {
-        if (rawKey[i] == '\00')
-            break;
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
@@ -1530,8 +1529,6 @@ WasmEdge_Result trx_del(void *data, const WasmEdge_CallingFrameContext *, const 
     WasmEdge_MemoryInstanceGetData(mem, rawKey, keyOffset, keyL);
     for (int i = 0; i < keyL; i++)
     {
-        if (rawKey[i] == '\00')
-            break;
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
@@ -1560,8 +1557,6 @@ WasmEdge_Result trx_get(void *data, const WasmEdge_CallingFrameContext *, const 
     WasmEdge_MemoryInstanceGetData(mem, rawKey, keyOffset, keyL);
     for (int i = 0; i < keyL; i++)
     {
-        if (rawKey[i] == '\00')
-            break;
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
@@ -1709,6 +1704,7 @@ void ConcurrentRunner::run()
         std::string packet = j.dump();
 
         wasmSend(&packet[0]);
+        WasmEdge_VMDelete(rt->vm);
     }
     auto stopTime = std::chrono::high_resolution_clock::now();
     auto passedTime = std::chrono::duration_cast<std::chrono::microseconds>(stopTime - startTime).count();

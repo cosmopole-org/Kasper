@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"unsafe"
+
+	"github.com/google/uuid"
 )
 
 //go:module env
@@ -168,11 +171,12 @@ func NewEntityType[T any](db *Db, s T) *EntityType[T] {
 	for i := range t.NumField() {
 		name := t.Field(i).Name
 		typ := t.Field(i).Type.String()
+		logger.Log(typ)
 		dbTyp, ok := goToDbTypes[typ]
 		if ok {
 			typ = dbTyp
 		} else {
-			typ = "list::" + t.Field(i).Tag.Get("entity")
+			typ = "list::" + name[:len(name)-1]
 		}
 		propsMap[name] = Field{Type: typ, Value: defDbVals[typ]}
 	}
@@ -188,22 +192,30 @@ func NewEntityType[T any](db *Db, s T) *EntityType[T] {
 		Db:         db,
 		Map:        map[string]*Entity{},
 	}
+	logger.Log("id: " + id)
 	return et
 }
 func (et *EntityType[T]) NewEntity(s *T) *Entity {
 	t := reflect.TypeOf(*s)
 	r := reflect.ValueOf(s)
+	logger.Log("hello 2")
 	id := r.Elem().FieldByName("Id").String()
+	logger.Log("hello 3")
 	props := map[string]any{}
 	for i := range t.NumField() {
 		name := t.Field(i).Name
+		logger.Log("hello 4")
 		typ := et.Props[name].Type
 		f := r.Elem().FieldByName(name)
+		logger.Log("hello 5")
 		if strings.Split(typ, "::")[0] == "list" {
 			if f.IsValid() {
 				if f.CanSet() {
+					logger.Log("hello 6")
 					if strings.Split(typ, "::")[0] == "list" {
+						logger.Log("hello 7 " + typ)
 						val := InstantiateEntityGroup(et.Store.Db, strings.Split(typ, "::")[1], et.Id+"::"+id+"::"+name)
+						logger.Log("hello 8")
 						//props[name] = val
 						r.Elem().FieldByName(name).Set(reflect.ValueOf(val))
 					}
@@ -212,8 +224,11 @@ func (et *EntityType[T]) NewEntity(s *T) *Entity {
 		}
 		c, ok := converters[typ]
 		if ok {
+			logger.Log("found " + typ + " " + name)
 			value := c(f)
 			props[name] = value
+		} else {
+			logger.Log("not found " + typ + " " + name)
 		}
 	}
 	e := &Entity{Props: map[string]any{}}
@@ -252,6 +267,7 @@ type EntityGroup[T any] struct {
 }
 
 func NewEntityGroup[T any](prefix string, et *EntityType[T], db *Db) *EntityGroup[T] {
+	logger.Log("hello 12")
 	return &EntityGroup[T]{
 		Prefix:     prefix,
 		EntityType: et,
@@ -261,6 +277,7 @@ func NewEntityGroup[T any](prefix string, et *EntityType[T], db *Db) *EntityGrou
 }
 
 func mapToStruct[T any](db *Db, et *EntityType[T], src map[string]any) T {
+	logger.Log("ok 0")
 	destP := new(T)
 	ps := reflect.ValueOf(destP)
 	s := ps.Elem()
@@ -271,7 +288,9 @@ func mapToStruct[T any](db *Db, et *EntityType[T], src map[string]any) T {
 			if f.IsValid() {
 				if f.CanSet() {
 					if strings.Split(v.Type, "::")[0] == "list" {
+						logger.Log("ok 1 " + v.Type + " " + et.Id)
 						f.Set(reflect.ValueOf(InstantiateEntityGroup(db, strings.Split(v.Type, "::")[1], et.Id+"::"+id+"::"+k)))
+						logger.Log("ok 2")
 					} else if v.Type == "i16" {
 						var x int64 = 0
 						x1, ok1 := src[k].(int16)
@@ -340,15 +359,22 @@ func mapToStruct[T any](db *Db, et *EntityType[T], src map[string]any) T {
 }
 
 func (eg *EntityGroup[T]) InsertEntity(e *Entity) {
+	logger.Log("hello 13")
 	b, _ := json.Marshal(e.Props)
+	logger.Log("hello 14 " + string(b))
 	eg.Db.Put("table::"+eg.EntityType.Id+"::"+e.Id, b)
+	logger.Log("hello 15")
 	if eg.EntityType.Id != eg.Prefix {
+		logger.Log("hello 16")
 		eg.Db.Put(eg.Prefix+"::"+e.Id, []byte(eg.EntityType.Id+"::"+e.Id))
 	}
+	logger.Log("hello 17")
 	eg.Map[e.Id] = e
 }
 func (eg *EntityGroup[T]) CreateAndInsert(s *T) {
+	logger.Log("hello 1")
 	eg.InsertEntity(eg.EntityType.NewEntity(s))
+	logger.Log("hello 18")
 }
 func (eg *EntityGroup[T]) DeleteById(id string) {
 	if eg.Prefix == eg.EntityType.Id {
@@ -359,17 +385,25 @@ func (eg *EntityGroup[T]) DeleteById(id string) {
 }
 func (eg *EntityGroup[T]) FindById(id string) T {
 	var b []byte
+	logger.Log("ok 0.1")
 	if eg.Prefix == eg.EntityType.Id {
+		logger.Log("ok 0.2")
 		b = eg.Db.Get("table::" + eg.Prefix + "::" + id)
 	} else {
+		logger.Log("ok 0.3")
 		b = eg.Db.Get(eg.Prefix + "::" + id)
 	}
+	logger.Log("ok 0.4")
 	if len(b) == 0 {
+		logger.Log("ok 0.5")
 		return *new(T)
 	}
+	logger.Log("ok 0.6 " + string(b))
 	src := map[string]any{}
 	json.Unmarshal(b, &src)
+	logger.Log("ok 0.7")
 	for k, v := range eg.EntityType.Props {
+		logger.Log("ok 0.8 " + v.Type)
 		if v.Type == "i16" {
 			var x int16 = 0
 			x1, ok1 := src[k].(int16)
@@ -417,6 +451,7 @@ func (eg *EntityGroup[T]) FindById(id string) T {
 			x := src[k].(bool)
 			src[k] = x
 		} else if v.Type == "str" {
+			logger.Log(reflect.TypeOf(src[k]).Name())
 			x := src[k].(string)
 			src[k] = x
 		}
@@ -429,11 +464,21 @@ func (eg *EntityGroup[T]) Load() {
 	bs := [][]byte{}
 	if eg.Prefix == eg.EntityType.Id {
 		bs = eg.Db.GetByPrefix("table::" + eg.Prefix)
+		for _, b := range bs {
+			logger.Log(string(b))
+		}
 	} else {
 		keys := eg.Db.GetByPrefix(eg.Prefix)
 		for _, keyB := range keys {
 			key := string(keyB)
-			bs = append(bs, eg.Db.Get("table::"+key))
+			if eg.Db == nil {
+				logger.Log(key + " false")
+			} else {
+				logger.Log(key + " true")
+			}
+			b := eg.Db.Get("table::" + key)
+			logger.Log(string(b))
+			bs = append(bs, b)
 		}
 	}
 	for _, b := range bs {
@@ -533,7 +578,10 @@ func (*Db) Del(key string) {
 }
 func (*Db) Get(key string) []byte {
 	kP, kL := bytesToPointer([]byte(key))
+	logger.Log("step 100 " + key)
 	val := get(kP, kL)
+	s := strconv.FormatInt(val, 10)
+	logger.Log("step 101 " + s)
 	return pointerToBytes(val)
 }
 func (*Db) GetByPrefix(key string) [][]byte {
@@ -679,42 +727,47 @@ func SendSignal(typ string, pointId string, userId string, data string) {
 type MyDb struct {
 	BaseDB *Db
 	Users  *EntityGroup[User]
-	Jobs   *EntityGroup[Job]
+	Docs   *EntityGroup[Doc]
 }
 
 type User struct {
 	Id       string
 	Name     string
 	AuthCode string
+	Docs     *EntityGroup[Doc] `json:"-" entity:"Doc"`
 }
 
-type Job struct {
-	Id     string
-	Title  string
-	Income int
-	Users  *EntityGroup[User] `json:"-" entity:"User"`
+type Doc struct {
+	Id        string
+	Title     string
+	FileId    string
+	CreatorId string
+	PointId   string
 }
 
 func NewMyDb() *MyDb {
 	db := &Db{
 		EntityTypes: map[string]any{},
 	}
+	docsColl := NewEntityType(db, Doc{})
+	db.EntityTypes[docsColl.Id] = docsColl
 	usersColl := NewEntityType(db, User{})
 	db.EntityTypes[usersColl.Id] = usersColl
-	jobsColl := NewEntityType(db, Job{})
-	db.EntityTypes[jobsColl.Id] = jobsColl
 	return &MyDb{
 		BaseDB: db,
+		Docs:   docsColl.Store,
 		Users:  usersColl.Store,
-		Jobs:   jobsColl.Store,
 	}
 }
 
 func InstantiateEntityGroup(db *Db, id string, prefix string) any {
+	logger.Log("hello 9 " + id)
 	if (id == reflect.TypeOf(User{}).Name()) {
+		logger.Log("hello 10")
 		return NewEntityGroup(prefix, db.EntityTypes[id].(*EntityType[User]), db)
-	} else if (id == reflect.TypeOf(Job{}).Name()) {
-		return NewEntityGroup(prefix, db.EntityTypes[id].(*EntityType[Job]), db)
+	} else if (id == reflect.TypeOf(Doc{}).Name()) {
+		logger.Log("hello 11")
+		return NewEntityGroup(prefix, db.EntityTypes[id].(*EntityType[Doc]), db)
 	}
 	return nil
 }
@@ -781,8 +834,59 @@ func answer(pointId string, userId string, data any) {
 	SendSignal("single", pointId, userId, string(res))
 }
 
+func broadcast(pointId string, data any) {
+	res, _ := json.Marshal(data)
+	SendSignal("broadcast", pointId, "", string(res))
+}
+
 //export run
 func run(a int64) int64 {
+
+	goToDbTypes = map[string]string{
+		"int":     "i32",
+		"int16":   "i16",
+		"int32":   "i32",
+		"int64":   "i64",
+		"float32": "f32",
+		"float64": "f64",
+		"bool":    "bool",
+		"string":  "str",
+	}
+
+	defDbVals = map[string]any{
+		"i16":  0,
+		"i32":  0,
+		"i64":  0,
+		"f32":  0,
+		"f64":  0,
+		"bool": false,
+		"str":  "",
+		"list": nil,
+	}
+
+	converters = map[string]func(reflect.Value) any{
+		"i16": func(val reflect.Value) any {
+			return int16(val.Int())
+		},
+		"i32": func(val reflect.Value) any {
+			return int32(val.Int())
+		},
+		"i64": func(val reflect.Value) any {
+			return int64(val.Int())
+		},
+		"f32": func(val reflect.Value) any {
+			return float32(val.Float())
+		},
+		"f64": func(val reflect.Value) any {
+			return float64(val.Float())
+		},
+		"bool": func(val reflect.Value) any {
+			return val.Bool()
+		},
+		"str": func(val reflect.Value) any {
+			return val.String()
+		},
+	}
 
 	logger.Log("parsing input...")
 	input := map[string]any{}
@@ -791,7 +895,9 @@ func run(a int64) int64 {
 	if err != nil {
 		logger.Log(err.Error())
 	}
-	db := NewMyDb()
+	trx := &Trx[MyDb]{
+		Db: NewMyDb(),
+	}
 	actRaw, ok := input["act"]
 	if !ok {
 		answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 1})
@@ -806,92 +912,99 @@ func run(a int64) int64 {
 	case "adminInit":
 		{
 			vm.RunDocker("gdrive", "gdrive", map[string]string{})
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": "initialized successfully"})
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "adminInitRes", "response": "initialized successfully"})
 			break
 		}
 	case "createStorage":
 		{
-			db.Users.CreateAndInsert(&User{
+			logger.Log("step 1")
+			trx.Db.Users.CreateAndInsert(&User{
 				Id:       signal.User.Id,
 				Name:     signal.User.Username,
 				AuthCode: "",
 			})
+			logger.Log("step 2")
 			redirectUrlRaw, ok := input["redirectUrl"]
 			if !ok {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "initStorageRes", "success": false, "errCode": 3})
 				return 0
 			}
+			logger.Log("step 3")
 			redirectUrl, ok := redirectUrlRaw.(string)
 			if !ok {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "initStorageRes", "success": false, "errCode": 4})
 				return 0
 			}
+			logger.Log("step 4")
 			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=createStorage --redirectUrl="+redirectUrl+" --userId="+signal.User.Id)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
+			logger.Log("step 5")
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "initStorageRes", "response": res})
 			break
 		}
 	case "authorizeStorage":
 		{
 			authCodeRaw, ok := input["authCode"]
 			if !ok {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "authStorageRes", "success": false, "errCode": 3})
 				return 0
 			}
 			authCode, ok := authCodeRaw.(string)
 			if !ok {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "authStorageRes", "success": false, "errCode": 4})
 				return 0
 			}
-			db.Users.CreateAndInsert(&User{
+			trx.Db.Users.CreateAndInsert(&User{
 				Id:       signal.User.Id,
 				Name:     signal.User.Username,
 				AuthCode: authCode,
 			})
 			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=authorizeStorage --userId="+signal.User.Id+" --authCode="+authCode)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "authStorageRes", "response": res})
 			break
 		}
 	case "listFiles":
 		{
 			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=listFiles --userId="+signal.User.Id)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "listFilesRes", "response": res})
 			break
 		}
 	case "upload":
 		{
-			user := db.Users.FindById(signal.User.Id)
+			logger.Log("test 1")
+			user := trx.Db.Users.FindById(signal.User.Id)
+			logger.Log("test 2")
 			if user.Id == "" {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "success": false, "errCode": 3})
 				return 0
 			}
 			contentRaw := input["content"]
 			if contentRaw == nil {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "success": false, "errCode": 4})
 				return 0
 			}
 			content, ok := contentRaw.(string)
 			if !ok {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 5})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "success": false, "errCode": 5})
 				return 0
 			}
 			totalSizeRaw := input["totalSize"]
 			if totalSizeRaw == nil {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 6})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "success": false, "errCode": 6})
 				return 0
 			}
 			totalSize, ok := totalSizeRaw.(float64)
 			if !ok {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 7})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "success": false, "errCode": 7})
 				return 0
 			}
 			mimeTypeRaw := input["mimeType"]
 			if mimeTypeRaw == nil {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 8})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "success": false, "errCode": 8})
 				return 0
 			}
 			mimeType, ok := mimeTypeRaw.(string)
 			if !ok {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 9})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "success": false, "errCode": 9})
 				return 0
 			}
 			fileKey := ""
@@ -901,29 +1014,53 @@ func run(a int64) int64 {
 				}
 			}
 			vm.CopyToDocker("gdrive", "gdrive", fileKey, content)
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --fileContentType=" + mimeType + " --file="+fileKey+" --totalSize="+fmt.Sprintf("%d", int(totalSize)))
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --fileContentType="+mimeType+" --file="+fileKey+" --totalSize="+fmt.Sprintf("%d", int(totalSize)))
+			resObj := map[string]any{}
+			res = "{" + strings.Join(strings.Split(res, "{")[1:], "{")
+			resObj = map[string]any{}
+			json.Unmarshal([]byte(res), &resObj)
+			doc := &Doc{
+				Id:        strings.ReplaceAll(uuid.NewString(), "-", ""),
+				FileId:    resObj["fileId"].(string),
+				CreatorId: signal.User.Id,
+				PointId:   signal.Point.Id,
+				Title:     fileKey,
+			}
+			logger.Log("end 0")
+			user.Docs.Load()
+			logger.Log("end 1")
+			user.Docs.CreateAndInsert(doc)
+			logger.Log("end 2")
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "docId": doc.Id})
+			broadcast(signal.Point.Id, map[string]any{"type": "uploadNotif", "docId": doc.Id})
 			break
 		}
 	case "download":
 		{
-			user := db.Users.FindById(signal.User.Id)
+			user := trx.Db.Users.FindById(signal.User.Id)
 			if user.Id == "" {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
 				return 0
 			}
-			fileIdRaw := input["fileId"]
-			if fileIdRaw == nil {
+			docIdRaw := input["docId"]
+			if docIdRaw == nil {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
 				return 0
 			}
-			fileId, ok := fileIdRaw.(string)
+			docId, ok := docIdRaw.(string)
 			if !ok {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 5})
 				return 0
 			}
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+signal.User.Id+" --fileId="+fileId)
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": res})
+			doc := trx.Db.Docs.FindById(docId)
+			if doc.Id == "" {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 6})
+				return 0
+			}
+			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+doc.CreatorId+" --fileId="+doc.FileId)
+			resObj := map[string]any{}
+			json.Unmarshal([]byte(strings.Join(strings.Split(res, "{")[1:], "{")), &resObj)
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"response": resObj})
 			break
 		}
 	}

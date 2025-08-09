@@ -250,7 +250,6 @@ func runHttpServer() {
 		} else {
 			if id, ok := metadata["id"].(string); ok {
 				sess.FileID = id
-				fmt.Fprintf(w, "File uploaded successfully. File ID: %s\n", id)
 			} else {
 				http.Error(w, "File ID not found in response", http.StatusInternalServerError)
 				return
