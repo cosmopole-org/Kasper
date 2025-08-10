@@ -1044,11 +1044,8 @@ func run(a int64) int64 {
 			}
 			point.Docs.Load()
 			point.Docs.CreateAndInsert(doc)
-			logger.Log("end 0")
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "docId": doc.Id})
-			logger.Log("end 1")
 			broadcast(signal.Point.Id, map[string]any{"type": "uploadNotif", "docId": doc.Id})
-			logger.Log("end 2")
 			break
 		}
 	case "download":
@@ -1076,8 +1073,10 @@ func run(a int64) int64 {
 				}
 				res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+doc.CreatorId+" --fileId="+doc.FileId)
 				resObj := map[string]any{}
-				json.Unmarshal([]byte(strings.Join(strings.Split(res, "{")[1:], "{")), &resObj)
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"response": resObj})
+				res = "{" + strings.Join(strings.Split(res, "{")[1:], "{")
+				resObj = map[string]any{}
+				json.Unmarshal([]byte(res), &resObj)
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "downloadRes", "docPayload": resObj["data"], "doc": doc})
 			}
 			break
 		}

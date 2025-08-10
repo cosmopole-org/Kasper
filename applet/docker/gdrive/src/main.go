@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -22,9 +23,6 @@ import (
 	"google.golang.org/api/option"
 )
 
-var tokFile = "token.json"
-var token = ""
-
 func getClient(config *oauth2.Config) any {
 	return getTokenFromWeb(config)
 }
@@ -41,10 +39,9 @@ func authorizeAndGEtToken(userId string, authCode string) *http.Client {
 	config := configs[userId]
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
-		log.Fatalf("Unable to retrieve token from web %v", err)
+		log.Println("Unable to retrieve token from web " + err.Error())
 	}
-	token = tok.AccessToken
-	saveToken(tokFile, tok)
+	tokens[userId] = tok.AccessToken
 	return config.Client(context.Background(), tok)
 }
 
@@ -52,12 +49,13 @@ func saveToken(path string, token *oauth2.Token) {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		log.Fatalf("Unable to cache oauth token: %v", err)
+		log.Println("Unable to cache oauth token: " + err.Error())
 	}
 	defer f.Close()
 	json.NewEncoder(f).Encode(token)
 }
 
+var tokens = map[string]string{}
 var clients = map[string]*http.Client{}
 var configs = map[string]*oauth2.Config{}
 var services = map[string]*drive.Service{}
@@ -74,8 +72,30 @@ var (
 	sessionsMu sync.Mutex
 )
 
+func registerRoute(path string, handler func(w http.ResponseWriter, r *http.Request)) {
+	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			r := recover()
+			if r != nil {
+				var err error
+				switch t := r.(type) {
+				case string:
+					err = errors.New(t)
+				case error:
+					err = t
+				default:
+					err = errors.New("Unknown error")
+				}
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}()
+		handler(w, r)
+	})
+}
+
 func runHttpServer() {
-	http.HandleFunc("/api/createStorage", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/api/createStorage", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("userId")
 		b, err := os.ReadFile("credentials.json")
 		if err != nil {
@@ -105,7 +125,7 @@ func runHttpServer() {
 			w.Write(res)
 		}
 	})
-	http.HandleFunc("/api/authorizeStorage", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/api/authorizeStorage", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("userId")
 		authCode := r.Header.Get("authCode")
 		client := authorizeAndGEtToken(userId, authCode)
@@ -121,9 +141,14 @@ func runHttpServer() {
 		res, _ := json.Marshal(map[string]any{"success": true})
 		w.Write(res)
 	})
-	http.HandleFunc("/api/listFiles", func(w http.ResponseWriter, req *http.Request) {
+	registerRoute("/api/listFiles", func(w http.ResponseWriter, req *http.Request) {
 		userId := req.Header.Get("userId")
 		srv := services[userId]
+		if srv == nil {
+			res, _ := json.Marshal(map[string]any{"success": false})
+			w.Write(res)
+			return
+		}
 		r, err := srv.Files.List().PageSize(10).
 			Fields("nextPageToken, files(id, name)").Do()
 		if err != nil {
@@ -142,9 +167,18 @@ func runHttpServer() {
 		res, _ := json.Marshal(map[string]any{"success": true, "list": list})
 		w.Write(res)
 	})
-	http.HandleFunc("/api/upload", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/api/upload", func(w http.ResponseWriter, r *http.Request) {
 		file := r.Header.Get("file")
 		fileId := r.Header.Get("fileId")
+		userId := r.Header.Get("userId")
+
+		fileKey := userId + "_" + fileId
+
+		token, ok := tokens[userId]
+		if !ok {
+			http.Error(w, "Failed to find user token", http.StatusInternalServerError)
+			return
+		}
 
 		payloadB64, _ := os.ReadFile("/app/input/" + file)
 		payload, _ := base64.StdEncoding.DecodeString(string(payloadB64))
@@ -157,10 +191,9 @@ func runHttpServer() {
 		}
 
 		sessionsMu.Lock()
-		sess := sessions[file]
+		sess := sessions[fileKey]
 		sessionsMu.Unlock()
 
-		// Step 1: Initiate session if not done yet
 		if sess == nil {
 			endpoint := "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable"
 			method := "POST"
@@ -195,7 +228,7 @@ func runHttpServer() {
 
 			sess = &SessionInfo{SessionURI: sessionURI, Uploaded: 0, TotalSize: total, FileID: fileId}
 			sessionsMu.Lock()
-			sessions[file] = sess
+			sessions[fileKey] = sess
 			sessionsMu.Unlock()
 		}
 
@@ -255,6 +288,7 @@ func runHttpServer() {
 				return
 			}
 			if sess.FileID != "" {
+				delete(sessions, fileKey)
 				response, _ := json.Marshal(map[string]any{"success": true, "fileId": sess.FileID})
 				w.Write(response)
 			} else {
@@ -263,7 +297,7 @@ func runHttpServer() {
 			}
 		}
 	})
-	http.HandleFunc("/api/download", func(w http.ResponseWriter, req *http.Request) {
+	registerRoute("/api/download", func(w http.ResponseWriter, req *http.Request) {
 		userId := req.Header.Get("userId")
 		fileId := req.Header.Get("fileId")
 		srv := services[userId]
@@ -276,7 +310,7 @@ func runHttpServer() {
 		if err != nil {
 			log.Fatalf("Failed to read downloaded data: %v", err)
 		}
-		resp, _ := json.Marshal(map[string]any{"success": true, "data": string(data)})
+		resp, _ := json.Marshal(map[string]any{"success": true, "data": base64.StdEncoding.EncodeToString(data)})
 		w.Write(resp)
 	})
 	http.ListenAndServe(":3000", nil)
