@@ -5,7 +5,7 @@ import "kasper/src/shell/utils/origin"
 type AddMachineInput struct {
 	AppId       string      `json:"userId" validate:"required"`
 	PointId     string      `json:"pointId" validate:"required"`
-	MachineMeta MachineMeta `json:"machinesMeta" validate:"required"`
+	MachineMeta MachineMeta `json:"machineMeta" validate:"required"`
 }
 
 func (d AddMachineInput) GetData() any {

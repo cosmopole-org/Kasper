@@ -135,14 +135,14 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMa
 		return nil, errors.New("app not found")
 	}
 	app := model.App{Id: input.AppId}.Pull(trx)
-	_, err := trx.GetJson("MemberMeta::"+state.Info().PointId()+"::"+input.MachineId, "metadata")
+	_, err := trx.GetJson("MemberMeta::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "metadata")
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
-	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineId+"::"+input.Identifier, "metadata", input.Metadata, false)
-	machine := model.User{Id: input.MachineId}.Pull(trx)
-	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
+	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineMeta.MachineId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, false)
+	machine := model.User{Id: input.MachineMeta.MachineId}.Pull(trx)
+	vm := model.Vm{MachineId: input.MachineMeta.MachineId}.Pull(trx)
 	fn := updates_points.Fn{
 		UserId:     machine.Id,
 		Typ:        machine.Typ,
@@ -153,8 +153,8 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMa
 		Runtime:    vm.Runtime,
 		Path:       vm.Path,
 		Comment:    vm.Comment,
-		Metadata:   input.Metadata,
-		Identifier: input.Identifier,
+		Metadata:   input.MachineMeta.Metadata,
+		Identifier: input.MachineMeta.Identifier,
 	}
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/updateMachine", state.Info().PointId(), updates_points.UpdateApp{PointId: state.Info().PointId(), App: app, Machine: fn}, true, []string{state.Info().UserId()})
