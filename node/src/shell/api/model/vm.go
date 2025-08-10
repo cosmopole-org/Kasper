@@ -13,6 +13,9 @@ type App struct {
 	OwnerId       string `json:"ownerId"`
 	Username      string `json:"username"`
 	MachinesCount int    `json:"machinesCount"`
+	Title         string `json:"title"`
+	Avatar        string `json:"avatar"`
+	Desc          string `json:"desc"`
 }
 
 func (m App) Type() string {
@@ -33,7 +36,7 @@ func (d App) Push(trx trx.ITrx) {
 	})
 }
 
-func (d App) Pull(trx trx.ITrx) App {
+func (d App) Pull(trx trx.ITrx, flags ...bool) App {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {
 		d.Id = string(m["id"])
@@ -41,6 +44,15 @@ func (d App) Pull(trx trx.ITrx) App {
 		d.OwnerId = string(m["ownerId"])
 		d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
 		d.MachinesCount = int(binary.LittleEndian.Uint32(m["machinesCount"]))
+		if len(flags) > 0 {
+			if flags[0] {
+				if metadata, err := trx.GetJson("AppMeta::"+d.Id, "metadata.public.profile"); err == nil {
+					d.Title = metadata["title"].(string)
+					d.Avatar = metadata["avatar"].(string)
+					d.Desc = metadata["desc"].(string)
+				}
+			}
+		}
 	}
 	return d
 }

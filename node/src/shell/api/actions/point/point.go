@@ -121,7 +121,7 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 			Metadata:  metadata,
 		}
 		if _, ok := apps[fn.AppId]; !ok {
-			apps[fn.AppId] = model.App{Id: fn.AppId}.Pull(trx)
+			apps[fn.AppId] = model.App{Id: fn.AppId}.Pull(trx, true)
 		}
 		fns[fn.UserId+"::"+fn.Identifier] = fn
 	}
