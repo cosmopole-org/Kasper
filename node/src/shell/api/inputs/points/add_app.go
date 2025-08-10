@@ -3,9 +3,9 @@ package inputs_points
 import "kasper/src/shell/utils/origin"
 
 type MachineMeta struct {
-	MachineId    string         `json:"machineId" validate:"required"`
-	Identifier   string         `json:"identifier" validate:"required"`
-	MachinesMeta map[string]any `json:"metadata" validate:"required"`
+	MachineId  string         `json:"machineId" validate:"required"`
+	Identifier string         `json:"identifier" validate:"required"`
+	Metadata   map[string]any `json:"metadata" validate:"required"`
 }
 
 type AddAppInput struct {
