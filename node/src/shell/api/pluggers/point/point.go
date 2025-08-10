@@ -14,6 +14,14 @@
 		Core core.ICore
 	}
 	
+		func (c *Plugger) AddApp() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.AddApp)
+		}
+		
+		func (c *Plugger) RemoveApp() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.RemoveApp)
+		}
+		
 		func (c *Plugger) AddMember() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.AddMember)
 		}
