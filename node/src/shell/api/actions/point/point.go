@@ -23,6 +23,115 @@ func Install(a *Actions) error {
 	return nil
 }
 
+// AddApp /points/addApp check [ true true false ] access [ true false false false POST ]
+func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("App", input.AppId) {
+		return nil, errors.New("app not found")
+	}
+	app := model.App{Id: input.AppId}.Pull(trx)
+
+	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	vms, err := model.Vm{}.List(trx, "appMachines::"+input.AppId+"::")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	vmMap := map[string]model.Vm{}
+	for _, vm := range vms {
+		vmMap[vm.MachineId] = vm
+	}
+	m := map[string]updates_points.Fn{}
+	for _, machine := range machines {
+		vm := vmMap[machine.Id]
+		fn := updates_points.Fn{
+			UserId:    machine.Id,
+			Typ:       machine.Typ,
+			Username:  machine.Username,
+			PublicKey: machine.PublicKey,
+			Name:      machine.Name,
+			AppId:     vm.AppId,
+			Runtime:   vm.Runtime,
+			Path:      vm.Path,
+			Comment:   vm.Comment,
+		}
+		m[fn.UserId] = fn
+	}
+	uniqueMacs := map[string][]string{}
+	for _, machine := range input.MachinesMeta {
+		fn := m[machine.MachineId]
+		trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.UserId+"::"+machine.Identifier, "metadata", machine.MachinesMeta, true)
+		if _, ok := uniqueMacs[fn.UserId]; ok {
+			uniqueMacs[fn.UserId] = append(uniqueMacs[fn.UserId], machine.Identifier)
+		} else {
+			uniqueMacs[fn.UserId] = []string{machine.Identifier}
+		}
+	}
+	macArr := []string{}
+	for uniMacId, identifiers := range uniqueMacs {
+		macArr = append(macArr, uniMacId)
+		trx.PutLink("member::"+state.Info().PointId()+"::"+uniMacId, "true")
+		trx.PutLink("memberof::"+uniMacId+"::"+state.Info().PointId(), "true")
+		trx.PutJson("MemberMeta::"+state.Info().PointId()+"::"+uniMacId, "metadata", map[string]any{"identifiers": identifiers}, true)
+		a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), uniMacId)
+	}
+	trx.PutLink("pointAppMachines::"+state.Info().PointId()+"::"+app.Id, strings.Join(macArr, ","))
+	future.Async(func() {
+		a.App.Tools().Signaler().SignalGroup("points/addApp", state.Info().PointId(), updates_points.AddApp{PointId: state.Info().PointId(), App: app, Machines: m}, true, []string{})
+	}, false)
+	return outputs_points.AddMemberOutput{}, nil
+}
+
+// RemoveApp /points/removeApp check [ true true false ] access [ true false false false POST ]
+func (a *Actions) RemoveApp(state state.IState, input inputs_points.AddAppInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("App", input.AppId) {
+		return nil, errors.New("app not found")
+	}
+	app := model.App{Id: input.AppId}.Pull(trx)
+
+	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	vms, err := model.Vm{}.List(trx, "appMachines::"+input.AppId+"::")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	vmMap := map[string]model.Vm{}
+	for _, vm := range vms {
+		vmMap[vm.MachineId] = vm
+	}
+	macArr := strings.Split(trx.GetLink("pointAppMachines::"+state.Info().PointId()+"::"+app.Id), ",")
+	for _, machine := range machines {
+		if slices.Contains(macArr, machine.Id) {
+			trx.DelKey("link::member::" + state.Info().PointId() + "::" + machine.Id)
+			trx.DelKey("link::memberof::" + machine.Id + "::" + state.Info().PointId())
+			a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), machine.Id)
+			meta, err := trx.GetJson("MemberMeta::"+state.Info().PointId()+"::"+machine.Id, "metadata")
+			if err != nil {
+				log.Println(err)
+			} else {
+				for _, idRaw := range meta["identifiers"].([]any) {
+					id := idRaw.(string)
+					trx.DelJson("FnMeta::"+state.Info().PointId()+"::"+machine.Id+"::"+id, "metadata")
+				}
+			}
+		}
+	}
+	trx.DelKey("link::pointAppMachines::" + state.Info().PointId() + "::" + app.Id)
+	future.Async(func() {
+		a.App.Tools().Signaler().SignalGroup("points/removeApp", state.Info().PointId(), updates_points.AddApp{PointId: state.Info().PointId(), App: app}, true, []string{})
+	}, false)
+	return outputs_points.AddMemberOutput{}, nil
+}
+
 // AddMember /points/addMember check [ true true false ] access [ true false false false POST ]
 func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInput) (any, error) {
 	trx := state.Trx()
