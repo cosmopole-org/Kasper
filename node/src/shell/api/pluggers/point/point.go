@@ -18,6 +18,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.AddApp)
 		}
 		
+		func (c *Plugger) ListPointApps() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ListPointApps)
+		}
+		
 		func (c *Plugger) UpdateMachine() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateMachine)
 		}

@@ -59,21 +59,20 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 			Path:      vm.Path,
 			Comment:   vm.Comment,
 		}
-		m[fn.UserId] = fn
+		m[fn.UserId+"::"+fn.Identifier] = fn
 	}
 	uniqueMacs := map[string][]string{}
 	for _, machine := range input.MachinesMeta {
 		fn := m[machine.MachineId]
 		fn.Metadata = machine.Metadata
 		fn.Identifier = machine.Identifier
-		trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.UserId+"::"+machine.Identifier, "metadata", machine.Metadata, true)
+		trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+machine.Identifier, "metadata", machine.Metadata, true)
 		trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+app.Id+"::"+machine.MachineId+"::"+machine.Identifier, "true")
 		uniqueMacs[fn.UserId] = append(uniqueMacs[fn.UserId], machine.Identifier)
 	}
-	for uniMacId, identifiers := range uniqueMacs {
+	for uniMacId, _ := range uniqueMacs {
 		trx.PutLink("member::"+state.Info().PointId()+"::"+uniMacId, "true")
 		trx.PutLink("memberof::"+uniMacId+"::"+state.Info().PointId(), "true")
-		trx.PutJson("MemberMeta::"+state.Info().PointId()+"::"+uniMacId, "metadata", map[string]any{"identifiers": identifiers}, true)
 		a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), uniMacId)
 	}
 	trx.PutLink("pointApp::"+state.Info().PointId()+"::"+app.Id, "true")
@@ -81,6 +80,52 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 		a.App.Tools().Signaler().SignalGroup("points/addApp", state.Info().PointId(), updates_points.AddApp{PointId: state.Info().PointId(), App: app, Machines: m}, true, []string{})
 	}, false)
 	return outputs_points.AddMemberOutput{}, nil
+}
+
+// ListPointApps /points/listApps check [ true true false ] access [ true false false false POST ]
+func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPointAppsInput) (any, error) {
+	trx := state.Trx()
+	prefix := "pointAppMachine::" + state.Info().PointId() + "::"
+	machineLinks, err := trx.GetLinksList(prefix, 0, 1000)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	fns := map[string]*updates_points.Fn{}
+	apps := map[string]model.App{}
+	for _, mlink := range machineLinks {
+		parts := strings.Split(mlink[len(prefix):], "::")
+		appId := parts[0]
+		machineId := parts[1]
+		identifier := parts[2]
+		machine := model.User{Id: machineId}.Pull(trx)
+		metadata, err := trx.GetJson("FnMeta::"+state.Info().PointId()+"::"+appId+"::"+machineId+"::"+identifier, "metadata")
+		if err != nil {
+			log.Println(err)
+		}
+		vm := model.Vm{MachineId: machineId}.Pull(trx)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		fn := &updates_points.Fn{
+			UserId:    machine.Id,
+			Typ:       machine.Typ,
+			Username:  machine.Username,
+			PublicKey: machine.PublicKey,
+			Name:      machine.Name,
+			AppId:     vm.AppId,
+			Runtime:   vm.Runtime,
+			Path:      vm.Path,
+			Comment:   vm.Comment,
+			Metadata:  metadata,
+		}
+		if _, ok := apps[fn.AppId]; !ok {
+			apps[fn.AppId] = model.App{Id: fn.AppId}.Pull(trx)
+		}
+		fns[fn.UserId+"::"+fn.Identifier] = fn
+	}
+	return outputs_points.ListPointAppsOutput{Apps: apps, Machines: fns}, nil
 }
 
 // UpdateMachine /points/updateMachine check [ true true false ] access [ true false false false POST ]
@@ -95,7 +140,7 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMa
 		log.Println(err)
 		return nil, err
 	}
-	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+input.MachineId+"::"+input.Identifier, "metadata", input.Metadata, false)
+	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineId+"::"+input.Identifier, "metadata", input.Metadata, false)
 	machine := model.User{Id: input.MachineId}.Pull(trx)
 	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
 	fn := updates_points.Fn{
@@ -145,15 +190,6 @@ func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInp
 			trx.DelKey("link::member::" + state.Info().PointId() + "::" + machine.Id)
 			trx.DelKey("link::memberof::" + machine.Id + "::" + state.Info().PointId())
 			a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), machine.Id)
-			meta, err := trx.GetJson("MemberMeta::"+state.Info().PointId()+"::"+machine.Id, "metadata")
-			if err != nil {
-				log.Println(err)
-			} else {
-				for _, idRaw := range meta["identifiers"].([]any) {
-					id := idRaw.(string)
-					trx.DelJson("FnMeta::"+state.Info().PointId()+"::"+machine.Id+"::"+id, "metadata")
-				}
-			}
 		}
 	}
 	prefix := "pointAppMachine::" + state.Info().PointId() + "::" + app.Id + "::"
@@ -162,6 +198,8 @@ func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInp
 		log.Println(err)
 	} else {
 		for _, key := range arr {
+			parts := strings.Split(key[len(prefix):], "::")
+			trx.DelJson("FnMeta::"+state.Info().PointId()+"::"+input.AppId+"::"+parts[0]+"::"+parts[1], "metadata")
 			trx.DelKey(key)
 		}
 	}
@@ -194,7 +232,7 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		Identifier: input.MachineMeta.Identifier,
 		Metadata:   input.MachineMeta.Metadata,
 	}
-	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
+	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "true")
 	trx.PutLink("memberof::"+input.MachineMeta.MachineId+"::"+state.Info().PointId(), "true")
 	trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineMeta.MachineId+"::"+input.MachineMeta.Identifier, "true")
@@ -229,7 +267,7 @@ func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMa
 		Comment:    vm.Comment,
 		Identifier: input.Identifier,
 	}
-	trx.DelJson("FnMeta::"+state.Info().PointId()+"::"+fn.UserId+"::"+input.Identifier, "metadata")
+	trx.DelJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.Identifier, "metadata")
 	trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.MachineId)
 	trx.DelKey("link::memberof::" + input.MachineId + "::" + state.Info().PointId())
 	trx.DelKey("link::pointAppMachine::" + state.Info().PointId() + "::" + input.AppId + "::" + input.MachineId + "::" + input.Identifier)
