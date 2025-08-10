@@ -18,6 +18,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.AddApp)
 		}
 		
+		func (c *Plugger) UpdateApp() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateApp)
+		}
+		
 		func (c *Plugger) RemoveApp() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.RemoveApp)
 		}
