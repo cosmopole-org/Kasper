@@ -268,10 +268,10 @@ func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMa
 		Identifier: input.Identifier,
 	}
 	trx.DelJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.Identifier, "metadata")
-	trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.MachineId)
-	trx.DelKey("link::memberof::" + input.MachineId + "::" + state.Info().PointId())
 	trx.DelKey("link::pointAppMachine::" + state.Info().PointId() + "::" + input.AppId + "::" + input.MachineId + "::" + input.Identifier)
 	if arr, err := trx.GetLinksList("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineId+"::", 0, 100); err == nil && len(arr) == 0 {
+		trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.MachineId)
+		trx.DelKey("link::memberof::" + input.MachineId + "::" + state.Info().PointId())
 		a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), input.MachineId)
 	}
 	future.Async(func() {
