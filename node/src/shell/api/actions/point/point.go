@@ -45,10 +45,10 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 	for _, vm := range vms {
 		vmMap[vm.MachineId] = vm
 	}
-	m := map[string]updates_points.Fn{}
+	m := map[string]*updates_points.Fn{}
 	for _, machine := range machines {
 		vm := vmMap[machine.Id]
-		fn := updates_points.Fn{
+		fn := &updates_points.Fn{
 			UserId:    machine.Id,
 			Typ:       machine.Typ,
 			Username:  machine.Username,
@@ -65,22 +65,17 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 	for _, machine := range input.MachinesMeta {
 		fn := m[machine.MachineId]
 		fn.Metadata = machine.Metadata
+		fn.Identifier = machine.Identifier
 		trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.UserId+"::"+machine.Identifier, "metadata", machine.Metadata, true)
-		if _, ok := uniqueMacs[fn.UserId]; ok {
-			uniqueMacs[fn.UserId] = append(uniqueMacs[fn.UserId], machine.Identifier)
-		} else {
-			uniqueMacs[fn.UserId] = []string{machine.Identifier}
-		}
+		trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+app.Id+"::"+machine.MachineId+"::"+machine.Identifier, "true")
+		uniqueMacs[fn.UserId] = append(uniqueMacs[fn.UserId], machine.Identifier)
 	}
-	macArr := []string{}
 	for uniMacId, identifiers := range uniqueMacs {
-		macArr = append(macArr, uniMacId)
 		trx.PutLink("member::"+state.Info().PointId()+"::"+uniMacId, "true")
 		trx.PutLink("memberof::"+uniMacId+"::"+state.Info().PointId(), "true")
 		trx.PutJson("MemberMeta::"+state.Info().PointId()+"::"+uniMacId, "metadata", map[string]any{"identifiers": identifiers}, true)
 		a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), uniMacId)
 	}
-	trx.PutLink("pointAppMachines::"+state.Info().PointId()+"::"+app.Id, strings.Join(macArr, ","))
 	trx.PutLink("pointApp::"+state.Info().PointId()+"::"+app.Id, "true")
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/addApp", state.Info().PointId(), updates_points.AddApp{PointId: state.Info().PointId(), App: app, Machines: m}, true, []string{})
@@ -88,8 +83,8 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 	return outputs_points.AddMemberOutput{}, nil
 }
 
-// UpdateApp /points/updateApp check [ true true false ] access [ true false false false POST ]
-func (a *Actions) UpdateApp(state state.IState, input inputs_points.UpdateAppInput) (any, error) {
+// UpdateMachine /points/updateMachine check [ true true false ] access [ true false false false POST ]
+func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMachineInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("App", input.AppId) {
 		return nil, errors.New("app not found")
@@ -104,25 +99,26 @@ func (a *Actions) UpdateApp(state state.IState, input inputs_points.UpdateAppInp
 	machine := model.User{Id: input.MachineId}.Pull(trx)
 	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
 	fn := updates_points.Fn{
-		UserId:    machine.Id,
-		Typ:       machine.Typ,
-		Username:  machine.Username,
-		PublicKey: machine.PublicKey,
-		Name:      machine.Name,
-		AppId:     vm.AppId,
-		Runtime:   vm.Runtime,
-		Path:      vm.Path,
-		Comment:   vm.Comment,
-		Metadata:  input.Metadata,
+		UserId:     machine.Id,
+		Typ:        machine.Typ,
+		Username:   machine.Username,
+		PublicKey:  machine.PublicKey,
+		Name:       machine.Name,
+		AppId:      vm.AppId,
+		Runtime:    vm.Runtime,
+		Path:       vm.Path,
+		Comment:    vm.Comment,
+		Metadata:   input.Metadata,
+		Identifier: input.Identifier,
 	}
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalGroup("points/updateApp", state.Info().PointId(), updates_points.UpdateApp{PointId: state.Info().PointId(), App: app, Machine: fn}, true, []string{state.Info().UserId()})
+		a.App.Tools().Signaler().SignalGroup("points/updateMachine", state.Info().PointId(), updates_points.UpdateApp{PointId: state.Info().PointId(), App: app, Machine: fn}, true, []string{state.Info().UserId()})
 	}, false)
 	return outputs_points.AddMemberOutput{}, nil
 }
 
 // RemoveApp /points/removeApp check [ true true false ] access [ true false false false POST ]
-func (a *Actions) RemoveApp(state state.IState, input inputs_points.AddAppInput) (any, error) {
+func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInput) (any, error) {
 	trx := state.Trx()
 	if !trx.HasObj("App", input.AppId) {
 		return nil, errors.New("app not found")
@@ -160,10 +156,88 @@ func (a *Actions) RemoveApp(state state.IState, input inputs_points.AddAppInput)
 			}
 		}
 	}
-	trx.DelKey("link::pointAppMachines::" + state.Info().PointId() + "::" + app.Id)
+	prefix := "pointAppMachine::" + state.Info().PointId() + "::" + app.Id + "::"
+	arr, err := trx.GetLinksList(prefix, 0, 1000)
+	if err != nil {
+		log.Println(err)
+	} else {
+		for _, key := range arr {
+			trx.DelKey(key)
+		}
+	}
 	trx.DelKey("link::pointApp::" + state.Info().PointId() + "::" + app.Id)
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/removeApp", state.Info().PointId(), updates_points.AddApp{PointId: state.Info().PointId(), App: app}, true, []string{state.Info().UserId()})
+	}, false)
+	return outputs_points.AddMemberOutput{}, nil
+}
+
+// AddMachine /points/addMachine check [ true true false ] access [ true false false false POST ]
+func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("App", input.AppId) {
+		return nil, errors.New("app not found")
+	}
+	app := model.App{Id: input.AppId}.Pull(trx)
+	machine := model.User{Id: input.MachineMeta.MachineId}.Pull(trx)
+	vm := model.Vm{MachineId: input.MachineMeta.MachineId}.Pull(trx)
+	fn := updates_points.Fn{
+		UserId:     machine.Id,
+		Typ:        machine.Typ,
+		Username:   machine.Username,
+		PublicKey:  machine.PublicKey,
+		Name:       machine.Name,
+		AppId:      vm.AppId,
+		Runtime:    vm.Runtime,
+		Path:       vm.Path,
+		Comment:    vm.Comment,
+		Identifier: input.MachineMeta.Identifier,
+		Metadata:   input.MachineMeta.Metadata,
+	}
+	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
+	trx.PutLink("member::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "true")
+	trx.PutLink("memberof::"+input.MachineMeta.MachineId+"::"+state.Info().PointId(), "true")
+	trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineMeta.MachineId+"::"+input.MachineMeta.Identifier, "true")
+	a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), input.MachineMeta.MachineId)
+	future.Async(func() {
+		a.App.Tools().Signaler().SignalGroup("points/addMachine", state.Info().PointId(), updates_points.AddMachine{PointId: state.Info().PointId(), App: app, Machine: fn}, true, []string{})
+	}, false)
+	return outputs_points.AddMemberOutput{}, nil
+}
+
+// RemoveMachine /points/removeMachine check [ true true false ] access [ true false false false POST ]
+func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMachineInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("App", input.AppId) {
+		return nil, errors.New("app not found")
+	}
+	if trx.GetLink("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineId+"::"+input.Identifier) == "" {
+		return nil, errors.New("machine with this identifier does not exist in point")
+	}
+	app := model.App{Id: input.AppId}.Pull(trx)
+	machine := model.User{Id: input.MachineId}.Pull(trx)
+	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
+	fn := updates_points.Fn{
+		UserId:     machine.Id,
+		Typ:        machine.Typ,
+		Username:   machine.Username,
+		PublicKey:  machine.PublicKey,
+		Name:       machine.Name,
+		AppId:      vm.AppId,
+		Runtime:    vm.Runtime,
+		Path:       vm.Path,
+		Comment:    vm.Comment,
+		Identifier: input.Identifier,
+	}
+	trx.DelJson("FnMeta::"+state.Info().PointId()+"::"+fn.UserId+"::"+input.Identifier, "metadata")
+	trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.MachineId)
+	trx.DelKey("link::memberof::" + input.MachineId + "::" + state.Info().PointId())
+	trx.DelKey("link::pointAppMachine::" + state.Info().PointId() + "::" + input.AppId + "::" + input.MachineId + "::" + input.Identifier)
+	if arr, err := trx.GetLinksList("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineId+"::", 0, 100); err == nil && len(arr) == 0 {
+		a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), input.MachineId)
+	}
+	future.Async(func() {
+		a.App.Tools().Signaler().SignalGroup("points/removeMachine", state.Info().PointId(), updates_points.AddMachine{PointId: state.Info().PointId(), App: app, Machine: fn}, true, []string{})
 	}, false)
 	return outputs_points.AddMemberOutput{}, nil
 }

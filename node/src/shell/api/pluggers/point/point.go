@@ -18,12 +18,20 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.AddApp)
 		}
 		
-		func (c *Plugger) UpdateApp() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateApp)
+		func (c *Plugger) UpdateMachine() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateMachine)
 		}
 		
 		func (c *Plugger) RemoveApp() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.RemoveApp)
+		}
+		
+		func (c *Plugger) AddMachine() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.AddMachine)
+		}
+		
+		func (c *Plugger) RemoveMachine() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.RemoveMachine)
 		}
 		
 		func (c *Plugger) AddMember() iaction.IAction {
