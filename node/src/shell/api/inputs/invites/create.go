@@ -12,7 +12,7 @@ func (d CreateInput) GetData() any {
 }
 
 func (d CreateInput) GetPointId() string {
-	return ""
+	return d.PointId
 }
 
 func (d CreateInput) Origin() string {

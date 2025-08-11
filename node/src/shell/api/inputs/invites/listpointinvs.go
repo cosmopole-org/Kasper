@@ -11,7 +11,7 @@ func (d ListPointInvitesInput) GetData() any {
 }
 
 func (d ListPointInvitesInput) GetPointId() string {
-	return ""
+	return d.PointId
 }
 
 func (d ListPointInvitesInput) Origin() string {
