@@ -1,5 +1,7 @@
 package updates_invites
 
+import "kasper/src/shell/api/model"
+
 type Create struct {
-	PointId string `json:"pointId"`
+	Point model.Point `json:"point"`
 }

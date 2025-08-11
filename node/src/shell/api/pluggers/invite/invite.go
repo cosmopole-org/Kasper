@@ -18,6 +18,14 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Create)
 		}
 		
+		func (c *Plugger) ListPointInvites() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ListPointInvites)
+		}
+		
+		func (c *Plugger) ListUserInvites() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ListUserInvites)
+		}
+		
 		func (c *Plugger) Cancel() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Cancel)
 		}

@@ -32,10 +32,45 @@ func (a *Actions) Create(state state.IState, input inputsinvites.CreateInput) (a
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
 	trx.PutLink("invite::"+point.Id+"::"+input.UserId, "true")
+	trx.PutLink("inviteto::"+input.UserId+"::"+point.Id, "true")
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalUser("invites/create", input.UserId, updatesinvites.Create{PointId: point.Id}, true)
+		a.App.Tools().Signaler().SignalUser("invites/create", input.UserId, updatesinvites.Create{Point: point}, true)
 	}, false)
 	return outputsinvites.CreateOutput{}, nil
+}
+
+// ListPointInvites /invites/listPointInvites check [ true true false ] access [ true false false false POST ]
+func (a *Actions) ListPointInvites(state state.IState, input inputsinvites.ListPointInvitesInput) (any, error) {
+	trx := state.Trx()
+	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("you are not admin")
+	}
+	if !trx.HasObj("Point", state.Info().PointId()) {
+		return nil, errors.New("point not found")
+	}
+	users, err := model.User{}.List(trx, "invite::"+state.Info().PointId()+"::")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"users": users}, nil
+}
+
+// ListUserInvites /invites/listUserInvites check [ true true false ] access [ true false false false POST ]
+func (a *Actions) ListUserInvites(state state.IState, input inputsinvites.ListUserInvitesInput) (any, error) {
+	trx := state.Trx()
+	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("you are not admin")
+	}
+	if !trx.HasObj("Point", state.Info().PointId()) {
+		return nil, errors.New("point not found")
+	}
+	points, err := model.Point{}.List(trx, "invite::"+state.Info().UserId()+"::")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"points": points}, nil
 }
 
 // Cancel /invites/cancel check [ true true false ] access [ true false false false POST ]
@@ -48,8 +83,10 @@ func (a *Actions) Cancel(state state.IState, input inputsinvites.CancelInput) (a
 		return nil, errors.New("invitation does not exist")
 	}
 	trx.DelKey("link::invite::" + state.Info().PointId() + "::" + input.UserId)
+	trx.DelKey("link::inviteto::" + input.UserId + "::" + state.Info().PointId())
+	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalUser("invites/cancel", input.UserId, updatesinvites.Cancel{PointId: state.Info().PointId()}, true)
+		a.App.Tools().Signaler().SignalUser("invites/cancel", input.UserId, updatesinvites.Cancel{Point: point}, true)
 	}, false)
 	return outputsinvites.CancelOutput{}, nil
 }
@@ -61,6 +98,7 @@ func (a *Actions) Accept(state state.IState, input inputsinvites.AcceptInput) (a
 		return nil, errors.New("invitation does not exist")
 	}
 	trx.DelKey("link::invite::" + input.PointId + "::" + state.Info().UserId())
+	trx.DelKey("link::inviteto::" + state.Info().UserId() + "::" + input.PointId)
 	trx.PutLink("member::"+input.PointId+"::"+state.Info().UserId(), "true")
 	a.App.Tools().Signaler().JoinGroup(input.PointId, state.Info().UserId())
 	admins, err := trx.GetLinksList("admin::"+input.PointId+"::", -1, -1)
@@ -68,12 +106,12 @@ func (a *Actions) Accept(state state.IState, input inputsinvites.AcceptInput) (a
 		log.Println(err)
 		return nil, err
 	}
+	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	for _, admin := range admins {
 		future.Async(func() {
-			a.App.Tools().Signaler().SignalUser("invites/accept", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
+			a.App.Tools().Signaler().SignalUser("invites/accept", admin, updatesinvites.Accept{User: user, PointId: input.PointId}, true)
 		}, false)
 	}
-	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("spaces/userJoined", input.PointId, updates_points.Join{PointId: input.PointId, User: user}, true, []string{})
 	}, false)
@@ -87,14 +125,16 @@ func (a *Actions) Decline(state state.IState, input inputsinvites.DeclineInput) 
 		return nil, errors.New("invitation does not exist")
 	}
 	trx.DelKey("link::invite::" + input.PointId + "::" + state.Info().UserId())
+	trx.DelKey("link::inviteto::" + state.Info().UserId() + "::" + input.PointId)
 	admins, err := trx.GetLinksList("admin::"+input.PointId+"::", -1, -1)
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
+	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	for _, admin := range admins {
 		future.Async(func() {
-			a.App.Tools().Signaler().SignalUser("invites/decline", admin, updatesinvites.Accept{UserId: state.Info().UserId(), PointId: input.PointId}, true)
+			a.App.Tools().Signaler().SignalUser("invites/decline", admin, updatesinvites.Accept{User: user, PointId: input.PointId}, true)
 		}, false)
 	}
 	return outputsinvites.DeclineOutput{}, nil

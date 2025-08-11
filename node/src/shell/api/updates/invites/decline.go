@@ -1,6 +1,8 @@
 package updates_invites
 
+import "kasper/src/shell/api/model"
+
 type Decline struct {
-	UserId  string `json:"userId"`
-	PointId string `json:"pointId"`
+	User    model.User `json:"user"`
+	PointId string     `json:"pointId"`
 }

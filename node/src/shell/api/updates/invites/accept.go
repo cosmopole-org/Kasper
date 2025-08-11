@@ -1,6 +1,8 @@
 package updates_invites
 
+import "kasper/src/shell/api/model"
+
 type Accept struct {
-	UserId  string `json:"userId"`
+	User  model.User `json:"user"`
 	PointId string `json:"pointId"`
 }
