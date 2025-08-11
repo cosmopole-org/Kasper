@@ -79,12 +79,6 @@ func (a *Actions) ListPointInvites(state state.IState, input inputsinvites.ListP
 // ListUserInvites /invites/listUserInvites check [ true false false ] access [ true false false false POST ]
 func (a *Actions) ListUserInvites(state state.IState, input inputsinvites.ListUserInvitesInput) (any, error) {
 	trx := state.Trx()
-	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
-		return nil, errors.New("you are not admin")
-	}
-	if !trx.HasObj("Point", state.Info().PointId()) {
-		return nil, errors.New("point not found")
-	}
 	prefix := "inviteto::" + state.Info().UserId() + "::"
 	links, err := trx.GetLinksList(prefix, 0, 1000)
 	if err != nil {
