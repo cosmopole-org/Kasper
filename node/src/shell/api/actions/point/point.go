@@ -98,7 +98,7 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 		appId := parts[0]
 		machineId := parts[1]
 		identifier := parts[2]
-		machine := model.User{Id: machineId}.Pull(trx)
+		machine := model.User{Id: machineId}.Pull(trx, true)
 		metadata, err := trx.GetJson("FnMeta::"+state.Info().PointId()+"::"+appId+"::"+machineId+"::"+identifier, "metadata")
 		if err != nil {
 			log.Println(err)
@@ -109,16 +109,17 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 			return nil, err
 		}
 		fn := &updates_points.Fn{
-			UserId:    machine.Id,
-			Typ:       machine.Typ,
-			Username:  machine.Username,
-			PublicKey: machine.PublicKey,
-			Name:      machine.Name,
-			AppId:     vm.AppId,
-			Runtime:   vm.Runtime,
-			Path:      vm.Path,
-			Comment:   vm.Comment,
-			Metadata:  metadata,
+			UserId:     machine.Id,
+			Typ:        machine.Typ,
+			Username:   machine.Username,
+			PublicKey:  machine.PublicKey,
+			Name:       machine.Name,
+			AppId:      vm.AppId,
+			Runtime:    vm.Runtime,
+			Path:       vm.Path,
+			Comment:    vm.Comment,
+			Metadata:   metadata,
+			Identifier: identifier,
 		}
 		if _, ok := apps[fn.AppId]; !ok {
 			apps[fn.AppId] = model.App{Id: fn.AppId}.Pull(trx, true)
