@@ -334,18 +334,20 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 	}
 	membersArr := []map[string]any{}
 	for _, member := range members {
-		metadata, err := trx.GetJson("UserMeta::"+member.Id, "metadata.public.profile")
-		if err != nil {
-			log.Println(err)
-			return nil, err
+		if member.Typ == "human" {
+			metadata, err := trx.GetJson("UserMeta::"+member.Id, "metadata.public.profile")
+			if err != nil {
+				log.Println(err)
+				return nil, err
+			}
+			membersArr = append(membersArr, map[string]any{
+				"id":        member.Id,
+				"publicKey": member.PublicKey,
+				"type":      member.Typ,
+				"username":  member.Username,
+				"name":      metadata["name"],
+			})
 		}
-		membersArr = append(membersArr, map[string]any{
-			"id":        member.Id,
-			"publicKey": member.PublicKey,
-			"type":      member.Typ,
-			"username":  member.Username,
-			"name":      metadata["name"],
-		})
 	}
 	return outputs_points.ReadMemberOutput{Members: membersArr}, nil
 }
