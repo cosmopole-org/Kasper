@@ -405,12 +405,14 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
 	trx.PutLink("admin::"+point.Id+"::"+state.Info().UserId(), "true")
+	trx.PutLink("adminof::"+state.Info().UserId()+"::"+point.Id, "true")
 	if input.Members != nil {
 		for userId, isAdmin := range input.Members {
 			trx.PutLink("memberof::"+userId+"::"+point.Id, "true")
 			trx.PutLink("member::"+point.Id+"::"+userId, "true")
 			if isAdmin {
 				trx.PutLink("admin::"+point.Id+"::"+userId, "true")
+				trx.PutLink("adminof::"+userId+"::"+point.Id, "true")
 			}
 		}
 	}
@@ -526,9 +528,11 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 		trx.DelKey("link::" + member)
 		usersList = append(usersList, parts[1])
 	}
-	admins, _ := trx.GetLinksList("admin::"+point.Id+"::", 0, 0)
+	prefix := "admin::" + point.Id + "::"
+	admins, _ := trx.GetLinksList(prefix, 0, 0)
 	for _, admin := range admins {
 		trx.DelKey("link::" + admin)
+		trx.DelKey("link::adminof::" + admin[len(prefix):] + "::" + point.Id)
 	}
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/delete", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
@@ -640,6 +644,9 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 		}
 		result["title"] = meta["title"]
 		result["avatar"] = meta["avatar"]
+		if trx.GetLink("adminof::"+state.Info().UserId()+"::"+point.Id) == "true" {
+			result["admin"] = true
+		}
 		results = append(results, result)
 	}
 	return outputs_points.ReadOutput{Points: results}, nil
@@ -730,6 +737,9 @@ func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, 
 		}
 		result["title"] = meta["title"]
 		result["avatar"] = meta["avatar"]
+		if trx.GetLink("adminof::"+state.Info().UserId()+"::"+point.Id) == "true" {
+			result["admin"] = true
+		}
 		results = append(results, result)
 	}
 	return map[string]any{"points": results}, nil
