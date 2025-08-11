@@ -1,7 +1,6 @@
 package actions_invite
 
 import (
-	"encoding/binary"
 	"errors"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
