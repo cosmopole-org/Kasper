@@ -513,10 +513,20 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		typ, err := checkField(input, "type", "")
+		typAndTemp, err := checkField(input, "type", "")
 		if err != nil {
 			log.Println(err)
 			return err.Error()
+		}
+		parts := strings.Split(typAndTemp, "|")
+		typ := parts[0]
+		temp := false
+		if len(parts) > 1 {
+			if parts[1] == "true" {
+				temp = true
+			} else if parts[1] == "false" {
+				temp = false
+			}
 		}
 		pointId, err := checkField(input, "pointId", "")
 		if err != nil {
@@ -539,6 +549,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 				Data:    data,
 				PointId: pointId,
 				UserId:  userId,
+				Temp:    temp,
 			})
 			return err
 		})

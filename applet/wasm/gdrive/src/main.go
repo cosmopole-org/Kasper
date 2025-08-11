@@ -719,8 +719,12 @@ func (vm *Vm) CopyToDocker(imageName string, containerName string, fileName stri
 	copyToDocker(kp, kl, cp, cl, cop, col, conp, conl)
 }
 
-func SendSignal(typ string, pointId string, userId string, data string) {
-	kp, kl := bytesToPointer([]byte(typ))
+func SendSignal(typ string, pointId string, userId string, data string, isTemp bool) {
+	temp := "false"
+	if isTemp {
+		temp = "true"
+	}
+	kp, kl := bytesToPointer([]byte(typ + "|" + temp))
 	cp, cl := bytesToPointer([]byte(pointId))
 	cop, col := bytesToPointer([]byte(userId))
 	cop2, col2 := bytesToPointer([]byte(data))
@@ -843,12 +847,12 @@ type FileResponse struct {
 
 func answer(pointId string, userId string, data any) {
 	res, _ := json.Marshal(data)
-	SendSignal("single", pointId, userId, string(res))
+	SendSignal("single", pointId, userId, string(res), true)
 }
 
 func broadcast(pointId string, data any) {
 	res, _ := json.Marshal(data)
-	SendSignal("broadcast", pointId, "-", string(res))
+	SendSignal("broadcast", pointId, "-", string(res), true)
 }
 
 //export run
