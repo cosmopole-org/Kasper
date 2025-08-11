@@ -385,7 +385,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		slices.Sort(ids)
 		if pointId := trx.GetLink("1-to-1-map::" + ids[0] + "<->" + ids[1]); pointId != "" {
 			point := model.Point{Id: pointId}.Pull(trx, true)
-			return outputs_points.CreateOutput{Point: point}, nil
+			return outputs_points.CreateOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
 		}
 	}
 	if input.ParentId != "" {
@@ -447,7 +447,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		a.App.Tools().Signaler().JoinGroup(point.Id, memberId)
 	}
 	a.App.Tools().Signaler().SignalGroup("points/create", point.Id, updates_points.Delete{Point: point}, true, []string{})
-	return outputs_points.CreateOutput{Point: point}, nil
+	return outputs_points.CreateOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
 }
 
 // Update /points/update check [ true true false ] access [ true false false false PUT ]
@@ -497,7 +497,7 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/update", point.Id, updates_points.Update{Point: point}, true, []string{state.Info().UserId()})
 	}, false)
-	return outputs_points.UpdateOutput{Point: point}, nil
+	return outputs_points.UpdateOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
 }
 
 // Delete /points/delete check [ true true false ] access [ true false false false DELETE ]
@@ -540,7 +540,7 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 			a.App.Tools().Signaler().LeaveGroup(point.Id, user)
 		}
 	}, false)
-	return outputs_points.DeleteOutput{Point: point}, nil
+	return outputs_points.DeleteOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
 }
 
 // Meta /points/meta check [ true false false ] access [ true false false false GET ]
@@ -584,6 +584,9 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 			}
 			result["metadata"] = metadata
 		}
+		if trx.GetLink("adminof::"+state.Info().UserId()+"::"+point.Id) == "true" {
+			result["admin"] = true
+		}
 		return outputs_points.GetOutput{Point: result}, nil
 	}
 	if trx.GetLink("member::"+input.PointId+"::"+state.Info().UserId()) != "true" {
@@ -610,7 +613,9 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 		}
 		result["metadata"] = metadata
 	}
-
+	if trx.GetLink("adminof::"+state.Info().UserId()+"::"+point.Id) == "true" {
+		result["admin"] = true
+	}
 	return outputs_points.GetOutput{Point: result}, nil
 }
 

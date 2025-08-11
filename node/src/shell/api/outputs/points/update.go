@@ -1,9 +1,5 @@
 package outputs_points
 
-import (
-	models "kasper/src/shell/api/model"
-)
-
 type UpdateOutput struct {
-	Point models.Point `json:"point"`
+	Point AdminPoiint `json:"point"`
 }

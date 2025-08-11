@@ -4,6 +4,11 @@ import (
 	"kasper/src/shell/api/model"
 )
 
+type AdminPoiint struct {
+	model.Point
+	Admin bool `json:"admin"`
+}
+
 type CreateOutput struct {
-	Point model.Point `json:"point"`
+	Point AdminPoiint `json:"point"`
 }
