@@ -76,7 +76,7 @@ func (a *Actions) ListPointInvites(state state.IState, input inputsinvites.ListP
 	return map[string]any{"users": users}, nil
 }
 
-// ListUserInvites /invites/listUserInvites check [ true true false ] access [ true false false false POST ]
+// ListUserInvites /invites/listUserInvites check [ true false false ] access [ true false false false POST ]
 func (a *Actions) ListUserInvites(state state.IState, input inputsinvites.ListUserInvitesInput) (any, error) {
 	trx := state.Trx()
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
