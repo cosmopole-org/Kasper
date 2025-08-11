@@ -45,27 +45,29 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 	for _, vm := range vms {
 		vmMap[vm.MachineId] = vm
 	}
-	m := map[string]*updates_points.Fn{}
-	for _, machine := range machines {
-		vm := vmMap[machine.Id]
-		fn := &updates_points.Fn{
-			UserId:    machine.Id,
-			Typ:       machine.Typ,
-			Username:  machine.Username,
-			PublicKey: machine.PublicKey,
-			Name:      machine.Name,
-			AppId:     vm.AppId,
-			Runtime:   vm.Runtime,
-			Path:      vm.Path,
-			Comment:   vm.Comment,
-		}
-		m[fn.UserId+"::"+fn.Identifier] = fn
+	macMap := map[string]model.User{}
+	for _, mac := range machines {
+		macMap[mac.Id] = mac
 	}
+	m := map[string]*updates_points.Fn{}
 	uniqueMacs := map[string][]string{}
 	for _, machine := range input.MachinesMeta {
-		fn := m[machine.MachineId+"::"+machine.Identifier]
-		fn.Metadata = machine.Metadata
-		fn.Identifier = machine.Identifier
+		mac := macMap[machine.MachineId]
+		vm := vmMap[machine.MachineId]
+		fn := &updates_points.Fn{
+			UserId:     mac.Id,
+			Typ:        mac.Typ,
+			Username:   mac.Username,
+			PublicKey:  mac.PublicKey,
+			Name:       mac.Name,
+			AppId:      vm.AppId,
+			Runtime:    vm.Runtime,
+			Path:       vm.Path,
+			Comment:    vm.Comment,
+			Metadata:   machine.Metadata,
+			Identifier: machine.Identifier,
+		}
+		m[fn.UserId+"::"+fn.Identifier] = fn
 		trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+machine.Identifier, "metadata", machine.Metadata, true)
 		trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+app.Id+"::"+machine.MachineId+"::"+machine.Identifier, "true")
 		uniqueMacs[fn.UserId] = append(uniqueMacs[fn.UserId], machine.Identifier)
@@ -121,7 +123,7 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 			Metadata:   metadata,
 			Identifier: identifier,
 		}
-		
+
 		if _, ok := apps[fn.AppId]; !ok {
 			apps[fn.AppId] = model.App{Id: fn.AppId}.Pull(trx, true)
 		}
