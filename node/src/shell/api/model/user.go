@@ -61,7 +61,7 @@ func (d User) Pull(trx trx.ITrx, flags ...bool) User {
 	return d
 }
 
-func (d User) List(trx trx.ITrx, prefix string) ([]User, error) {
+func (d User) List(trx trx.ITrx, prefix string, query map[string]string) ([]User, error) {
 	list, err := trx.GetLinksList(prefix, -1, -1)
 	if err != nil {
 		log.Println(err)
@@ -70,7 +70,7 @@ func (d User) List(trx trx.ITrx, prefix string) ([]User, error) {
 	for i := 0; i < len(list); i++ {
 		list[i] = list[i][len(prefix):]
 	}
-	objs, err := trx.GetObjList("User", list, map[string]string{})
+	objs, err := trx.GetObjList("User", list, query)
 	if err != nil {
 		log.Println(err)
 		return nil, err

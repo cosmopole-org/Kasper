@@ -342,7 +342,7 @@ func (a *Actions) ListMachs(state state.IState, input inputs_machiner.ListInput)
 // ListAppMachs /machines/listAppMachines check [ true false false ] access [ true false false false GET ]
 func (a *Actions) ListAppMachs(state state.IState, input inputs_machiner.ListAppMachsInput) (any, error) {
 	trx := state.Trx()
-	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::")
+	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::", map[string]string{})
 	if err != nil {
 		log.Println(err)
 		return nil, err

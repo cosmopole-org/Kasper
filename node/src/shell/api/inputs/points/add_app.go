@@ -9,7 +9,7 @@ type MachineMeta struct {
 }
 
 type AddAppInput struct {
-	AppId        string        `json:"userId" validate:"required"`
+	AppId        string        `json:"appId" validate:"required"`
 	PointId      string        `json:"pointId" validate:"required"`
 	MachinesMeta []MachineMeta `json:"machinesMeta" validate:"required"`
 }

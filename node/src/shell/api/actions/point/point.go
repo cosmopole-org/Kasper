@@ -31,7 +31,7 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 	}
 	app := model.App{Id: input.AppId}.Pull(trx)
 
-	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::")
+	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::", map[string]string{})
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -63,7 +63,7 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 	}
 	uniqueMacs := map[string][]string{}
 	for _, machine := range input.MachinesMeta {
-		fn := m[machine.MachineId]
+		fn := m[machine.MachineId+"::"+machine.Identifier]
 		fn.Metadata = machine.Metadata
 		fn.Identifier = machine.Identifier
 		trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+machine.Identifier, "metadata", machine.Metadata, true)
@@ -170,7 +170,7 @@ func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInp
 	}
 	app := model.App{Id: input.AppId}.Pull(trx)
 
-	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::")
+	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::", map[string]string{})
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -286,6 +286,10 @@ func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInp
 	if !trx.HasObj("User", input.UserId) {
 		return nil, errors.New("user not found")
 	}
+	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	if point.Tag == "home" {
+		return nil, errors.New("home is not extendable")
+	}
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.UserId, "true")
 	trx.PutLink("memberof::"+input.UserId+"::"+state.Info().PointId(), "true")
 	a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), input.UserId)
@@ -302,6 +306,10 @@ func (a *Actions) UpdateMember(state state.IState, input inputs_points.UpdateMem
 	if state.Info().PointId() == "" {
 		return nil, errors.New("member not found")
 	}
+	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	if point.Tag == "home" {
+		return nil, errors.New("home is not extendable")
+	}
 	trx.PutJson("member_"+state.Info().PointId()+"_"+input.UserId, "meta", input.Metadata, true)
 	user := model.User{Id: input.UserId}.Pull(trx)
 	obj, e := trx.GetJson("member_"+state.Info().PointId()+"_"+input.UserId, "meta")
@@ -316,7 +324,7 @@ func (a *Actions) UpdateMember(state state.IState, input inputs_points.UpdateMem
 // ReadMembers /points/readMembers check [ true true false ] access [ true false false false POST ]
 func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMemberInput) (any, error) {
 	trx := state.Trx()
-	members, err := model.User{}.List(trx, "member::"+state.Info().PointId()+"::")
+	members, err := model.User{}.List(trx, "member::"+state.Info().PointId()+"::", map[string]string{"type": "human"})
 	if err != nil {
 		return nil, err
 	}
@@ -346,6 +354,10 @@ func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMem
 	}
 	if trx.GetLink("member::"+state.Info().PointId()+"::"+input.UserId) != "true" {
 		return nil, errors.New("member not found")
+	}
+	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	if point.Tag == "home" {
+		return nil, errors.New("home is not extendable")
 	}
 	trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.UserId)
 	trx.DelKey("link::memberof::" + input.UserId + "::" + state.Info().PointId())

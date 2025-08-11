@@ -43,6 +43,9 @@ func (a *Actions) Create(state state.IState, input inputsinvites.CreateInput) (a
 		return nil, errors.New("point not found")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	if point.Tag == "home" {
+		return nil, errors.New("home is not extendable")
+	}
 	trx.PutLink("invite::"+point.Id+"::"+input.UserId, "true")
 	trx.PutLink("inviteto::"+input.UserId+"::"+point.Id, "true")
 	trx.PutLink("invitetime::"+point.Id+"::"+input.UserId, strconv.FormatInt(time.Now().UnixMilli(), 10))
