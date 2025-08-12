@@ -38,8 +38,11 @@
   <script type="text/javascript">
     let vms = {};
     function _destroyVm(appId) {
-       vms[appId] && vms[appId].dispose();
-    }   
+      if (vms[appId]) {
+        vms[appId].dispose();
+        delete vms[appId];
+      }
+    }
     async function _runJsCode(appId, id, code) {
       let vm;
       if (vms[appId]) vm = vms[appId];
