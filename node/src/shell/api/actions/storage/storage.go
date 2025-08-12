@@ -55,6 +55,54 @@ func (a *Actions) Upload(state state.IState, input inputs_storage.UploadDataInpu
 	}
 }
 
+// UploadUserEntity /storage/uploadUserEntity check [ true false true ] access [ true false false false POST ]
+func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.UploadUserEntityInput) (any, error) {
+	data, err := base64.StdEncoding.DecodeString(input.Data)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), data, input.EntityId, true); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{}, nil
+}
+
+// UploadPointEntity /storage/uploadPointEntity check [ true false true ] access [ true false false false POST ]
+func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.UploadPointEntityInput) (any, error) {
+	data, err := base64.StdEncoding.DecodeString(input.Data)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+state.Info().PointId(), data, input.EntityId, true); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{}, nil
+}
+
+// DownloadUserEntity /storage/downloadUserEntity check [ true false true ] access [ true false false false POST ]
+func (a *Actions) DownloadUserEntity(state state.IState, input inputs_storage.DownloadUserEntityInput) (any, error) {
+	data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), input.EntityId)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"data": data}, nil
+}
+
+// DownloadPointEntity /storage/downloadPointEntity check [ true false true ] access [ true false false false POST ]
+func (a *Actions) DownloadPointEntity(state state.IState, input inputs_storage.DownloadPointEntityInput) (any, error) {
+	data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, input.EntityId)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"data": data}, nil
+}
+
 // Download /storage/download check [ true true true ] access [ true false false false POST ]
 func (a *Actions) Download(state state.IState, input inputs_storage.DownloadInput) (any, error) {
 	trx := state.Trx()

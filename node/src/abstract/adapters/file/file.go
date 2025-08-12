@@ -8,7 +8,7 @@ import (
 type IFile interface {
 	CheckFileFromStorage(storageRoot string, pointId string, key string) bool
 	SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, pointId string, key string) error
-	SaveDataToStorage(storageRoot string, data []byte, pointId string, key string) error
+	SaveDataToStorage(storageRoot string, data []byte, pointId string, key string, flag... bool) error
 	SaveTarFileItemToStorage(storageRoot string, fh *tar.Reader, pointId string, key string) error
 	ReadFileFromStorage(storageRoot string, pointId string, key string) ([]byte, error)
 	CheckFileFromGlobalStorage(storageRoot string, key string) bool

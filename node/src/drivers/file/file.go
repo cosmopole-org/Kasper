@@ -62,13 +62,19 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 	return nil
 }
 
-func (g *File) SaveDataToStorage(storageRoot string, data []byte, topicId string, key string) error {
+func (g *File) SaveDataToStorage(storageRoot string, data []byte, topicId string, key string, flag... bool) error {
 	var dirPath = fmt.Sprintf("%s/files/%s", storageRoot, topicId)
 	err := os.MkdirAll(dirPath, os.ModePerm)
 	if err != nil {
 		return err
 	}
-	dest, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, key), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	var flags = 0
+	if len(flag) > 0 && flag[0] {
+		flags = os.O_WRONLY | os.O_CREATE
+	} else {
+		flags = os.O_APPEND | os.O_WRONLY | os.O_CREATE
+	}
+	dest, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, key), flags, 0600)
 	if err != nil {
 		return err
 	}
