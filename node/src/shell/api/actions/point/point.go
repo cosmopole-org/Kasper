@@ -139,11 +139,6 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMa
 		return nil, errors.New("app not found")
 	}
 	app := model.App{Id: input.AppId}.Pull(trx)
-	_, err := trx.GetJson("MemberMeta::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "metadata")
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
 	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineMeta.MachineId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, false)
 	machine := model.User{Id: input.MachineMeta.MachineId}.Pull(trx)
 	vm := model.Vm{MachineId: input.MachineMeta.MachineId}.Pull(trx)
@@ -173,7 +168,6 @@ func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInp
 		return nil, errors.New("app not found")
 	}
 	app := model.App{Id: input.AppId}.Pull(trx)
-
 	machines, err := model.User{}.List(trx, "appMachines::"+input.AppId+"::", map[string]string{})
 	if err != nil {
 		log.Println(err)
