@@ -85,7 +85,7 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 
 // DownloadUserEntity /storage/downloadUserEntity check [ true false true ] access [ true false false false POST ]
 func (a *Actions) DownloadUserEntity(state state.IState, input inputs_storage.DownloadUserEntityInput) (any, error) {
-	data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), input.EntityId)
+	data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+input.UserId, input.EntityId)
 	if err != nil {
 		log.Println(err)
 		return nil, err
