@@ -6,6 +6,7 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
+	"kasper/src/shell/api/model"
 	models "kasper/src/shell/api/model"
 	"log"
 )
@@ -57,24 +58,41 @@ func (a *Actions) Upload(state state.IState, input inputs_storage.UploadDataInpu
 
 // UploadUserEntity /storage/uploadUserEntity check [ true false true ] access [ true false false false POST ]
 func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.UploadUserEntityInput) (any, error) {
+	trx := state.Trx()
 	data, err := base64.StdEncoding.DecodeString(input.Data)
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
-	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), data, input.EntityId, true); err != nil {
-		log.Println(err)
-		return nil, err
+	if input.MachineId == "" {
+		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), data, input.EntityId, true); err != nil {
+			log.Println(err)
+			return nil, err
+		}
+	} else {
+		vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
+		app := model.App{Id: vm.AppId}.Pull(trx)
+		if app.OwnerId != state.Info().UserId() {
+			return nil, errors.New("you are not owner of this machine")
+		}
+		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, input.EntityId, true); err != nil {
+			log.Println(err)
+			return nil, err
+		}
 	}
 	return map[string]any{}, nil
 }
 
-// UploadPointEntity /storage/uploadPointEntity check [ true false true ] access [ true false false false POST ]
+// UploadPointEntity /storage/uploadPointEntity check [ true true true ] access [ true false false false POST ]
 func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.UploadPointEntityInput) (any, error) {
+	trx := state.Trx()
 	data, err := base64.StdEncoding.DecodeString(input.Data)
 	if err != nil {
 		log.Println(err)
 		return nil, err
+	}
+	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) == "" {
+		return nil, errors.New("you are not admin")
 	}
 	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+state.Info().PointId(), data, input.EntityId, true); err != nil {
 		log.Println(err)
