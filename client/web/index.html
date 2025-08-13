@@ -39,7 +39,9 @@
     let vms = {};
     function _destroyVm(appId) {
       if (vms[appId]) {
-        vms[appId].dispose();
+        try {
+          vms[appId].dispose();
+        } catch (ex) { }
         delete vms[appId];
       }
     }
