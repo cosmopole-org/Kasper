@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	kasper "kasper/src/shell"
@@ -38,11 +39,11 @@ func main() {
 
 	ownerId := os.Getenv("OWNER_ID")
 	privateKeyBlock, _ := pem.Decode([]byte(os.Getenv("OWNER_PRIVATE_KEY")))
-	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyBlock.Bytes)
+	privateKey, err := x509.ParsePKCS8PrivateKey(privateKeyBlock.Bytes)
 	if err != nil {
 		panic(err)
 	}
-	app := kasper.NewApp(ownerId, privateKey)
+	app := kasper.NewApp(ownerId, privateKey.(*rsa.PrivateKey))
 
 	KasperApp = app
 
