@@ -184,6 +184,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 				Type:   "json-file",
 				Config: map[string]string{},
 			},
+			Runtime: "runsc",
 		},
 		&network.NetworkingConfig{},
 		nil,
