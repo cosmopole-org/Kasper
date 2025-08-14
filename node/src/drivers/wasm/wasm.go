@@ -33,6 +33,7 @@ import (
 	"kasper/src/shell/utils/future"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -571,6 +572,7 @@ func checkField[T any](input map[string]any, fieldName string, defVal T) (T, err
 }
 
 func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDbPath string, docker docker.IDocker, file file.IFile) *Wasm {
+	os.MkdirAll(kvDbPath, os.ModePerm)
 	wm := &Wasm{
 		app:         core,
 		storageRoot: storageRoot,

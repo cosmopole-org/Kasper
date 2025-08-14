@@ -8,6 +8,7 @@ import (
 	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/trx"
 	"log"
+	"os"
 	"sync"
 
 	"github.com/dgraph-io/badger"
@@ -116,6 +117,7 @@ func (sm *StorageManager) GenId(t trx.ITrx, origin string) string {
 
 func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPath string) *StorageManager {
 	log.Println("connecting to database...")
+	os.MkdirAll(baseDbPath, os.ModePerm)
 	kvdb, err := badger.Open(badger.DefaultOptions(baseDbPath).WithSyncWrites(true).WithTruncate(true))
 	if err != nil {
 		panic(err)
