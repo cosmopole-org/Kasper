@@ -1,5 +1,5 @@
 #!/bin/bash
 
-bash install-fcvmm-2.sh
+bash run-fcvmm.sh
 
 ./kasper
