@@ -861,11 +861,11 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	if block == nil || block.Type != "PRIVATE KEY" {
 		panic("failed to decode PEM block containing private key")
 	}
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	privateKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
 		panic(err)
 	}
-	c.privKey = privateKey
+	c.privKey = privateKey.(*rsa.PrivateKey)
 
 	c.tools = &Tools{
 		signaler: dsignaler,
