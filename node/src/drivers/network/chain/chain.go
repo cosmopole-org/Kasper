@@ -970,7 +970,7 @@ func (c *SubChain) GetEventByProof(proof string) *Event {
 func openSocket(origin string, chain *Blockchain) bool {
 
 	log.Println("connecting to chain socket server: ", origin)
-	conn, err := net.Dial("tcp", origin+":8082")
+	conn, err := net.Dial("tcp", origin+":8079")
 	if err != nil {
 		log.Println("Error connecting to server:", err)
 		return false
