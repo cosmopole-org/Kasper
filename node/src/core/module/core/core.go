@@ -858,7 +858,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 
 	pemData := dsecurity.FetchKeyPair("server_key")[0]
 	block, _ := pem.Decode([]byte(pemData))
-	if block == nil || block.Type != "RSA PRIVATE KEY" {
+	if block == nil || block.Type != "PRIVATE KEY" {
 		panic("failed to decode PEM block containing private key")
 	}
 	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
