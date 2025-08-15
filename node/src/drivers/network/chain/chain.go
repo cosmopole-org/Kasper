@@ -203,7 +203,7 @@ func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 		}
 		defer ln.Close()
 		log.Println("Chains' TLS server listening on port ", port)
-		
+
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
@@ -1009,6 +1009,7 @@ func (b *Blockchain) CreateWorkChain(peers map[string]int64) int64 {
 		id:        sc.id,
 		SubChains: &m2,
 		MyShards:  &m3,
+		blockchain: b,
 	}
 	chain.sharder = NewSharder(chain)
 	sc.chain = chain
@@ -1055,6 +1056,7 @@ func (c *Chain) CreateShardChain(subchainId int64) {
 	q, _ := queues.NewLinkedBlockingQueue(1000)
 	q2, _ := queues.NewLinkedBlockingQueue(1000)
 	sc := &SubChain{
+		chain:                 c,
 		id:                    subchainId,
 		events:                map[string]*Event{},
 		pendingBlockElections: 0,
@@ -1101,6 +1103,7 @@ func (b *Blockchain) CreateTempChain(peers map[string]int64) int64 {
 		id:        sc.id,
 		SubChains: &m2,
 		MyShards:  &m3,
+		blockchain: b,
 	}
 	chain.sharder = NewSharder(chain)
 	sc.chain = chain
