@@ -145,6 +145,7 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 				continue
 			}
 			userOrigin := strings.Split(username, "@")[1]
+			log.Println(p.app.Id() + " " + userOrigin)
 			if (userOrigin == p.app.Id()) || (userOrigin == "global") {
 				if !p.LGroupDisabled || !group.Override {
 					if !excepDict[t.Key] {
