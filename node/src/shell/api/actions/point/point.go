@@ -455,6 +455,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		slices.Sort(ids)
 		trx.PutLink("1-to-1-map::"+ids[0]+"<->"+ids[1], point.Id)
 	}
+	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
 	for memberId := range input.Members {
 		a.App.Tools().Signaler().JoinGroup(point.Id, memberId)
 	}
