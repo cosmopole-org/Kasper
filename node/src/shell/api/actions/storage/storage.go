@@ -108,7 +108,7 @@ func (a *Actions) DownloadUserEntity(state state.IState, input inputs_storage.Do
 		log.Println(err)
 		return nil, err
 	}
-	return map[string]any{"data": data}, nil
+	return map[string]any{"data": base64.StdEncoding.EncodeToString([]byte(data))}, nil
 }
 
 // DownloadPointEntity /storage/downloadPointEntity check [ true false true ] access [ true false false false POST ]
@@ -118,7 +118,7 @@ func (a *Actions) DownloadPointEntity(state state.IState, input inputs_storage.D
 		log.Println(err)
 		return nil, err
 	}
-	return map[string]any{"data": data}, nil
+	return map[string]any{"data": base64.StdEncoding.EncodeToString([]byte(data))}, nil
 }
 
 // Download /storage/download check [ true true true ] access [ true false false false POST ]

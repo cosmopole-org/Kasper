@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"google.golang.org/genai"
 )
@@ -46,6 +47,26 @@ func runHttpServer() {
 	registerRoute("/api/interact", func(w http.ResponseWriter, r *http.Request) {
 		pointId := r.Header.Get("pointId")
 		message := r.Header.Get("message")
+
+		message = strings.ReplaceAll(message, "\n", "")
+		message = strings.ReplaceAll(message, "\t", "")
+		message = message[1:len(message)-1]
+
+		log.Println(message)
+		
+		if message == "/reset" {
+			history := []*genai.Content{}
+			chatObj, ok := chats[pointId]
+			if ok {
+				history = chatObj.History
+			} else {
+				chatObj = &Chat{Key: pointId, History: history}
+				chats[pointId] = chatObj
+			}
+			chatObj.History = []*genai.Content{}
+			w.Write([]byte("context reset"))
+			return
+		}
 
 		ctx := context.Background()
 		client, err := genai.NewClient(ctx, &genai.ClientConfig{
