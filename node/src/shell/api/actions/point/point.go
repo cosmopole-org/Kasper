@@ -10,10 +10,10 @@ import (
 	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/future"
 	"log"
+	"maps"
 	"slices"
 	"strings"
 	"time"
-	"maps"
 )
 
 type Actions struct {
@@ -106,6 +106,12 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 		if err != nil {
 			log.Println(err)
 		}
+		meta, err := trx.GetJson("MachineMeta::"+machineId, "metadata")
+		if err != nil {
+			log.Println(err)
+			meta = map[string]any{}
+		}
+		maps.Copy(metadata, meta)
 		vm := model.Vm{MachineId: machineId}.Pull(trx)
 		if err != nil {
 			log.Println(err)
@@ -223,7 +229,7 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		log.Println(err)
 		meta = map[string]any{}
 	}
-	maps.Copy(meta, input.MachineMeta.Metadata)
+	maps.Copy(input.MachineMeta.Metadata, meta)
 	fn := updates_points.Fn{
 		UserId:     machine.Id,
 		Typ:        machine.Typ,
@@ -235,9 +241,9 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		Path:       vm.Path,
 		Comment:    vm.Comment,
 		Identifier: input.MachineMeta.Identifier,
-		Metadata:   meta,
+		Metadata:   input.MachineMeta.Metadata,
 	}
-	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", meta, true)
+	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "true")
 	trx.PutLink("memberof::"+input.MachineMeta.MachineId+"::"+state.Info().PointId(), "true")
 	trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineMeta.MachineId+"::"+input.MachineMeta.Identifier, "true")
