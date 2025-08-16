@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"maps"
 )
 
 type Actions struct {
@@ -222,9 +223,7 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		log.Println(err)
 		meta = map[string]any{}
 	}
-	for k, v := range input.MachineMeta.Metadata {
-		meta[k] = v
-	}
+	maps.Copy(meta, input.MachineMeta.Metadata)
 	fn := updates_points.Fn{
 		UserId:     machine.Id,
 		Typ:        machine.Typ,
