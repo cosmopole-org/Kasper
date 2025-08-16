@@ -227,7 +227,7 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 	meta, err := trx.GetJson("MachineMeta::"+vm.MachineId, "metadata")
 	if err != nil {
 		log.Println(err)
-		meta = map[string]any{}
+		return nil, err
 	}
 	maps.Copy(input.MachineMeta.Metadata, meta)
 	fn := updates_points.Fn{
