@@ -211,7 +211,7 @@ func (tw *TrxWrapper) indexJson(key string, path string, obj map[string]any, mer
 			if m, ok := v.(map[string]any); ok {
 				tw.indexJson(key, path+"."+k, m, merge)
 			} else {
-				b, _ := json.Marshal(obj)
+				b, _ := json.Marshal(v)
 				tw.PutBytes("json::"+key+"::"+path+"."+k, b)
 			}
 		}
