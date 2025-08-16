@@ -48,12 +48,14 @@ func runHttpServer() {
 		pointId := r.Header.Get("pointId")
 		message := r.Header.Get("message")
 
+		message, _ = url.QueryUnescape(message)
+
 		message = strings.ReplaceAll(message, "\n", "")
 		message = strings.ReplaceAll(message, "\t", "")
-		message = message[1:len(message)-1]
+		message = message[1 : len(message)-1]
 
 		log.Println(message)
-		
+
 		if message == "/reset" {
 			history := []*genai.Content{}
 			chatObj, ok := chats[pointId]
@@ -97,6 +99,27 @@ func runHttpServer() {
 			chatObj.History = append(chatObj.History, genai.NewContentFromText(response, genai.RoleModel))
 		}
 	})
+	registerRoute("/api/generate", func(w http.ResponseWriter, r *http.Request) {
+		message := r.Header.Get("message")
+
+		message, _ = url.QueryUnescape(message)
+
+		ctx := context.Background()
+		client, err := genai.NewClient(ctx, &genai.ClientConfig{
+			APIKey:  "AIzaSyAekCwMAh1HlKtogiUVsfkMEEzOcN1pRSs",
+			Backend: genai.BackendGeminiAPI,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		res, _ := client.Models.GenerateContent(ctx, "gemini-2.5-flash", genai.Text(message), nil)
+
+		if len(res.Candidates) > 0 {
+			response := res.Candidates[0].Content.Parts[0].Text
+			w.Write([]byte(response))
+		}
+	})
 	http.ListenAndServe(":3000", nil)
 }
 
@@ -122,13 +145,26 @@ func main() {
 	} else if command == "interact" {
 		req, _ := http.NewRequest("POST", "http://localhost:3000/api/interact", bytes.NewBuffer([]byte("{}")))
 		req.Header.Set("pointId", pointId)
-		msg, _ := url.QueryUnescape(message)
-		req.Header.Set("message", string(msg))
+		req.Header.Set("message", message)
 		req.Header.Set("Content-Type", "application/json")
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Println(err)
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		log.Println(string(body))
+	} else if command == "generate" {
+		req, _ := http.NewRequest("POST", "http://localhost:3000/api/generate", bytes.NewBuffer([]byte("{}")))
+		req.Header.Set("message", message)
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println(err)
+			return
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)

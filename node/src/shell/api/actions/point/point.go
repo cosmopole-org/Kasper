@@ -217,6 +217,14 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 	app := model.App{Id: input.AppId}.Pull(trx)
 	machine := model.User{Id: input.MachineMeta.MachineId}.Pull(trx)
 	vm := model.Vm{MachineId: input.MachineMeta.MachineId}.Pull(trx)
+	meta, err := trx.GetJson("MachineMeta::"+vm.MachineId, "metadata")
+	if err != nil {
+		log.Println(err)
+		meta = map[string]any{}
+	}
+	for k, v := range input.MachineMeta.Metadata {
+		meta[k] = v
+	}
 	fn := updates_points.Fn{
 		UserId:     machine.Id,
 		Typ:        machine.Typ,
@@ -228,7 +236,7 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		Path:       vm.Path,
 		Comment:    vm.Comment,
 		Identifier: input.MachineMeta.Identifier,
-		Metadata:   input.MachineMeta.Metadata,
+		Metadata:   meta,
 	}
 	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "true")

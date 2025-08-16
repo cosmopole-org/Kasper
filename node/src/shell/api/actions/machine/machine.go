@@ -205,6 +205,9 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_machiner.Update
 	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
 	vm.Path = input.Path
 	vm.Push(trx)
+	if input.Metadata != nil {
+		trx.PutJson("MachineMeta::"+vm.MachineId, "metadata", input.Metadata, true)
+	}
 	return map[string]any{}, nil
 }
 

@@ -844,9 +844,9 @@ type FileResponse struct {
 	File File `json:"file"`
 }
 
-func answer(pointId string, userId string, data any) {
+func answer(pointId string, userId string, data any, temp bool) {
 	res, _ := json.Marshal(data)
-	SendSignal("single", pointId, userId, string(res), false)
+	SendSignal("single", pointId, userId, string(res), temp)
 }
 
 func broadcast(pointId string, data any) {
@@ -912,7 +912,7 @@ func run(a int64) int64 {
 	}
 	actRaw, ok := input["type"]
 	if !ok {
-		answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 1})
+		answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 1}, true)
 	}
 	act, ok := actRaw.(string)
 	if !ok {
@@ -924,14 +924,21 @@ func run(a int64) int64 {
 	case "adminInit":
 		{
 			vm.RunDocker("gemini", "gemini", map[string]string{})
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "adminInitRes", "response": "initialized successfully"})
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "adminInitRes", "response": "initialized successfully"}, true)
 			break
 		}
 	case "textMessage":
 		{
 			message := input["text"].(string)
 			res := vm.ExecDocker("gemini", "gemini", "/app/gemini --command=interact --pointId="+signal.Point.Id+" --userId="+signal.User.Id+" -message \""+url.QueryEscape(message)+"\"")
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": strings.Join(strings.Split(res, " ")[2:], " ")})
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": strings.Join(strings.Split(res, " ")[2:], " ")}, false)
+			break
+		}
+	case "generate":
+		{
+			message := input["prompt"].(string)
+			res := vm.ExecDocker("gemini", "gemini", "/app/gemini --command=generate --userId="+signal.User.Id+" -message \""+url.QueryEscape(message)+"\"")
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "generateRes", "text": strings.Join(strings.Split(res, " ")[2:], " ")}, true)
 			break
 		}
 	}

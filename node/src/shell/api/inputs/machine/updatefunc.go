@@ -1,8 +1,9 @@
 package inputs_machiner
 
 type UpdateMachineInput struct {
-	MachineId string `json:"machineId" validate:"required"`
-	Path      string `json:"path" validate:"required"`
+	MachineId string         `json:"machineId" validate:"required"`
+	Path      string         `json:"path" validate:"required"`
+	Metadata  map[string]any `json:"metadata"`
 }
 
 func (d UpdateMachineInput) GetData() any {
