@@ -238,7 +238,7 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		Identifier: input.MachineMeta.Identifier,
 		Metadata:   meta,
 	}
-	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
+	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", meta, true)
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "true")
 	trx.PutLink("memberof::"+input.MachineMeta.MachineId+"::"+state.Info().PointId(), "true")
 	trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineMeta.MachineId+"::"+input.MachineMeta.Identifier, "true")
