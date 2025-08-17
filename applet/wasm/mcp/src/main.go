@@ -1,7 +1,7 @@
 package main
 
 import (
-	"applet/src/models"
+	model "applet/src/models"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -740,13 +740,14 @@ type MyDb struct {
 }
 
 type User struct {
-	Id   string
-	Name string
+	Id       string
+	Name     string
+	AuthCode string
 }
 
 type Point struct {
-	Id            string
-	PendingUserId string
+	Id   string
+	Docs *EntityGroup[Doc] `json:"-"`
 }
 
 type Doc struct {
@@ -918,56 +919,25 @@ func run(a int64) int64 {
 		broadcast(signal.Point.Id, map[string]any{"success": false, "errCode": 2})
 	}
 	vm := Vm{}
-	trx := &Trx[MyDb]{
-		Db: NewMyDb(),
-	}
 
 	switch act {
 	case "adminInit":
 		{
-			vm.RunDocker("gemini", "gemini", map[string]string{})
+			vm.RunDocker("mcp", "mcp", map[string]string{})
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "adminInitRes", "response": "initialized successfully"}, true)
 			break
 		}
-	case "textMessage":
+	case "execute":
 		{
-			message := input["text"].(string)
-			res := vm.ExecDocker("gemini", "gemini", "/app/gemini --command=interact --pointId="+signal.Point.Id+" --userId="+signal.User.Id+" -message \""+url.QueryEscape(message)+"\"")
-			res = strings.Join(strings.Split(res, " ")[2:], " ")
-			result := map[string]any{}
-			json.Unmarshal([]byte(res), &result)
-			if result["type"].(string) == "text-message" {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": result["text"]}, false)
-			} else {
-				trx.Db.Points.CreateAndInsert(&Point{
-					Id:            signal.Point.Id,
-					PendingUserId: signal.User.Id,
-				})
-				str, _ := json.Marshal(result["data"])
-				SendSignal("single", signal.Point.Id, "39@global", string(str), true)
+			toolName := input["name"].(string)
+			args := input["args"].(map[string]any)
+			payload := map[string]any{
+				"name": toolName,
+				"args": args,
 			}
-			break
-		}
-	case "mcpCallback":
-		{
-			res := vm.ExecDocker("gemini", "gemini", "/app/gemini --command=interactCallback --pointId="+signal.Point.Id+" --userId="+signal.User.Id+" -message \""+url.QueryEscape(input["payload"].(string))+"\"")
-			res = strings.Join(strings.Split(res, " ")[2:], " ")
-			result := map[string]any{}
-			json.Unmarshal([]byte(res), &result)
-			if result["type"].(string) == "text-message" {
-				point := trx.Db.Points.FindById(signal.Point.Id)
-				answer(signal.Point.Id, point.PendingUserId, map[string]any{"type": "textMessage", "text": result["text"]}, false)
-			} else {
-				str, _ := json.Marshal(result["data"])
-				SendSignal("single", signal.Point.Id, "39@global", string(str), true)
-			}
-			break
-		}
-	case "generate":
-		{
-			message := input["prompt"].(string)
-			res := vm.ExecDocker("gemini", "gemini", "/app/gemini --command=generate --userId="+signal.User.Id+" -message \""+url.QueryEscape(message)+"\"")
-			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "generateRes", "text": strings.Join(strings.Split(res, " ")[2:], " ")}, true)
+			str, _ := json.Marshal(payload)
+			res := vm.ExecDocker("mcp", "mcp", "python /app/req.py -payload \""+url.QueryEscape(string(str))+"\"")
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "mcpCallback", "payload": res}, false)
 			break
 		}
 	}

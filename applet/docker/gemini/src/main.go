@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"io"
@@ -43,6 +44,8 @@ func registerRoute(path string, handler func(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+var callbacks = map[string]func(map[string]any) []byte{}
+
 func runHttpServer() {
 	registerRoute("/api/interact", func(w http.ResponseWriter, r *http.Request) {
 		pointId := r.Header.Get("pointId")
@@ -50,13 +53,12 @@ func runHttpServer() {
 
 		message, _ = url.QueryUnescape(message)
 
-		message = strings.ReplaceAll(message, "\n", "")
-		message = strings.ReplaceAll(message, "\t", "")
-		message = message[1 : len(message)-1]
+		temp := strings.ReplaceAll(message, "\n", "")
+		temp = strings.ReplaceAll(temp, "\t", "")
+		temp = strings.Trim(temp, " ")
+		temp = temp[1 : len(temp)-1]
 
-		log.Println(message)
-
-		if message == "/reset" {
+		if temp == "/reset" {
 			history := []*genai.Content{}
 			chatObj, ok := chats[pointId]
 			if ok {
@@ -66,7 +68,8 @@ func runHttpServer() {
 				chats[pointId] = chatObj
 			}
 			chatObj.History = []*genai.Content{}
-			w.Write([]byte("context reset"))
+			output, _ := json.Marshal(map[string]any{"type": "text-message", "text": "context reset"})
+			w.Write(output)
 			return
 		}
 
@@ -90,13 +93,139 @@ func runHttpServer() {
 		}
 		chatObj.History = append(chatObj.History, genai.NewContentFromText(message, genai.RoleUser))
 
-		chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", nil, history)
+		chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
+			Tools: []*genai.Tool{
+				{
+					FunctionDeclarations: []*genai.FunctionDeclaration{
+						{
+							Name: "set",
+							Parameters: &genai.Schema{
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"key": {
+										Title:       "key",
+										Type:        genai.TypeString,
+										Description: "key of the pair to be saved to redis",
+									},
+									"value": {
+										Title:       "value",
+										Type:        genai.TypeString,
+										Description: "value of the pair to be saved to redis",
+									},
+								},
+							},
+							Description: "save a key value data into redis",
+						},
+						{
+							Name: "get",
+							Parameters: &genai.Schema{
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"key": {
+										Title:       "key",
+										Type:        genai.TypeString,
+										Description: "key of the pair to be fetched by from redis",
+									},
+								},
+							},
+							Description: "get a key value data from redis",
+						},
+					},
+				},
+			},
+		}, history)
+
 		res, _ := chat.SendMessage(ctx, genai.Part{Text: message})
 
-		if len(res.Candidates) > 0 {
+		fc := res.FunctionCalls()
+		if len(fc) > 0 {
+			toolName := fc[0].Name
+			args := fc[0].Args
+			id := fc[0].ID
+			callbacks[pointId] = func(result map[string]any) []byte {
+				history := []*genai.Content{}
+				chatObj, ok := chats[pointId]
+				if ok {
+					history = chatObj.History
+				} else {
+					chatObj = &Chat{Key: pointId, History: history}
+					chats[pointId] = chatObj
+				}
+				chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
+					Tools: []*genai.Tool{
+						{
+							FunctionDeclarations: []*genai.FunctionDeclaration{
+								{
+									Name: "set",
+									Parameters: &genai.Schema{
+										Type: genai.TypeObject,
+										Properties: map[string]*genai.Schema{
+											"key": {
+												Title:       "key",
+												Type:        genai.TypeString,
+												Description: "key of the pair to be saved to redis",
+											},
+											"value": {
+												Title:       "value",
+												Type:        genai.TypeString,
+												Description: "value of the pair to be saved to redis",
+											},
+										},
+									},
+									Description: "save a key value data into redis",
+								},
+								{
+									Name: "get",
+									Parameters: &genai.Schema{
+										Type: genai.TypeObject,
+										Properties: map[string]*genai.Schema{
+											"key": {
+												Title:       "key",
+												Type:        genai.TypeString,
+												Description: "key of the pair to be fetched by from redis",
+											},
+										},
+									},
+									Description: "get a key value data from redis",
+								},
+							},
+						},
+					},
+				}, history)
+				res, _ = chat.SendMessage(ctx, genai.Part{FunctionResponse: &genai.FunctionResponse{ID: id, Name: toolName, Response: result}})
+				response := res.Candidates[0].Content.Parts[0].Text
+				chatObj.History = append(chatObj.History, genai.NewContentFromText(response, genai.RoleModel))
+				output, _ := json.Marshal(map[string]any{"type": "text-message", "text": response})
+				return output
+			}
+			output, _ := json.Marshal(map[string]any{"type": "tool-call", "data": map[string]any{"name": toolName, "args": args, "type": "execute"}})
+			w.Write(output)
+		} else if len(res.Candidates) > 0 {
 			response := res.Candidates[0].Content.Parts[0].Text
-			w.Write([]byte(response))
 			chatObj.History = append(chatObj.History, genai.NewContentFromText(response, genai.RoleModel))
+			output, _ := json.Marshal(map[string]any{"type": "text-message", "text": response})
+			w.Write(output)
+		}
+	})
+	registerRoute("/api/interactCallback", func(w http.ResponseWriter, r *http.Request) {
+		pointId := r.Header.Get("pointId")
+		message := r.Header.Get("message")
+
+		message, _ = url.QueryUnescape(message)
+		message = message[1 : len(message)-1]
+
+		log.Println(message)
+
+		params := map[string]any{}
+		json.Unmarshal([]byte(message), &params)
+
+		log.Println(params)
+
+		cb := callbacks[pointId]
+		if cb != nil {
+			output := cb(params)
+			delete(callbacks, pointId)
+			w.Write(output)
 		}
 	})
 	registerRoute("/api/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +273,20 @@ func main() {
 		runHttpServer()
 	} else if command == "interact" {
 		req, _ := http.NewRequest("POST", "http://localhost:3000/api/interact", bytes.NewBuffer([]byte("{}")))
+		req.Header.Set("pointId", pointId)
+		req.Header.Set("message", message)
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		log.Println(string(body))
+	} else if command == "interactCallback" {
+		req, _ := http.NewRequest("POST", "http://localhost:3000/api/interactCallback", bytes.NewBuffer([]byte("{}")))
 		req.Header.Set("pointId", pointId)
 		req.Header.Set("message", message)
 		req.Header.Set("Content-Type", "application/json")
