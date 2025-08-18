@@ -718,7 +718,7 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 			a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
 			return outputs_points.SignalOutput{Passed: true, Packet: packet}, nil
 		} else {
-			var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
+			var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t, IsTemp: true}
 			a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
 			return outputs_points.SignalOutput{Passed: true}, nil
 		}
@@ -731,7 +731,7 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 				a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
 				return outputs_points.SignalOutput{Passed: true, Packet: packet}, nil
 			} else {
-				var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data, Time: t}
+				var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data, Time: t, IsTemp: true}
 				a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
 				return outputs_points.SignalOutput{Passed: true}, nil
 			}
