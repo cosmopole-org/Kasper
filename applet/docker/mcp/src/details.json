@@ -1,0 +1,18 @@
+{
+    "isMcp": true,
+    "tools": [
+        {
+            "name": "set",
+            "args": {
+                "key": {
+                    "type": "STRING",
+                    "desc": "the key of value to be inserted into redis"
+                },
+                "value": {
+                    "type": "STRING",
+                    "desc": "the value to be inserted into redis"
+                }
+            }
+        }
+    ]
+}

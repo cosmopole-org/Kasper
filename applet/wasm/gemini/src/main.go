@@ -959,7 +959,7 @@ func run(a int64) int64 {
 			out := model.ListPointAppsOutput{}
 			err := json.Unmarshal(pointsAppsRes, &out)
 			if err != nil {
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": "an error happended"}, false)
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": "an error happended " + string(pointsAppsRes)}, false)
 				return 0
 			}
 			payload := map[string]any{}
@@ -967,10 +967,14 @@ func run(a int64) int64 {
 			machinesMeta := []map[string]any{}
 			for _, v := range out.Machines {
 				if v.Identifier == "0" {
-					machinesMeta = append(machinesMeta, map[string]any{
-						"machineId": v.UserId,
-						"metadata":  v.Metadata,
-					})
+					if isMcpRaw, ok := v.Metadata["isMcp"]; ok {
+						if isMcp, ok := isMcpRaw.(bool); ok && isMcp {
+							machinesMeta = append(machinesMeta, map[string]any{
+								"machineId": v.UserId,
+								"metadata":  v.Metadata,
+							})
+						}
+					}
 				}
 			}
 			payload["macnies"] = machinesMeta

@@ -466,7 +466,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 					}
 				})
 			} else {
-				action := wm.app.Actor().FetchAction(key)
+				action := wm.app.Actor().FetchAction(k)
 				if action == nil {
 					return "action not found"
 				}
@@ -492,7 +492,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 					}
 				})
 			} else {
-				action := wm.app.Actor().FetchAction(key)
+				action := wm.app.Actor().FetchAction(k)
 				if action == nil {
 					return "action not found"
 				}

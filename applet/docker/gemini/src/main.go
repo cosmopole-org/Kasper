@@ -52,6 +52,37 @@ func runHttpServer() {
 		message := r.Header.Get("message")
 
 		message, _ = url.QueryUnescape(message)
+		inp := map[string]any{}
+		json.Unmarshal([]byte(message), &inp)
+
+		message = inp["text"].(string)
+		machinesMeta := inp["machines"].([]any)
+
+		tools := []*genai.FunctionDeclaration{}
+
+		for _, metaRaw := range machinesMeta {
+			metaObj := metaRaw.(map[string]any)
+			tools := metaObj["tools"].([]any)
+			for _, toolRaw := range tools {
+				toolObj := toolRaw.(map[string]any)
+				params := map[string]*genai.Schema{}
+				for k, v := range toolObj["args"].(map[string]any) {
+					params[k] = &genai.Schema{
+						Title:       k,
+						Type:        v.(map[string]any)["type"].(genai.Type),
+						Description: v.(map[string]any)["desc"].(string),
+					}
+				}
+				tools = append(tools, &genai.FunctionDeclaration{
+					Name: toolObj["name"].(string),
+					Parameters: &genai.Schema{
+						Type:       genai.TypeObject,
+						Properties: params,
+					},
+					Description: "save a key value data into redis",
+				})
+			}
+		}
 
 		temp := strings.ReplaceAll(message, "\n", "")
 		temp = strings.ReplaceAll(temp, "\t", "")
@@ -96,41 +127,7 @@ func runHttpServer() {
 		chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
 			Tools: []*genai.Tool{
 				{
-					FunctionDeclarations: []*genai.FunctionDeclaration{
-						{
-							Name: "set",
-							Parameters: &genai.Schema{
-								Type: genai.TypeObject,
-								Properties: map[string]*genai.Schema{
-									"key": {
-										Title:       "key",
-										Type:        genai.TypeString,
-										Description: "key of the pair to be saved to redis",
-									},
-									"value": {
-										Title:       "value",
-										Type:        genai.TypeString,
-										Description: "value of the pair to be saved to redis",
-									},
-								},
-							},
-							Description: "save a key value data into redis",
-						},
-						{
-							Name: "get",
-							Parameters: &genai.Schema{
-								Type: genai.TypeObject,
-								Properties: map[string]*genai.Schema{
-									"key": {
-										Title:       "key",
-										Type:        genai.TypeString,
-										Description: "key of the pair to be fetched by from redis",
-									},
-								},
-							},
-							Description: "get a key value data from redis",
-						},
-					},
+					FunctionDeclarations: tools,
 				},
 			},
 		}, history)
