@@ -19,6 +19,7 @@ import (
 	"kasper/src/abstract/adapters/file"
 	"kasper/src/abstract/adapters/signaler"
 	"kasper/src/abstract/adapters/storage"
+	iaction "kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/trx"
@@ -403,6 +404,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		userId := kParts[2]
 		userSignature := kParts[3]
 		tokenId := kParts[4]
+		onchainReq := kParts[5] == "true"
 		isFile, err := checkField(input, "isFile", false)
 		if err != nil {
 			log.Println(err)
@@ -445,33 +447,69 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		result := []byte("{}")
 		outputCnan := make(chan int)
 		if isBase {
-			if k == "/storage/upload" {
-				data, _ = json.Marshal(inputs_storage.UploadDataInput{
-					Data:    base64.StdEncoding.EncodeToString(data),
-					PointId: dstPointId,
-				})
+			inp := inputs_storage.UploadDataInput{
+				Data:    base64.StdEncoding.EncodeToString(data),
+				PointId: dstPointId,
 			}
-			wm.app.ExecBaseRequestOnChain(k, data, userSignature, userId, tag, func(b []byte, i int, err error) {
+			if k == "/storage/upload" {
+				data, _ = json.Marshal(inp)
+			}
+			if onchainReq {
+				wm.app.ExecBaseRequestOnChain(k, data, userSignature, userId, tag, func(b []byte, i int, err error) {
+					if err != nil {
+						log.Println(err)
+						return
+					}
+					result = b
+					if isRequesterOnchain {
+						outputCnan <- 1
+					}
+				})
+			} else {
+				action := wm.app.Actor().FetchAction(key)
+				if action == nil {
+					return "action not found"
+				}
+				var err error
+				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "")
+				log.Println(result)
 				if err != nil {
-					log.Println(err)
-					return
+					return err.Error()
 				}
-				result = b
-				if isRequesterOnchain {
-					outputCnan <- 1
-				}
-			})
+				str, _ := json.Marshal(result)
+				return string(str)
+			}
 		} else {
-			wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, userSignature, userId, tag, tokenId, func(b []byte, i int, err error) {
+			if onchainReq {
+				wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, userSignature, userId, tag, tokenId, func(b []byte, i int, err error) {
+					if err != nil {
+						log.Println(err)
+						return
+					}
+					result = b
+					if isRequesterOnchain {
+						outputCnan <- 1
+					}
+				})
+			} else {
+				action := wm.app.Actor().FetchAction(key)
+				if action == nil {
+					return "action not found"
+				}
+				var err error
+				inp, err := action.(iaction.ISecureAction).ParseInput("tcp", data)
 				if err != nil {
 					log.Println(err)
-					return
+					return err.Error()
 				}
-				result = b
-				if isRequesterOnchain {
-					outputCnan <- 1
+				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "")
+				log.Println(result)
+				if err != nil {
+					return err.Error()
 				}
-			})
+				str, _ := json.Marshal(result)
+				return string(str)
+			}
 		}
 		if isRequesterOnchain {
 			<-outputCnan

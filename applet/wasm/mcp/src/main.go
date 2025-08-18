@@ -610,10 +610,13 @@ func (*Db) GetByPrefix(key string) [][]byte {
 type Chain struct {
 }
 
+type OffChain struct {
+}
+
 func (c *Chain) SubmitAppletPacketTrx(pointId string, targetMachineId string, key string, userId string, signature string, tokenId string, tag string, input any) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
 	tagO, tagL := bytesToPointer([]byte("00" + tag))
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + tokenId))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + tokenId + "|" + "true"))
 	b, e := json.Marshal(input)
 	if e != nil {
 		logger.Log(e.Error())
@@ -628,7 +631,7 @@ func (c *Chain) SubmitAppletPacketTrx(pointId string, targetMachineId string, ke
 func (c *Chain) SubmitAppletFileTrx(pointId string, targetMachineId string, fileId string, userId string, signature string, tokenId string, tag string) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
 	tagO, tagL := bytesToPointer([]byte("10" + tag))
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + tokenId))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + tokenId + "|" + "true"))
 	inputO, inputL := bytesToPointer([]byte(fileId))
 	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
@@ -636,7 +639,7 @@ func (c *Chain) SubmitAppletFileTrx(pointId string, targetMachineId string, file
 }
 
 func (c *Chain) SubmitBasePacketTrx(pointId string, key string, userId string, signature string, tag string, input []byte) []byte {
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-"))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-" + "|" + "true"))
 	tagO, tagL := bytesToPointer([]byte("01" + tag))
 	b, e := json.Marshal(input)
 	if e != nil {
@@ -650,9 +653,23 @@ func (c *Chain) SubmitBasePacketTrx(pointId string, key string, userId string, s
 }
 
 func (c *Chain) SubmitBaseFileTrx(pointId string, fileId string, userId string, signature string, tag string) []byte {
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + "-"))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + "-" + "|" + "true"))
 	tagO, tagL := bytesToPointer([]byte("11" + tag))
 	inputO, inputL := bytesToPointer([]byte(fileId))
+	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, tagO, tagL)
+	result := pointerToBytes(resP)
+	return result
+}
+
+func (c *OffChain) SubmitBaseRequest(pointId string, key string, userId string, signature string, tag string, input []byte) []byte {
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-" + "|" + "false"))
+	tagO, tagL := bytesToPointer([]byte("01" + tag))
+	b, e := json.Marshal(input)
+	if e != nil {
+		logger.Log(e.Error())
+		return []byte("{}")
+	}
+	inputO, inputL := bytesToPointer(b)
 	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
 	return result
@@ -669,6 +686,7 @@ func (c *Chain) PlantTrigger(count int32, pointId string, tag string, input map[
 type Trx[T any] struct {
 	Db    *T
 	Chain *Chain
+	OffChain *OffChain
 }
 
 func ParseArgs(a int64) model.Send {

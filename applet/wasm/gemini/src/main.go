@@ -610,10 +610,13 @@ func (*Db) GetByPrefix(key string) [][]byte {
 type Chain struct {
 }
 
+type OffChain struct {
+}
+
 func (c *Chain) SubmitAppletPacketTrx(pointId string, targetMachineId string, key string, userId string, signature string, tokenId string, tag string, input any) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
 	tagO, tagL := bytesToPointer([]byte("00" + tag))
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + tokenId))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + tokenId + "|" + "true"))
 	b, e := json.Marshal(input)
 	if e != nil {
 		logger.Log(e.Error())
@@ -628,7 +631,7 @@ func (c *Chain) SubmitAppletPacketTrx(pointId string, targetMachineId string, ke
 func (c *Chain) SubmitAppletFileTrx(pointId string, targetMachineId string, fileId string, userId string, signature string, tokenId string, tag string) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
 	tagO, tagL := bytesToPointer([]byte("10" + tag))
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + tokenId))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + tokenId + "|" + "true"))
 	inputO, inputL := bytesToPointer([]byte(fileId))
 	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
@@ -636,7 +639,7 @@ func (c *Chain) SubmitAppletFileTrx(pointId string, targetMachineId string, file
 }
 
 func (c *Chain) SubmitBasePacketTrx(pointId string, key string, userId string, signature string, tag string, input []byte) []byte {
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-"))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-" + "|" + "true"))
 	tagO, tagL := bytesToPointer([]byte("01" + tag))
 	b, e := json.Marshal(input)
 	if e != nil {
@@ -650,9 +653,23 @@ func (c *Chain) SubmitBasePacketTrx(pointId string, key string, userId string, s
 }
 
 func (c *Chain) SubmitBaseFileTrx(pointId string, fileId string, userId string, signature string, tag string) []byte {
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + "-"))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + "-" + "|" + "true"))
 	tagO, tagL := bytesToPointer([]byte("11" + tag))
 	inputO, inputL := bytesToPointer([]byte(fileId))
+	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, tagO, tagL)
+	result := pointerToBytes(resP)
+	return result
+}
+
+func (c *OffChain) SubmitBaseRequest(pointId string, key string, userId string, signature string, tag string, input []byte) []byte {
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-" + "|" + "false"))
+	tagO, tagL := bytesToPointer([]byte("01" + tag))
+	b, e := json.Marshal(input)
+	if e != nil {
+		logger.Log(e.Error())
+		return []byte("{}")
+	}
+	inputO, inputL := bytesToPointer(b)
 	resP := submitOnchainTrx(0, 0, keyO, keyL, inputO, inputL, tagO, tagL)
 	result := pointerToBytes(resP)
 	return result
@@ -667,8 +684,9 @@ func (c *Chain) PlantTrigger(count int32, pointId string, tag string, input map[
 }
 
 type Trx[T any] struct {
-	Db    *T
-	Chain *Chain
+	Db       *T
+	Chain    *Chain
+	OffChain *OffChain
 }
 
 func ParseArgs(a int64) model.Send {
@@ -919,7 +937,9 @@ func run(a int64) int64 {
 	}
 	vm := Vm{}
 	trx := &Trx[MyDb]{
-		Db: NewMyDb(),
+		Db:       NewMyDb(),
+		Chain:    &Chain{},
+		OffChain: &OffChain{},
 	}
 
 	switch act {
@@ -932,7 +952,30 @@ func run(a int64) int64 {
 	case "textMessage":
 		{
 			message := input["text"].(string)
-			res := vm.ExecDocker("gemini", "gemini", "/app/gemini --command=interact --pointId="+signal.Point.Id+" --userId="+signal.User.Id+" -message \""+url.QueryEscape(message)+"\"")
+			inp, _ := json.Marshal(model.ListPointAppsInput{
+				PointId: signal.Point.Id,
+			})
+			pointsAppsRes := trx.OffChain.SubmitBaseRequest(signal.Point.Id, "/points/listApps", "", "", "", inp)
+			out := model.ListPointAppsOutput{}
+			err := json.Unmarshal(pointsAppsRes, &out)
+			if err != nil {
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": "an error happended"}, false)
+				return 0
+			}
+			payload := map[string]any{}
+			payload["text"] = message
+			machinesMeta := []map[string]any{}
+			for _, v := range out.Machines {
+				if v.Identifier == "0" {
+					machinesMeta = append(machinesMeta, map[string]any{
+						"machineId": v.UserId,
+						"metadata":  v.Metadata,
+					})
+				}
+			}
+			payload["macnies"] = machinesMeta
+			payloadBytes, _ := json.Marshal(payload)
+			res := vm.ExecDocker("gemini", "gemini", "/app/gemini --command=interact --pointId="+signal.Point.Id+" --userId="+signal.User.Id+" -message \""+url.QueryEscape(string(payloadBytes))+"\"")
 			res = strings.Join(strings.Split(res, " ")[2:], " ")
 			result := map[string]any{}
 			json.Unmarshal([]byte(res), &result)
