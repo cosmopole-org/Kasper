@@ -60577,15 +60577,12 @@ return A.b2A(A.a([new A.rT(new A.ai(s,s,s,s),new A.Kx(r.ap_(),new A.Bl(new A.azx
 ap_(){var s,r,q,p
 if(this.f)return B.a1k
 else{s=this.d
-if(s<800){r=350
-q=3
-p=16}else if(s<1200){r=380
-q=2.8
-p=18}else if(s<1600){r=400
-q=2.6
+if(s<800){r=620
+q=2.2
+p=16}else{if(s<1200){r=625
+p=18}else if(s<1600){r=600
 p=20}else{r=420
-q=2.5
-p=22}return new A.aEG(r,p,p,q)}},
+p=22}q=2.6}return new A.aEG(r,p,p,q)}},
 akl(a,a0){var s,r,q,p,o,n,m,l,k,j,i,h,g,f=this,e=null,d=A.cz(0,200+a0*50,0),c=a.a,b=A.Q(20)
 $.aq()
 s=A.m(64,B.c.i()>>>16&255,B.c.i()>>>8&255,B.c.i()&255)
@@ -129177,8 +129174,8 @@ B.Fl=new A.dy(null,6,null,null)
 B.af=new A.dy(null,8,null,null)
 B.a1j=new A.Kv(null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.Fm=new A.a0n(0,0,0,0,0,0,0,!1,!1,null,0)
+B.a1k=new A.nq(1,12,12,2.75)
 B.p_=new A.nq(3,8,8,1)
-B.a1k=new A.nq(1,12,12,3.2)
 B.a1l=new A.nq(4,4,4,0.85)
 B.a1m=new A.nq(3,16,16,0.8)
 B.a1n=new A.nq(3,16,16,0.85)
