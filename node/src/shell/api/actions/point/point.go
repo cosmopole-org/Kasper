@@ -473,7 +473,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		a.App.Tools().Signaler().JoinGroup(point.Id, memberId)
 	}
 	point = point.Pull(trx, true)
-	a.App.Tools().Signaler().SignalGroup("points/create", point.Id, updates_points.Delete{Point: point}, true, []string{})
+	a.App.Tools().Signaler().SignalGroup("points/create", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
 	return outputs_points.CreateOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
 }
 
