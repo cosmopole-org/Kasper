@@ -14,6 +14,16 @@
                     "desc": "the value to be inserted into redis"
                 }
             }
+        },
+        {
+            "name": "get",
+            "desc": "get a value by key from redis",
+            "args": {
+                "key": {
+                    "type": "STRING",
+                    "desc": "the key of value to be fetched from redis"
+                }
+            }
         }
     ]
 }

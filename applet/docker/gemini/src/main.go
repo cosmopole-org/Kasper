@@ -59,48 +59,21 @@ func runHttpServer() {
 		if err != nil {
 			log.Println(err)
 		}
-
-		log.Println("hello 0")
-
-		log.Println(inp)
-
 		message = inp["text"].(string)
 		machinesMeta := inp["machines"].([]any)
 
-		log.Println("hello 1")
-
-		tools := []*genai.FunctionDeclaration{}
+		toolsList := []*genai.FunctionDeclaration{}
 
 		toolToMachIdMap := map[string]string{}
 
 		for _, metaRaw := range machinesMeta {
-
-			log.Println("hello 2")
-
 			machineId := metaRaw.(map[string]any)["machineId"].(string)
-
 			metaObj := metaRaw.(map[string]any)["metadata"].(map[string]any)
-
-			log.Println("hello 3")
-
 			tools := metaObj["tools"].([]any)
-
-			log.Println("hello 4")
-
 			for _, toolRaw := range tools {
-
-				log.Println("hello 5")
-
 				toolObj := toolRaw.(map[string]any)
-
-				log.Println("hello 6")
-
 				params := map[string]*genai.Schema{}
-
 				for k, v := range toolObj["args"].(map[string]any) {
-
-					log.Println("hello 7")
-
 					t := v.(map[string]any)["type"]
 					var typ genai.Type
 					if t == "STRING" {
@@ -112,22 +85,14 @@ func runHttpServer() {
 					} else {
 						typ = genai.TypeUnspecified
 					}
-
 					params[k] = &genai.Schema{
 						Title:       k,
 						Type:        typ,
 						Description: v.(map[string]any)["desc"].(string),
 					}
-
-					log.Println("hello 8")
-
 				}
-
-				log.Println("hello 9")
-
 				toolName := toolObj["name"].(string)
-
-				tools = append(tools, &genai.FunctionDeclaration{
+				toolsList = append(toolsList, &genai.FunctionDeclaration{
 					Name: toolName,
 					Parameters: &genai.Schema{
 						Type:       genai.TypeObject,
@@ -135,10 +100,7 @@ func runHttpServer() {
 					},
 					Description: toolObj["desc"].(string),
 				})
-
 				toolToMachIdMap[toolName] = machineId
-
-				log.Println("hello 10")
 			}
 		}
 
@@ -181,10 +143,12 @@ func runHttpServer() {
 		}
 		chatObj.History = append(chatObj.History, genai.NewContentFromText(message, genai.RoleUser))
 
+		log.Println(toolsList)
+
 		chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
 			Tools: []*genai.Tool{
 				{
-					FunctionDeclarations: tools,
+					FunctionDeclarations: toolsList,
 				},
 			},
 		}, history)
@@ -208,41 +172,7 @@ func runHttpServer() {
 				chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
 					Tools: []*genai.Tool{
 						{
-							FunctionDeclarations: []*genai.FunctionDeclaration{
-								{
-									Name: "set",
-									Parameters: &genai.Schema{
-										Type: genai.TypeObject,
-										Properties: map[string]*genai.Schema{
-											"key": {
-												Title:       "key",
-												Type:        genai.TypeString,
-												Description: "key of the pair to be saved to redis",
-											},
-											"value": {
-												Title:       "value",
-												Type:        genai.TypeString,
-												Description: "value of the pair to be saved to redis",
-											},
-										},
-									},
-									Description: "save a key value data into redis",
-								},
-								{
-									Name: "get",
-									Parameters: &genai.Schema{
-										Type: genai.TypeObject,
-										Properties: map[string]*genai.Schema{
-											"key": {
-												Title:       "key",
-												Type:        genai.TypeString,
-												Description: "key of the pair to be fetched by from redis",
-											},
-										},
-									},
-									Description: "get a key value data from redis",
-								},
-							},
+							FunctionDeclarations: toolsList,
 						},
 					},
 				}, history)

@@ -999,7 +999,8 @@ func run(a int64) int64 {
 					Id:            signal.Point.Id,
 					PendingUserId: signal.User.Id,
 				})
-				machId := result["machineId"].(string)
+				machId := result["data"].(map[string]any)["machineId"].(string)
+				logger.Log(res)
 				str, _ := json.Marshal(result["data"])
 				SendSignal("single", signal.Point.Id, machId, string(str), true)
 			}
