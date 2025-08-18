@@ -661,7 +661,7 @@ func (c *Chain) SubmitBaseFileTrx(pointId string, fileId string, userId string, 
 	return result
 }
 
-func (c *OffChain) SubmitBaseRequest(pointId string, key string, userId string, signature string, tag string, input []byte) []byte {
+func (c *OffChain) SubmitBaseRequest(pointId string, key string, userId string, signature string, tag string, input any) []byte {
 	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-" + "|" + "false"))
 	tagO, tagL := bytesToPointer([]byte("01" + tag))
 	b, e := json.Marshal(input)
@@ -952,9 +952,9 @@ func run(a int64) int64 {
 	case "textMessage":
 		{
 			message := input["text"].(string)
-			inp, _ := json.Marshal(model.ListPointAppsInput{
+			inp := model.ListPointAppsInput{
 				PointId: signal.Point.Id,
-			})
+			}
 			pointsAppsRes := trx.OffChain.SubmitBaseRequest(signal.Point.Id, "/points/listApps", "", "", "", inp)
 			out := model.ListPointAppsOutput{}
 			err := json.Unmarshal(pointsAppsRes, &out)

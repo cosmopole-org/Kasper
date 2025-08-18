@@ -447,41 +447,15 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		result := []byte("{}")
 		outputCnan := make(chan int)
 		if isBase {
-			inp := inputs_storage.UploadDataInput{
-				Data:    base64.StdEncoding.EncodeToString(data),
-				PointId: dstPointId,
-			}
 			if k == "/storage/upload" {
+				inp := inputs_storage.UploadDataInput{
+					Data:    base64.StdEncoding.EncodeToString(data),
+					PointId: dstPointId,
+				}
 				data, _ = json.Marshal(inp)
 			}
 			if onchainReq {
 				wm.app.ExecBaseRequestOnChain(k, data, userSignature, userId, tag, func(b []byte, i int, err error) {
-					if err != nil {
-						log.Println(err)
-						return
-					}
-					result = b
-					if isRequesterOnchain {
-						outputCnan <- 1
-					}
-				})
-			} else {
-				action := wm.app.Actor().FetchAction(k)
-				if action == nil {
-					return "action not found"
-				}
-				var err error
-				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "")
-				log.Println(result)
-				if err != nil {
-					return err.Error()
-				}
-				str, _ := json.Marshal(result)
-				return string(str)
-			}
-		} else {
-			if onchainReq {
-				wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, userSignature, userId, tag, tokenId, func(b []byte, i int, err error) {
 					if err != nil {
 						log.Println(err)
 						return
@@ -509,6 +483,19 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 				}
 				str, _ := json.Marshal(result)
 				return string(str)
+			}
+		} else {
+			if onchainReq {
+				wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, userSignature, userId, tag, tokenId, func(b []byte, i int, err error) {
+					if err != nil {
+						log.Println(err)
+						return
+					}
+					result = b
+					if isRequesterOnchain {
+						outputCnan <- 1
+					}
+				})
 			}
 		}
 		if isRequesterOnchain {
