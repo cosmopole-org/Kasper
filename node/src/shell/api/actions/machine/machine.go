@@ -187,6 +187,7 @@ func (a *Actions) CreateMachine(state state.IState, input inputs_machiner.Create
 	user.Push(trx)
 	session.Push(trx)
 	vm.Push(trx)
+	trx.PutJson("MachineMeta::"+vm.MachineId, "metadata", map[string]any{}, true)
 	trx.PutIndex("Machine", "id", "appId", user.Id, []byte(app.Id))
 	trx.PutLink("appMachines::"+app.Id+"::"+vm.MachineId, "true")
 	return outputs_machiner.CreateOutput{User: user}, nil

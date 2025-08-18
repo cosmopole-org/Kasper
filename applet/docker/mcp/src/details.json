@@ -3,6 +3,7 @@
     "tools": [
         {
             "name": "set",
+            "desc": "save a key value data into redis",
             "args": {
                 "key": {
                     "type": "STRING",

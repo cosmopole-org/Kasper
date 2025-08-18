@@ -52,42 +52,99 @@ func runHttpServer() {
 		message := r.Header.Get("message")
 
 		message, _ = url.QueryUnescape(message)
+		message = message[1 : len(message)-1]
+
 		inp := map[string]any{}
-		json.Unmarshal([]byte(message), &inp)
+		err := json.Unmarshal([]byte(message), &inp)
+		if err != nil {
+			log.Println(err)
+		}
+
+		log.Println("hello 0")
+
+		log.Println(inp)
 
 		message = inp["text"].(string)
 		machinesMeta := inp["machines"].([]any)
 
+		log.Println("hello 1")
+
 		tools := []*genai.FunctionDeclaration{}
 
+		toolToMachIdMap := map[string]string{}
+
 		for _, metaRaw := range machinesMeta {
-			metaObj := metaRaw.(map[string]any)
+
+			log.Println("hello 2")
+
+			machineId := metaRaw.(map[string]any)["machineId"].(string)
+
+			metaObj := metaRaw.(map[string]any)["metadata"].(map[string]any)
+
+			log.Println("hello 3")
+
 			tools := metaObj["tools"].([]any)
+
+			log.Println("hello 4")
+
 			for _, toolRaw := range tools {
+
+				log.Println("hello 5")
+
 				toolObj := toolRaw.(map[string]any)
+
+				log.Println("hello 6")
+
 				params := map[string]*genai.Schema{}
+
 				for k, v := range toolObj["args"].(map[string]any) {
+
+					log.Println("hello 7")
+
+					t := v.(map[string]any)["type"]
+					var typ genai.Type
+					if t == "STRING" {
+						typ = genai.TypeString
+					} else if t == "NUMBER" {
+						typ = genai.TypeNumber
+					} else if t == "BOOL" {
+						typ = genai.TypeBoolean
+					} else {
+						typ = genai.TypeUnspecified
+					}
+
 					params[k] = &genai.Schema{
 						Title:       k,
-						Type:        v.(map[string]any)["type"].(genai.Type),
+						Type:        typ,
 						Description: v.(map[string]any)["desc"].(string),
 					}
+
+					log.Println("hello 8")
+
 				}
+
+				log.Println("hello 9")
+
+				toolName := toolObj["name"].(string)
+
 				tools = append(tools, &genai.FunctionDeclaration{
-					Name: toolObj["name"].(string),
+					Name: toolName,
 					Parameters: &genai.Schema{
 						Type:       genai.TypeObject,
 						Properties: params,
 					},
-					Description: "save a key value data into redis",
+					Description: toolObj["desc"].(string),
 				})
+
+				toolToMachIdMap[toolName] = machineId
+
+				log.Println("hello 10")
 			}
 		}
 
 		temp := strings.ReplaceAll(message, "\n", "")
 		temp = strings.ReplaceAll(temp, "\t", "")
 		temp = strings.Trim(temp, " ")
-		temp = temp[1 : len(temp)-1]
 
 		if temp == "/reset" {
 			history := []*genai.Content{}
@@ -195,7 +252,7 @@ func runHttpServer() {
 				output, _ := json.Marshal(map[string]any{"type": "text-message", "text": response})
 				return output
 			}
-			output, _ := json.Marshal(map[string]any{"type": "tool-call", "data": map[string]any{"name": toolName, "args": args, "type": "execute"}})
+			output, _ := json.Marshal(map[string]any{"type": "tool-call", "data": map[string]any{"name": toolName, "args": args, "type": "execute", "machineId": toolToMachIdMap[toolName]}})
 			w.Write(output)
 		} else if len(res.Candidates) > 0 {
 			response := res.Candidates[0].Content.Parts[0].Text

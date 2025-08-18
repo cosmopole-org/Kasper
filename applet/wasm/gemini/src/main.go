@@ -630,7 +630,7 @@ func (c *Chain) SubmitAppletPacketTrx(pointId string, targetMachineId string, ke
 
 func (c *Chain) SubmitAppletFileTrx(pointId string, targetMachineId string, fileId string, userId string, signature string, tokenId string, tag string) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
-	tagO, tagL := bytesToPointer([]byte("10" + tag))
+	tagO, tagL := bytesToPointer([]byte("01" + tag))
 	keyO, keyL := bytesToPointer([]byte(pointId + "|" + "/storage/upload" + "|" + userId + "|" + signature + "|" + tokenId + "|" + "true"))
 	inputO, inputL := bytesToPointer([]byte(fileId))
 	resP := submitOnchainTrx(tmO, tmL, keyO, keyL, inputO, inputL, tagO, tagL)
@@ -640,7 +640,7 @@ func (c *Chain) SubmitAppletFileTrx(pointId string, targetMachineId string, file
 
 func (c *Chain) SubmitBasePacketTrx(pointId string, key string, userId string, signature string, tag string, input []byte) []byte {
 	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-" + "|" + "true"))
-	tagO, tagL := bytesToPointer([]byte("01" + tag))
+	tagO, tagL := bytesToPointer([]byte("10" + tag))
 	b, e := json.Marshal(input)
 	if e != nil {
 		logger.Log(e.Error())
@@ -663,7 +663,7 @@ func (c *Chain) SubmitBaseFileTrx(pointId string, fileId string, userId string, 
 
 func (c *OffChain) SubmitBaseRequest(pointId string, key string, userId string, signature string, tag string, input any) []byte {
 	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-" + "|" + "false"))
-	tagO, tagL := bytesToPointer([]byte("01" + tag))
+	tagO, tagL := bytesToPointer([]byte("10" + tag))
 	b, e := json.Marshal(input)
 	if e != nil {
 		logger.Log(e.Error())
@@ -956,19 +956,26 @@ func run(a int64) int64 {
 				PointId: signal.Point.Id,
 			}
 			pointsAppsRes := trx.OffChain.SubmitBaseRequest(signal.Point.Id, "/points/listApps", "", "", "", inp)
+			logger.Log(string(pointsAppsRes))
 			out := model.ListPointAppsOutput{}
+			logger.Log("parsing...")
 			err := json.Unmarshal(pointsAppsRes, &out)
 			if err != nil {
+				logger.Log(err.Error())
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": "an error happended " + string(pointsAppsRes)}, false)
 				return 0
 			}
+			logger.Log("parsed.")
 			payload := map[string]any{}
 			payload["text"] = message
 			machinesMeta := []map[string]any{}
-			for _, v := range out.Machines {
+			logger.Log("starting to extract...")
+			for k, v := range out.Machines {
+				logger.Log(k)
 				if v.Identifier == "0" {
 					if isMcpRaw, ok := v.Metadata["isMcp"]; ok {
 						if isMcp, ok := isMcpRaw.(bool); ok && isMcp {
+							logger.Log(k + " is mcp")
 							machinesMeta = append(machinesMeta, map[string]any{
 								"machineId": v.UserId,
 								"metadata":  v.Metadata,
@@ -977,8 +984,10 @@ func run(a int64) int64 {
 					}
 				}
 			}
-			payload["macnies"] = machinesMeta
+			logger.Log("test...")
+			payload["machines"] = machinesMeta
 			payloadBytes, _ := json.Marshal(payload)
+			logger.Log(string(payloadBytes))
 			res := vm.ExecDocker("gemini", "gemini", "/app/gemini --command=interact --pointId="+signal.Point.Id+" --userId="+signal.User.Id+" -message \""+url.QueryEscape(string(payloadBytes))+"\"")
 			res = strings.Join(strings.Split(res, " ")[2:], " ")
 			result := map[string]any{}
@@ -990,8 +999,9 @@ func run(a int64) int64 {
 					Id:            signal.Point.Id,
 					PendingUserId: signal.User.Id,
 				})
+				machId := result["machineId"].(string)
 				str, _ := json.Marshal(result["data"])
-				SendSignal("single", signal.Point.Id, "39@global", string(str), true)
+				SendSignal("single", signal.Point.Id, machId, string(str), true)
 			}
 			break
 		}
