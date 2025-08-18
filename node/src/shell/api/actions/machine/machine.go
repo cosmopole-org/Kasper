@@ -31,6 +31,18 @@ func Install(a *Actions) error {
 			} else if vm.Runtime == "elpis" {
 				a.App.Tools().Elpis().Assign(vm.MachineId)
 			}
+			var pointIds []string
+			prefix := "memberof::" + vm.MachineId + "::"
+			pIds, err := trx.GetLinksList(prefix, -1, -1)
+			if err != nil {
+				log.Println(err)
+				pointIds = []string{}
+			} else {
+				pointIds = pIds
+			}
+			for _, pointId := range pointIds {
+				a.App.Tools().Signaler().JoinGroup(pointId[len(prefix):], vm.MachineId)
+			}
 		}
 		return nil
 	})
