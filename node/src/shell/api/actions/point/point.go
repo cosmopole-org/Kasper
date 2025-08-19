@@ -303,6 +303,8 @@ func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInp
 	}
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.UserId, "true")
 	trx.PutLink("memberof::"+input.UserId+"::"+state.Info().PointId(), "true")
+	point.MemberCount++
+	point.Push(trx)
 	a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), input.UserId)
 	user := model.User{Id: input.UserId}.Pull(trx)
 	future.Async(func() {
@@ -374,6 +376,8 @@ func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMem
 	}
 	trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.UserId)
 	trx.DelKey("link::memberof::" + input.UserId + "::" + state.Info().PointId())
+	point.MemberCount--
+	point.Push(trx)
 	a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), input.UserId)
 	user := model.User{Id: input.UserId}.Pull(trx)
 	future.Async(func() {
@@ -597,11 +601,12 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 	point := model.Point{Id: input.PointId}.Pull(trx)
 	if point.IsPublic {
 		result := map[string]any{
-			"id":       point.Id,
-			"parentId": point.ParentId,
-			"isPublic": point.IsPublic,
-			"persHist": point.PersHist,
-			"tag":      point.Tag,
+			"id":          point.Id,
+			"parentId":    point.ParentId,
+			"isPublic":    point.IsPublic,
+			"persHist":    point.PersHist,
+			"memberCount": point.MemberCount,
+			"tag":         point.Tag,
 		}
 		if input.IncludeMeta {
 			metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
@@ -625,12 +630,13 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 		lastPacket = lpData
 	}
 	result := map[string]any{
-		"id":         point.Id,
-		"parentId":   point.ParentId,
-		"isPublic":   point.IsPublic,
-		"persHist":   point.PersHist,
-		"tag":        point.Tag,
-		"lastPacket": lastPacket,
+		"id":          point.Id,
+		"parentId":    point.ParentId,
+		"isPublic":    point.IsPublic,
+		"persHist":    point.PersHist,
+		"memberCount": point.MemberCount,
+		"tag":         point.Tag,
+		"lastPacket":  lastPacket,
 	}
 	if input.IncludeMeta {
 		metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
@@ -662,12 +668,13 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 			lastPacket = lpData
 		}
 		result := map[string]any{
-			"id":         point.Id,
-			"parentId":   point.ParentId,
-			"isPublic":   point.IsPublic,
-			"persHist":   point.PersHist,
-			"tag":        point.Tag,
-			"lastPacket": lastPacket,
+			"id":          point.Id,
+			"parentId":    point.ParentId,
+			"isPublic":    point.IsPublic,
+			"persHist":    point.PersHist,
+			"memberCount": point.MemberCount,
+			"tag":         point.Tag,
+			"lastPacket":  lastPacket,
 		}
 		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
 		if err != nil {
@@ -756,11 +763,12 @@ func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, 
 	results := []map[string]any{}
 	for _, point := range points {
 		result := map[string]any{
-			"id":       point.Id,
-			"parentId": point.ParentId,
-			"isPublic": point.IsPublic,
-			"persHist": point.PersHist,
-			"tag":      point.Tag,
+			"id":          point.Id,
+			"parentId":    point.ParentId,
+			"isPublic":    point.IsPublic,
+			"persHist":    point.PersHist,
+			"memberCount": point.MemberCount,
+			"tag":         point.Tag,
 		}
 		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
 		if err != nil {

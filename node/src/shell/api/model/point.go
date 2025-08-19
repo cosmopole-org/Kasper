@@ -2,19 +2,21 @@ package model
 
 import (
 	"bytes"
+	"encoding/binary"
 	"kasper/src/abstract/models/trx"
 	"log"
 	"sort"
 )
 
 type Point struct {
-	Id       string `json:"id"`
-	Tag      string `json:"tag"`
-	ParentId string `json:"parentId"`
-	PersHist bool   `json:"persHist"`
-	IsPublic bool   `json:"isPublic"`
-	Title    string `json:"title"`
-	Avatar   string `json:"avatar"`
+	Id          string `json:"id"`
+	Tag         string `json:"tag"`
+	ParentId    string `json:"parentId"`
+	PersHist    bool   `json:"persHist"`
+	IsPublic    bool   `json:"isPublic"`
+	Title       string `json:"title"`
+	Avatar      string `json:"avatar"`
+	MemberCount int32  `json:"memberCount"`
 }
 
 func (d Point) Type() string {
@@ -30,11 +32,14 @@ func (d Point) Push(trx trx.ITrx) {
 	if d.PersHist {
 		b2 = byte(0x01)
 	}
+	b3 := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b3, uint32(d.MemberCount))
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
-		"tag":      []byte(d.Tag),
-		"parentId": []byte(d.ParentId),
-		"isPublic": {b},
-		"persHist": {b2},
+		"tag":         []byte(d.Tag),
+		"parentId":    []byte(d.ParentId),
+		"isPublic":    {b},
+		"persHist":    {b2},
+		"memberCount": b3,
 	})
 }
 
@@ -45,6 +50,7 @@ func (d Point) Delete(trx trx.ITrx) {
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::parentId")
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::isPublic")
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::persHist")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::memberCount")
 	trx.DelJson("PointMeta::"+d.Id, "metadata")
 }
 
@@ -53,6 +59,7 @@ func (d Point) Pull(trx trx.ITrx, flags ...bool) Point {
 	if len(m) > 0 {
 		d.Tag = string(m["tag"])
 		d.ParentId = string(m["parentId"])
+		d.MemberCount = int32(binary.LittleEndian.Uint32(m["memberCount"]))
 		d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 		d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 		if len(flags) > 0 {
@@ -96,6 +103,7 @@ func (d Point) List(trx trx.ITrx, prefix string, positional ...int) ([]Point, er
 			d.Id = id
 			d.Tag = string(m["tag"])
 			d.ParentId = string(m["parentId"])
+			d.MemberCount = int32(binary.LittleEndian.Uint32(m["memberCount"]))
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)
@@ -120,6 +128,7 @@ func (d Point) All(trx trx.ITrx, offset int64, count int64, query map[string]str
 			d.Id = id
 			d.Tag = string(m["tag"])
 			d.ParentId = string(m["parentId"])
+			d.MemberCount = int32(binary.LittleEndian.Uint32(m["memberCount"]))
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)
@@ -149,6 +158,7 @@ func (d Point) Search(trx trx.ITrx, offset int64, count int64, word string, filt
 			d.Id = id
 			d.Tag = string(m["tag"])
 			d.ParentId = string(m["parentId"])
+			d.MemberCount = int32(binary.LittleEndian.Uint32(m["memberCount"]))
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)
