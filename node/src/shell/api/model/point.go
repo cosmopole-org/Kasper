@@ -33,6 +33,9 @@ func (d Point) Push(trx trx.ITrx) {
 		b2 = byte(0x01)
 	}
 	b3 := make([]byte, 4)
+	if d.MemberCount < 1 { 
+		d.MemberCount = 1
+	}
 	binary.LittleEndian.PutUint32(b3, uint32(d.MemberCount))
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
 		"tag":         []byte(d.Tag),
