@@ -279,6 +279,27 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	return outputsusers.CreateOutput{User: user, Session: session}, nil
 }
 
+// Delete /users/delete check [ true false false ] access [ true false false false POST ]
+func (a *Actions) Delete(state state.IState, input inputsusers.DeleteInput) (any, error) {
+	trx := state.Trx()
+	user := models.User{Id: state.Info().UserId()}.Pull(trx)
+	meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
+	if err == nil && meta["name"] != nil {
+		trx.DelIndex("User", "name", "id", user.Id+"->"+meta["name"].(string))
+	}
+	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile", map[string]any{"name": "", "avatar": "empty"}, true)
+	email := trx.GetLink("UserIdToEmail::"+user.Id)
+	trx.DelKey("link::UserPrivateKey::"+user.Id)
+	trx.DelKey("link::UserEmailToId::"+email)
+	trx.DelKey("link::UserIdToEmail::"+user.Id)
+	user.Username = "deleted_user"
+	user.PublicKey = ""
+	user.Balance = 0
+	user.Name = "Deleted User"
+	user.Push(trx)
+	return map[string]any{}, nil
+}
+
 // Update /users/update check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any, error) {
 	trx := state.Trx()
