@@ -214,7 +214,9 @@ func Install(a *Actions) error {
 		}
 		w.Write([]byte(data))
 	})
-	http.ListenAndServe(":3000", nil)
+	future.Async(func() {
+		http.ListenAndServe(":3000", nil)
+	}, false)
 	return nil
 }
 
