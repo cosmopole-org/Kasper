@@ -2,20 +2,219 @@ package actions_user
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/state"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
 	models "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/future"
 	"log"
+	"net/http"
+	"strconv"
 )
 
 type Actions struct {
 	App core.ICore
 }
 
+func registerRoute(path string, handler func(w http.ResponseWriter, r *http.Request)) {
+	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			r := recover()
+			if r != nil {
+				var err error
+				switch t := r.(type) {
+				case string:
+					err = errors.New(t)
+				case error:
+					err = t
+				default:
+					err = errors.New("unknown error")
+				}
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}()
+		handler(w, r)
+	})
+}
+
 func Install(a *Actions) error {
+	registerRoute("/storage/downloadUserEntity", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("user_id")
+		inputLengthStr := r.Header.Get("input_length")
+		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputLength := int(ilI64)
+		var input inputs_storage.DownloadUserEntityInput
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputBody := body[0:inputLength]
+		signature := body[inputLength:]
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+input.UserId, input.EntityId)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "can't read file", http.StatusBadRequest)
+			return
+		}
+		w.Write([]byte(data))
+	})
+	registerRoute("/storage/uploadUserEntity", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("user_id")
+		inputLengthStr := r.Header.Get("input_length")
+		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputLength := int(ilI64)
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputBody := body[0:inputLength]
+		signature := body[inputLength:]
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		machineId := r.Header.Get("machine_id")
+		entityId := r.Header.Get("entity_id")
+		var e error
+		a.App.ModifyState(false, func(trx trx.ITrx) error {
+			data := inputBody
+			if machineId == "" {
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+userId, data, entityId, true); err != nil {
+					log.Println(err)
+					e = err
+					return err
+				}
+			} else {
+				vm := models.Vm{MachineId: machineId}.Pull(trx)
+				app := models.App{Id: vm.AppId}.Pull(trx)
+				if app.OwnerId != userId {
+					e = errors.New("you are not owner of this machine")
+					return err
+				}
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, entityId, true); err != nil {
+					log.Println(err)
+					e = err
+					return err
+				}
+			}
+			return nil
+		})
+		if e == nil {
+			w.Write([]byte("{ \"resCode\": 0, \"obj\": {} }"))
+		} else {
+			b, _ := json.Marshal(map[string]any{
+				"resCode": 1,
+				"message": e.Error(),
+			})
+			w.Write(b)
+		}
+	})
+	registerRoute("/storage/uploadPointEntity", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("user_id")
+		inputLengthStr := r.Header.Get("input_length")
+		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputLength := int(ilI64)
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputBody := body[0:inputLength]
+		signature := body[inputLength:]
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		pointId := r.Header.Get("point_id")
+		entityId := r.Header.Get("entity_id")
+		var e error
+		a.App.ModifyState(false, func(trx trx.ITrx) error {
+			data := inputBody
+			if trx.GetLink("admin::"+pointId+"::"+userId) == "" {
+				e = errors.New("you are not admin")
+				return err
+			}
+			if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+pointId, data, entityId, true); err != nil {
+				log.Println(err)
+				e = err
+				return err
+			}
+			future.Async(func() {
+				a.App.Tools().Signaler().SignalGroup("storage/updatePointEntity", pointId, map[string]any{"pointId": pointId, "entityId": entityId}, true, []string{})
+			}, false)
+			return nil
+		})
+		if e == nil {
+			w.Write([]byte("{ \"resCode\": 0, \"obj\": {} }"))
+		} else {
+			b, _ := json.Marshal(map[string]any{
+				"resCode": 1,
+				"message": e.Error(),
+			})
+			w.Write(b)
+		}
+	})
+	registerRoute("/storage/downloadPointEntity", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("user_id")
+		inputLengthStr := r.Header.Get("input_length")
+		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputLength := int(ilI64)
+		var input inputs_storage.DownloadPointEntityInput
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputBody := body[0:inputLength]
+		signature := body[inputLength:]
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, input.EntityId)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "can't read file", http.StatusBadRequest)
+			return
+		}
+		w.Write([]byte(data))
+	})
+	http.ListenAndServe(":3000", nil)
 	return nil
 }
 
@@ -140,26 +339,6 @@ func (a *Actions) DeletePointEntity(state state.IState, input inputs_storage.Del
 		a.App.Tools().Signaler().SignalGroup("storage/updatePointEntity", state.Info().PointId(), map[string]any{"pointId": state.Info().PointId(), "entityId": input.EntityId}, true, []string{})
 	}, false)
 	return map[string]any{}, nil
-}
-
-// DownloadUserEntity /storage/downloadUserEntity check [ true false true ] access [ true false false false POST ]
-func (a *Actions) DownloadUserEntity(state state.IState, input inputs_storage.DownloadUserEntityInput) (any, error) {
-	data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+input.UserId, input.EntityId)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	return map[string]any{"data": base64.StdEncoding.EncodeToString([]byte(data))}, nil
-}
-
-// DownloadPointEntity /storage/downloadPointEntity check [ true false true ] access [ true false false false POST ]
-func (a *Actions) DownloadPointEntity(state state.IState, input inputs_storage.DownloadPointEntityInput) (any, error) {
-	data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, input.EntityId)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	return map[string]any{"data": base64.StdEncoding.EncodeToString([]byte(data))}, nil
 }
 
 // Download /storage/download check [ true true true ] access [ true false false false POST ]

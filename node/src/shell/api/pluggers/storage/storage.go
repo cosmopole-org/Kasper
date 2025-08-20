@@ -34,14 +34,6 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.DeletePointEntity)
 		}
 		
-		func (c *Plugger) DownloadUserEntity() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.DownloadUserEntity)
-		}
-		
-		func (c *Plugger) DownloadPointEntity() iaction.IAction {
-			return utils.ExtractSecureAction(c.Core, c.Actions.DownloadPointEntity)
-		}
-		
 		func (c *Plugger) Download() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Download)
 		}
