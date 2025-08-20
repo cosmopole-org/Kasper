@@ -99,7 +99,7 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 		return nil, err
 	}
 	future.Async(func() {
-		a.App.Tools().Signaler().SignalGroup("storage/pointEntityUpdated", state.Info().PointId(), map[string]any{"entityId": input.EntityId}, true, []string{})
+		a.App.Tools().Signaler().SignalGroup("storage/pointEntityUpdated", state.Info().PointId(), map[string]any{"pointId": state.Info().PointId(), "entityId": input.EntityId}, true, []string{})
 	}, false)
 	return map[string]any{}, nil
 }
