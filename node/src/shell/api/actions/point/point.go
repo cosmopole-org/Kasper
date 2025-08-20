@@ -24,12 +24,14 @@ type LockHolder struct {
 }
 
 type Actions struct {
-	App   core.ICore
-	Locks cmap.ConcurrentMap[string, *LockHolder]
+	App           core.ICore
+	Locks         cmap.ConcurrentMap[string, *LockHolder]
+	OneToOneLocks cmap.ConcurrentMap[string, *LockHolder]
 }
 
 func Install(a *Actions) error {
 	a.Locks = cmap.New[*LockHolder]()
+	a.OneToOneLocks = cmap.New[*LockHolder]()
 	return nil
 }
 
@@ -334,6 +336,9 @@ func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInp
 	if point.Tag == "home" {
 		return nil, errors.New("home is not extendable")
 	}
+	if trx.GetLink("member::"+state.Info().PointId()+"::"+input.UserId) == "true" {
+		return nil, errors.New("membership already exists")
+	}
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.UserId, "true")
 	trx.PutLink("memberof::"+input.UserId+"::"+state.Info().PointId(), "true")
 	point.MemberCount++
@@ -411,6 +416,9 @@ func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMem
 	if point.Tag == "home" {
 		return nil, errors.New("home is not extendable")
 	}
+	if trx.GetLink("member::"+state.Info().PointId()+"::"+input.UserId) != "true" {
+		return nil, errors.New("membership does exist")
+	}
 	trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.UserId)
 	trx.DelKey("link::memberof::" + input.UserId + "::" + state.Info().PointId())
 	point.MemberCount--
@@ -430,6 +438,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	if input.Origin() == "global" {
 		orig = "global"
 	}
+	input.Members[state.Info().UserId()] = true
 	if input.Tag == "1-to-1" {
 		if len(input.Members) > 2 {
 			return nil, errors.New("1-to-1 chat can not have more than 2 members")
@@ -443,12 +452,15 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		for k := range input.Members {
 			input.Members[k] = true
 		}
-		input.Members[state.Info().UserId()] = true
 		ids := []string{}
 		for k := range input.Members {
 			ids = append(ids, k)
 		}
 		slices.Sort(ids)
+		a.OneToOneLocks.SetIfAbsent(ids[0]+"<->"+ids[1], &LockHolder{})
+		locker, _ := a.OneToOneLocks.Get(ids[0] + "<->" + ids[1])
+		locker.Lock.Lock()
+		defer locker.Lock.Unlock()
 		if pointId := trx.GetLink("1-to-1-map::" + ids[0] + "<->" + ids[1]); pointId != "" {
 			point := model.Point{Id: pointId}.Pull(trx, true)
 			return outputs_points.CreateOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
@@ -466,7 +478,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 			return nil, err
 		}
 	}
-	point := model.Point{Id: a.App.Tools().Storage().GenId(trx, orig), Tag: input.Tag, IsPublic: *input.IsPublic, PersHist: *input.PersHist, ParentId: input.ParentId}
+	point := model.Point{Id: a.App.Tools().Storage().GenId(trx, orig), MemberCount: int32(len(input.Members)), Tag: input.Tag, IsPublic: *input.IsPublic, PersHist: *input.PersHist, ParentId: input.ParentId}
 	point.Push(trx)
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
@@ -509,7 +521,6 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		slices.Sort(ids)
 		trx.PutLink("1-to-1-map::"+ids[0]+"<->"+ids[1], point.Id)
 	}
-	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
 	for memberId := range input.Members {
 		a.App.Tools().Signaler().JoinGroup(point.Id, memberId)
 	}
@@ -652,6 +663,7 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 			"isPublic":    point.IsPublic,
 			"persHist":    point.PersHist,
 			"memberCount": point.MemberCount,
+			"signalCount": point.SignalCount,
 			"tag":         point.Tag,
 		}
 		if input.IncludeMeta {
@@ -681,6 +693,7 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 		"isPublic":    point.IsPublic,
 		"persHist":    point.PersHist,
 		"memberCount": point.MemberCount,
+		"signalCount": point.SignalCount,
 		"tag":         point.Tag,
 		"lastPacket":  lastPacket,
 	}
@@ -719,6 +732,7 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 			"isPublic":    point.IsPublic,
 			"persHist":    point.PersHist,
 			"memberCount": point.MemberCount,
+			"signalCount": point.SignalCount,
 			"tag":         point.Tag,
 			"lastPacket":  lastPacket,
 		}
@@ -751,13 +765,61 @@ func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, 
 	if !point.IsPublic {
 		return nil, errors.New("point is private")
 	}
+	if trx.GetLink("member::"+point.Id+"::"+state.Info().UserId()) == "true" {
+		return nil, errors.New("membership already eixsts")
+	}
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
+	point.MemberCount++
+	point.Push(trx)
 	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
 	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/join", point.Id, updates_points.Join{PointId: point.Id, User: user}, true, []string{state.Info().UserId()})
 	}, false)
+	return outputs_points.JoinOutput{}, nil
+}
+
+// Leave /points/leave check [ true false false ] access [ true false false false POST ]
+func (a *Actions) Leave(state state.IState, input inputs_points.JoinInput) (any, error) {
+	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
+	if !trx.HasObj("Point", input.PointId) {
+		return nil, errors.New("point not found")
+	}
+	point := model.Point{Id: input.PointId}.Pull(trx)
+	if !point.IsPublic {
+		return nil, errors.New("point is private")
+	}
+	if trx.GetLink("member::"+point.Id+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("membership doesn't eixst")
+	}
+	trx.DelKey("link::member::" + point.Id + "::" + state.Info().UserId())
+	trx.DelKey("link::memberof::" + state.Info().UserId() + "::" + point.Id)
+	if trx.GetLink("admin::"+point.Id+"::"+state.Info().UserId()) == "true" {
+		trx.DelKey("link::admin::" + point.Id + "::" + state.Info().UserId())
+		trx.DelKey("lnik::adminof::" + state.Info().UserId() + "::" + point.Id)
+	}
+	point.MemberCount--
+	point.Push(trx)
+	a.App.Tools().Signaler().LeaveGroup(point.Id, state.Info().UserId())
+	user := model.User{Id: state.Info().UserId()}.Pull(trx)
+	future.Async(func() {
+		a.App.Tools().Signaler().SignalGroup("points/join", point.Id, updates_points.Join{PointId: point.Id, User: user}, true, []string{state.Info().UserId()})
+	}, false)
+	if point.MemberCount == 0 {
+		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		trx.DelIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string))
+		point.Delete(trx)
+		a.Locks.Remove(state.Info().PointId())
+	}
 	return outputs_points.JoinOutput{}, nil
 }
 
@@ -779,13 +841,13 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 			point.SignalCount++
 			point.Push(trx)
 			future.Async(func() {
-					a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+				a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
 			}, false)
 			return outputs_points.SignalOutput{Passed: true, Packet: packet}, nil
 		} else {
 			var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t, IsTemp: true}
 			future.Async(func() {
-					a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+				a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
 			}, false)
 			return outputs_points.SignalOutput{Passed: true}, nil
 		}
