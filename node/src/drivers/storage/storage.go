@@ -36,11 +36,22 @@ func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data str
 	defer sm.lock.Unlock()
 	ctx := context.Background()
 	id := gocql.TimeUUID()
-	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data, time) VALUES (?, ?, ?, ?, ?)`,
-		id, pointId, userId, data, timeVal).WithContext(ctx).Exec(); err != nil {
+	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data, time, edited) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, pointId, userId, data, timeVal, false).WithContext(ctx).Exec(); err != nil {
 		log.Fatal(err)
 	}
-	return packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal}
+	return packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: false}
+}
+
+func (sm *StorageManager) UpdateLog(pointId string, userId string, signalId string, data string, timeVal int64) packet.LogPacket {
+	sm.lock.Lock()
+	defer sm.lock.Unlock()
+	ctx := context.Background()
+	id := gocql.TimeUUID()
+	if err := sm.tsdb.Query(`UPDATE storage SET data = ?, time = ?, edited = ? WHERE user_id = ? IF id = ?;`, data, timeVal, true, userId, id).WithContext(ctx).Exec(); err != nil {
+		log.Println(err)
+	}
+	return packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: true}
 }
 
 func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count int) []packet.LogPacket {
@@ -49,14 +60,14 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count
 	ctx := context.Background()
 	var scanner gocql.Scanner
 	if beforeTime == "" {
-		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time FROM storage WHERE point_id = ? limit ? ALLOW FILTERING`, pointId, count).WithContext(ctx).Iter().Scanner()
+		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time, edited FROM storage WHERE point_id = ? limit ? ALLOW FILTERING`, pointId, count).WithContext(ctx).Iter().Scanner()
 	} else {
 		uuid, err := gocql.ParseUUID(beforeTime)
 		if err != nil {
 			fmt.Println("Invalid UUID:", err)
 			return []packet.LogPacket{}
 		}
-		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time FROM storage WHERE point_id = ? and id < ? limit ? ALLOW FILTERING`, pointId, uuid, count).WithContext(ctx).Iter().Scanner()
+		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time, edited FROM storage WHERE point_id = ? and id < ? limit ? ALLOW FILTERING`, pointId, uuid, count).WithContext(ctx).Iter().Scanner()
 	}
 	logs := []packet.LogPacket{}
 	for scanner.Next() {
@@ -64,11 +75,12 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count
 		var userId string
 		var data string
 		var timeVal int64
-		err := scanner.Scan(&id, &userId, &data, &timeVal)
+		var edited bool
+		err := scanner.Scan(&id, &userId, &data, &timeVal, &edited)
 		if err != nil {
 			log.Fatal(err)
 		}
-		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal})
+		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: edited})
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)

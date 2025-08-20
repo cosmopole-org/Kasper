@@ -12,5 +12,6 @@ type IStorage interface {
 	KvDb() *badger.DB
 	GenId(t trx.ITrx, origin string) string
 	LogTimeSieries(pointId string, userId string, data string, timeVal int64) packet.LogPacket
+	UpdateLog(pointId string, userId string, signalId string, data string, timeVal int64) packet.LogPacket
 	ReadPointLogs(pointId string, beforeTime string, count int) []packet.LogPacket
 }

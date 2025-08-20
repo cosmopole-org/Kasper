@@ -12,4 +12,5 @@ type LogPacket struct {
 	UserId  string `json:"userId"`
 	Data    string `json:"data"`
 	Time    int64  `json:"time"`
+	Edited  bool   `json:"edited"`
 }

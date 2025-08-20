@@ -17,6 +17,7 @@ type Point struct {
 	Title       string `json:"title"`
 	Avatar      string `json:"avatar"`
 	MemberCount int32  `json:"memberCount"`
+	SignalCount int64  `json:"signalCount"`
 }
 
 func (d Point) Type() string {
@@ -33,16 +34,19 @@ func (d Point) Push(trx trx.ITrx) {
 		b2 = byte(0x01)
 	}
 	b3 := make([]byte, 4)
-	if d.MemberCount < 1 { 
+	if d.MemberCount < 1 {
 		d.MemberCount = 1
 	}
+	b4 := make([]byte, 8)
 	binary.LittleEndian.PutUint32(b3, uint32(d.MemberCount))
+	binary.LittleEndian.PutUint64(b4, uint64(d.SignalCount))
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
 		"tag":         []byte(d.Tag),
 		"parentId":    []byte(d.ParentId),
 		"isPublic":    {b},
 		"persHist":    {b2},
 		"memberCount": b3,
+		"signalCount": b4,
 	})
 }
 
@@ -54,6 +58,7 @@ func (d Point) Delete(trx trx.ITrx) {
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::isPublic")
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::persHist")
 	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::memberCount")
+	trx.DelKey("obj::" + d.Type() + "::" + d.Id + "::signalCount")
 	trx.DelJson("PointMeta::"+d.Id, "metadata")
 }
 
@@ -63,6 +68,7 @@ func (d Point) Pull(trx trx.ITrx, flags ...bool) Point {
 		d.Tag = string(m["tag"])
 		d.ParentId = string(m["parentId"])
 		d.MemberCount = int32(binary.LittleEndian.Uint32(m["memberCount"]))
+		d.SignalCount = int64(binary.LittleEndian.Uint64(m["signalCount"]))
 		d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 		d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 		if len(flags) > 0 {
@@ -107,6 +113,7 @@ func (d Point) List(trx trx.ITrx, prefix string, positional ...int) ([]Point, er
 			d.Tag = string(m["tag"])
 			d.ParentId = string(m["parentId"])
 			d.MemberCount = int32(binary.LittleEndian.Uint32(m["memberCount"]))
+			d.SignalCount = int64(binary.LittleEndian.Uint64(m["signalCount"]))
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)
@@ -132,6 +139,7 @@ func (d Point) All(trx trx.ITrx, offset int64, count int64, query map[string]str
 			d.Tag = string(m["tag"])
 			d.ParentId = string(m["parentId"])
 			d.MemberCount = int32(binary.LittleEndian.Uint32(m["memberCount"]))
+			d.SignalCount = int64(binary.LittleEndian.Uint64(m["signalCount"]))
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)
@@ -162,6 +170,7 @@ func (d Point) Search(trx trx.ITrx, offset int64, count int64, word string, filt
 			d.Tag = string(m["tag"])
 			d.ParentId = string(m["parentId"])
 			d.MemberCount = int32(binary.LittleEndian.Uint32(m["memberCount"]))
+			d.SignalCount = int64(binary.LittleEndian.Uint64(m["signalCount"]))
 			d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 			d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
 			entities = append(entities, d)

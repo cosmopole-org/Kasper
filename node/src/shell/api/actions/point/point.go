@@ -13,20 +13,33 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+
+	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
+type LockHolder struct {
+	Lock sync.Mutex
+}
+
 type Actions struct {
-	App core.ICore
+	App   core.ICore
+	Locks cmap.ConcurrentMap[string, *LockHolder]
 }
 
 func Install(a *Actions) error {
+	a.Locks = cmap.New[*LockHolder]()
 	return nil
 }
 
 // AddApp /points/addApp check [ true true false ] access [ true false false false POST ]
 func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if !trx.HasObj("App", input.AppId) {
 		return nil, errors.New("app not found")
 	}
@@ -142,6 +155,10 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 // UpdateMachine /points/updateMachine check [ true true false ] access [ true false false false POST ]
 func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMachineInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if !trx.HasObj("App", input.AppId) {
 		return nil, errors.New("app not found")
 	}
@@ -171,6 +188,10 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMa
 // RemoveApp /points/removeApp check [ true true false ] access [ true false false false POST ]
 func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if !trx.HasObj("App", input.AppId) {
 		return nil, errors.New("app not found")
 	}
@@ -218,6 +239,10 @@ func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInp
 // AddMachine /points/addMachine check [ true true false ] access [ true false false false POST ]
 func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if !trx.HasObj("App", input.AppId) {
 		return nil, errors.New("app not found")
 	}
@@ -257,6 +282,10 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 // RemoveMachine /points/removeMachine check [ true true false ] access [ true false false false POST ]
 func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMachineInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if !trx.HasObj("App", input.AppId) {
 		return nil, errors.New("app not found")
 	}
@@ -294,6 +323,10 @@ func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMa
 // AddMember /points/addMember check [ true true false ] access [ true false false false POST ]
 func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if !trx.HasObj("User", input.UserId) {
 		return nil, errors.New("user not found")
 	}
@@ -364,6 +397,10 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 // RemoveMember /points/removeMember check [ true true false ] access [ true false false false POST ]
 func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMemberInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
 		return nil, errors.New("you are not admin")
 	}
@@ -484,6 +521,10 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 // Update /points/update check [ true true false ] access [ true false false false PUT ]
 func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
 		return nil, errors.New("you are not admin")
 	}
@@ -534,6 +575,10 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 // Delete /points/delete check [ true true false ] access [ true false false false DELETE ]
 func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if len(trx.GetColumn("Point", state.Info().PointId(), "|")) == 0 {
 		return nil, errors.New("point does not exist")
 	}
@@ -571,6 +616,7 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 			a.App.Tools().Signaler().LeaveGroup(point.Id, user)
 		}
 	}, false)
+	a.Locks.Remove(state.Info().PointId())
 	return outputs_points.DeleteOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
 }
 
@@ -694,6 +740,10 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 // Join /points/join check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	if !trx.HasObj("Point", input.PointId) {
 		return nil, errors.New("point not found")
 	}
@@ -714,6 +764,10 @@ func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, 
 // Signal /points/signal check [ true true true ] access [ true false false false POST ]
 func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (any, error) {
 	trx := state.Trx()
+	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
+	locker, _ := a.Locks.Get(state.Info().PointId())
+	locker.Lock.Lock()
+	defer locker.Lock.Unlock()
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx, true)
 	user := model.User{Id: state.Info().UserId()}.Pull(trx, true)
 	t := time.Now().UnixMilli()
@@ -722,11 +776,17 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 			packet := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
 			trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", packet, false)
 			var p = updates_points.Send{Id: packet.Id, Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
-			a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+			point.SignalCount++
+			point.Push(trx)
+			future.Async(func() {
+					a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+			}, false)
 			return outputs_points.SignalOutput{Passed: true, Packet: packet}, nil
 		} else {
 			var p = updates_points.Send{Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t, IsTemp: true}
-			a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+			future.Async(func() {
+					a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
+			}, false)
 			return outputs_points.SignalOutput{Passed: true}, nil
 		}
 	} else if input.Type == "single" {
@@ -735,11 +795,17 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 				packet := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
 				trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", packet, false)
 				var p = updates_points.Send{Id: packet.Id, Action: "single", Point: point, User: user, Data: input.Data, Time: t}
-				a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
+				point.SignalCount++
+				point.Push(trx)
+				future.Async(func() {
+					a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
+				}, false)
 				return outputs_points.SignalOutput{Passed: true, Packet: packet}, nil
 			} else {
 				var p = updates_points.Send{Action: "single", Point: point, User: user, Data: input.Data, Time: t, IsTemp: true}
-				a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
+				future.Async(func() {
+					a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
+				}, false)
 				return outputs_points.SignalOutput{Passed: true}, nil
 			}
 		}
