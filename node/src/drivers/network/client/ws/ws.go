@@ -285,7 +285,15 @@ func (t *Socket) processPacket(packet []byte) {
 	payload := packet[pointer:]
 	log.Println(string(payload))
 
-	if path == "authenticate" {
+	if path == "logout" {
+		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
+		if success {
+			t.app.Tools().Signaler().Listeners().Remove(userId)
+			t.writeResponse(packetId, 0, packetmodel.BuildErrorJson("loggedout"), false)
+		} else {
+			t.writeResponse(packetId, 0, packetmodel.BuildErrorJson("logout_failed"), false)
+		}
+	} else if path == "authenticate" {
 		var lis *signaler.Listener
 		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
 		if success {
