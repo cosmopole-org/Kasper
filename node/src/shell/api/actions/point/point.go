@@ -780,7 +780,7 @@ func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, 
 	return outputs_points.JoinOutput{}, nil
 }
 
-// Leave /points/leave check [ true false false ] access [ true false false false POST ]
+// Leave /points/leave check [ true true false ] access [ true false false false POST ]
 func (a *Actions) Leave(state state.IState, input inputs_points.JoinInput) (any, error) {
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})

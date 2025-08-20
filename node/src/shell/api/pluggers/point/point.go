@@ -82,6 +82,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Join)
 		}
 		
+		func (c *Plugger) Leave() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Leave)
+		}
+		
 		func (c *Plugger) Signal() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Signal)
 		}
