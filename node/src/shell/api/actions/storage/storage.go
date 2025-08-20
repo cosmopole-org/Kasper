@@ -44,8 +44,8 @@ func registerRoute(path string, handler func(w http.ResponseWriter, r *http.Requ
 
 func Install(a *Actions) error {
 	registerRoute("/storage/downloadUserEntity", func(w http.ResponseWriter, r *http.Request) {
-		userId := r.Header.Get("user_id")
-		inputLengthStr := r.Header.Get("input_length")
+		userId := r.Header.Get("User-Id")
+		inputLengthStr := r.Header.Get("Input-Length")
 		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
 		if err != nil {
 			log.Printf("Error reading body: %v", err)
@@ -75,8 +75,8 @@ func Install(a *Actions) error {
 		w.Write([]byte(data))
 	})
 	registerRoute("/storage/uploadUserEntity", func(w http.ResponseWriter, r *http.Request) {
-		userId := r.Header.Get("user_id")
-		inputLengthStr := r.Header.Get("input_length")
+		userId := r.Header.Get("User-Id")
+		inputLengthStr := r.Header.Get("Input-Length")
 		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
 		if err != nil {
 			log.Printf("Error reading body: %v", err)
@@ -96,8 +96,8 @@ func Install(a *Actions) error {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
 		}
-		machineId := r.Header.Get("machine_id")
-		entityId := r.Header.Get("entity_id")
+		machineId := r.Header.Get("Machine-Id")
+		entityId := r.Header.Get("Entity-Id")
 		var e error
 		a.App.ModifyState(false, func(trx trx.ITrx) error {
 			data := inputBody
@@ -133,8 +133,8 @@ func Install(a *Actions) error {
 		}
 	})
 	registerRoute("/storage/uploadPointEntity", func(w http.ResponseWriter, r *http.Request) {
-		userId := r.Header.Get("user_id")
-		inputLengthStr := r.Header.Get("input_length")
+		userId := r.Header.Get("User-Id")
+		inputLengthStr := r.Header.Get("Input-Length")
 		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
 		if err != nil {
 			log.Printf("Error reading body: %v", err)
@@ -154,8 +154,8 @@ func Install(a *Actions) error {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
 		}
-		pointId := r.Header.Get("point_id")
-		entityId := r.Header.Get("entity_id")
+		pointId := r.Header.Get("Point-Id")
+		entityId := r.Header.Get("Entity-Id")
 		var e error
 		a.App.ModifyState(false, func(trx trx.ITrx) error {
 			data := inputBody
@@ -184,8 +184,8 @@ func Install(a *Actions) error {
 		}
 	})
 	registerRoute("/storage/downloadPointEntity", func(w http.ResponseWriter, r *http.Request) {
-		userId := r.Header.Get("user_id")
-		inputLengthStr := r.Header.Get("input_length")
+		userId := r.Header.Get("User-Id")
+		inputLengthStr := r.Header.Get("Input-Length")
 		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
 		if err != nil {
 			log.Printf("Error reading body: %v", err)
