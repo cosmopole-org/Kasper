@@ -38,6 +38,13 @@ func registerRoute(path string, handler func(w http.ResponseWriter, r *http.Requ
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		}()
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-My-Header")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		handler(w, r)
 	})
 }
