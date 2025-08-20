@@ -76,6 +76,12 @@ func Install(a *Actions) error {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
 		}
+		err = json.Unmarshal(inputBody, &input)
+		if err != nil {
+			log.Printf("Error parsing body: %v", err)
+			http.Error(w, "can't parse body", http.StatusBadRequest)
+			return
+		}
 		data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+input.UserId, input.EntityId)
 		if err != nil {
 			log.Println(err)
@@ -214,6 +220,12 @@ func Install(a *Actions) error {
 		signature := body[inputLength:]
 		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		err = json.Unmarshal(inputBody, &input)
+		if err != nil {
+			log.Printf("Error parsing body: %v", err)
+			http.Error(w, "can't parse body", http.StatusBadRequest)
 			return
 		}
 		data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, input.EntityId)
