@@ -6,8 +6,8 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
-	"kasper/src/shell/api/model"
 	models "kasper/src/shell/api/model"
+	"kasper/src/shell/utils/future"
 	"log"
 )
 
@@ -70,8 +70,8 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 			return nil, err
 		}
 	} else {
-		vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
-		app := model.App{Id: vm.AppId}.Pull(trx)
+		vm := models.Vm{MachineId: input.MachineId}.Pull(trx)
+		app := models.App{Id: vm.AppId}.Pull(trx)
 		if app.OwnerId != state.Info().UserId() {
 			return nil, errors.New("you are not owner of this machine")
 		}
@@ -98,6 +98,9 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 		log.Println(err)
 		return nil, err
 	}
+	future.Async(func() {
+		a.App.Tools().Signaler().SignalGroup("storage/pointEntityUpdated", state.Info().PointId(), map[string]any{"entityId": input.EntityId}, true, []string{})
+	}, false)
 	return map[string]any{}, nil
 }
 
