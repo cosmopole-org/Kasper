@@ -292,7 +292,7 @@ func (a *Actions) Delete(state state.IState, input inputsusers.DeleteInput) (any
 	trx.DelKey("link::UserPrivateKey::"+user.Id)
 	trx.DelKey("link::UserEmailToId::"+email)
 	trx.DelKey("link::UserIdToEmail::"+user.Id)
-	trx.DelIndex("User", "username", "id", user.Username+"@"+state.Source())
+	trx.DelIndex("User", "username", "id", user.Username+"@"+a.App.Id())
 	user.Username = "deleted_user"
 	user.PublicKey = ""
 	user.Balance = 0
