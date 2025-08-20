@@ -83,6 +83,28 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 	return map[string]any{}, nil
 }
 
+// DeleteUserEntity /storage/deleteUserEntity check [ true false false ] access [ true false false false POST ]
+func (a *Actions) DeleteUserEntity(state state.IState, input inputs_storage.DeleteUserEntityInput) (any, error) {
+	trx := state.Trx()
+	if input.MachineId == "" {
+		if err := a.App.Tools().File().DeleteFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), input.EntityId, true); err != nil {
+			log.Println(err)
+			return nil, err
+		}
+	} else {
+		vm := models.Vm{MachineId: input.MachineId}.Pull(trx)
+		app := models.App{Id: vm.AppId}.Pull(trx)
+		if app.OwnerId != state.Info().UserId() {
+			return nil, errors.New("you are not owner of this machine")
+		}
+		if err := a.App.Tools().File().DeleteFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, input.EntityId, true); err != nil {
+			log.Println(err)
+			return nil, err
+		}
+	}
+	return map[string]any{}, nil
+}
+
 // UploadPointEntity /storage/uploadPointEntity check [ true true true ] access [ true false false false POST ]
 func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.UploadPointEntityInput) (any, error) {
 	trx := state.Trx()
@@ -95,6 +117,22 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 		return nil, errors.New("you are not admin")
 	}
 	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+state.Info().PointId(), data, input.EntityId, true); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	future.Async(func() {
+		a.App.Tools().Signaler().SignalGroup("storage/updatePointEntity", state.Info().PointId(), map[string]any{"pointId": state.Info().PointId(), "entityId": input.EntityId}, true, []string{})
+	}, false)
+	return map[string]any{}, nil
+}
+
+// DeletePointEntity /storage/deletePointEntity check [ true true true ] access [ true false false false POST ]
+func (a *Actions) DeletePointEntity(state state.IState, input inputs_storage.DeletePointEntityInput) (any, error) {
+	trx := state.Trx()
+	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) == "" {
+		return nil, errors.New("you are not admin")
+	}
+	if err := a.App.Tools().File().DeleteFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+state.Info().PointId(), input.EntityId, true); err != nil {
 		log.Println(err)
 		return nil, err
 	}

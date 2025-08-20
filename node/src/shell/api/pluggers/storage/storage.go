@@ -22,8 +22,16 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.UploadUserEntity)
 		}
 		
+		func (c *Plugger) DeleteUserEntity() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.DeleteUserEntity)
+		}
+		
 		func (c *Plugger) UploadPointEntity() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.UploadPointEntity)
+		}
+		
+		func (c *Plugger) DeletePointEntity() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.DeletePointEntity)
 		}
 		
 		func (c *Plugger) DownloadUserEntity() iaction.IAction {

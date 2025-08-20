@@ -12,7 +12,6 @@ import (
 )
 
 type File struct {
-	
 }
 
 func (g *File) CheckFileFromStorage(storageRoot string, topicId string, key string) bool {
@@ -62,7 +61,7 @@ func (g *File) SaveFileToStorage(storageRoot string, fh *multipart.FileHeader, t
 	return nil
 }
 
-func (g *File) SaveDataToStorage(storageRoot string, data []byte, topicId string, key string, flag... bool) error {
+func (g *File) SaveDataToStorage(storageRoot string, data []byte, topicId string, key string, flag ...bool) error {
 	var dirPath = fmt.Sprintf("%s/files/%s", storageRoot, topicId)
 	err := os.MkdirAll(dirPath, os.ModePerm)
 	if err != nil {
@@ -191,6 +190,17 @@ func (g *File) SaveFileToGlobalStorage(storageRoot string, fh *multipart.FileHea
 	if _, err = dest.Write(buf.Bytes()); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (g *File) DeleteFileFromGlobalStorage(storageRoot string, key string, overwrite bool) error {
+	filePath := fmt.Sprintf("%s/%s", storageRoot, key)
+	_, err := os.Stat(filePath)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	os.Remove(filePath)
 	return nil
 }
 
