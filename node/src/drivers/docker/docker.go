@@ -381,10 +381,6 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 					outputDone <- err
 					break
 				}
-				if len == 0 {
-					outputChan <- ""
-					break
-				}
 				outputChan <- string(oBuf[:len])
 			}
 		}()
