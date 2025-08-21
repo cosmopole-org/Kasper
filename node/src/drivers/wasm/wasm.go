@@ -302,6 +302,8 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println("Error reading response body:" + err.Error())
 			return err.Error()
 		}
+		log.Println(len(bodyBytes))
+		log.Println(string(bodyBytes))
 		return string(bodyBytes)
 	} else if key == "checkTokenValidity" {
 		tokenOwnerId, err := checkField(input, "tokenOwnerId", "")

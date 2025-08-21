@@ -997,6 +997,7 @@ func run(a int64) int64 {
 					json.Unmarshal([]byte(res), &m)
 					url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["large"].(string)
 					data := network.Request("GET", url, map[string]string{}, map[string]any{})
+					logger.Log(data)
 					inp := model.UploadPointEntityInput{
 						EntityId: "wallpaper",
 						PointId:  point.Id,
