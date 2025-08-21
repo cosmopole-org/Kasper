@@ -1103,6 +1103,16 @@ func run(a int64) int64 {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
 				return 0
 			}
+			var point Point
+			pIdRaw := input["pointId"]
+			if pIdRaw != nil {
+				p := trx.Db.Points.FindById(pIdRaw.(string))
+				if p.IsPublic == true {
+					point = p
+				}
+			} else {
+				point = trx.Db.Points.FindById(signal.Point.Id)
+			}
 			docIdRaw := input["docId"]
 			if docIdRaw == nil {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})
@@ -1114,7 +1124,7 @@ func run(a int64) int64 {
 				return 0
 			}
 			doc := trx.Db.Docs.FindById(docId)
-			if doc.PointId == signal.Point.Id {
+			if doc.PointId == point.Id {
 				if doc.Id == "" {
 					answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 6})
 					return 0
