@@ -264,7 +264,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return err.Error()
 		}
 		method := strings.Split(url, "|")[0]
-		url = url[len(method):]
+		url = url[len(method)+1:]
 		headers, err := checkField(input, "headers", "")
 		if err != nil {
 			log.Println(err)
