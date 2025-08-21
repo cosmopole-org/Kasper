@@ -263,6 +263,8 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
+		method := strings.Split(url, "|")[0]
+		url = url[len(method):]
 		headers, err := checkField(input, "headers", "")
 		if err != nil {
 			log.Println(err)
@@ -273,7 +275,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(body)))
+		req, err := http.NewRequest(method, url, bytes.NewBuffer([]byte(body)))
 		if err != nil {
 			log.Println("Error creating request:" + err.Error())
 			return err.Error()
