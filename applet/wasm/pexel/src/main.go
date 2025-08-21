@@ -709,6 +709,14 @@ func (c *Chain) PlantTrigger(count int32, pointId string, tag string, input map[
 	plantTrigger(tagO, tagL, inputO, inputL, piO, piL, count)
 }
 
+func (c *OffChain) PlantRewoke(seconds int32, input map[string]any) {
+	tagO, tagL := bytesToPointer([]byte("alarm"))
+	piO, piL := bytesToPointer([]byte("alarm"))
+	b, _ := json.Marshal(input)
+	inputO, inputL := bytesToPointer(b)
+	plantTrigger(tagO, tagL, inputO, inputL, piO, piL, seconds)
+}
+
 func (c *OffChain) SubmitBaseRequest(pointId string, key string, userId string, signature string, tag string, input any) []byte {
 	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + "-" + "|" + "false"))
 	tagO, tagL := bytesToPointer([]byte("10" + tag))
@@ -994,16 +1002,16 @@ func run(a int64) int64 {
 				for _, point := range points {
 					res := network.Request("GET", "https://api.pexels.com/v1/curated?per_page=1", map[string]string{"Authorization": API_KEY}, map[string]any{})
 					m := map[string]any{}
-					json.Unmarshal([]byte(res), &m)
+					j, _ := base64.StdEncoding.DecodeString(res)
+					json.Unmarshal([]byte(j), &m)
 					url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["large"].(string)
 					data := network.Request("GET", url, map[string]string{}, map[string]any{})
 					inp := model.UploadPointEntityInput{
-						EntityId: "wallpaper",
+						EntityId: "background",
 						PointId:  point.Id,
-						Data:     base64.StdEncoding.EncodeToString([]byte(data)),
+						Data:     data,
 					}
-					response := trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/storage/uplloadPointEntity", "", "", "", inp)
-					logger.Log(string(response))
+					trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/storage/uploadPointEntity", "", "", "", inp)
 				}
 				time.Sleep(60000)
 			}

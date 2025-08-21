@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 type Wasm struct {
@@ -534,7 +535,16 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		wm.app.PlantChainTrigger(int(count), machineId, tag, machineId, pointId, data)
+		if tag == "alarm" {
+			future.Async(func() {
+				time.Sleep(time.Duration(count) * time.Second)
+				if wm.app.Tools().Security().HasAccessToPoint(machineId, pointId) {
+					wm.RunVm(machineId, pointId, data)
+				}
+			}, false)
+		} else {
+			wm.app.PlantChainTrigger(int(count), machineId, tag, machineId, pointId, data)
+		}
 	} else if key == "signalPoint" {
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
