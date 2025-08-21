@@ -1,4 +1,4 @@
-FROM docker.arvancloud.ir/ubuntu:24.04
+FROM ubuntu:24.04
 WORKDIR /app
 
 ENV DEBIAN_FRONTEND=noninteractive
