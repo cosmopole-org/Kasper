@@ -438,6 +438,9 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	if input.Origin() == "global" {
 		orig = "global"
 	}
+	if input.Members == nil {
+		input.Members = map[string]bool{}
+	}
 	input.Members[state.Info().UserId()] = true
 	if input.Tag == "1-to-1" {
 		if len(input.Members) > 2 {
