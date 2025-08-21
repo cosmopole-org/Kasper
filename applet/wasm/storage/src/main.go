@@ -956,7 +956,7 @@ func run(a int64) int64 {
 	trx := &Trx[MyDb]{
 		Db: NewMyDb(),
 	}
-	actRaw, ok := input["act"]
+	actRaw, ok := input["type"]
 	if !ok {
 		answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 1})
 	}

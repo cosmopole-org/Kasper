@@ -6,11 +6,11 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unsafe"
 )
 
@@ -709,9 +709,9 @@ func (c *Chain) PlantTrigger(count int32, pointId string, tag string, input map[
 	plantTrigger(tagO, tagL, inputO, inputL, piO, piL, count)
 }
 
-func (c *OffChain) PlantRewoke(seconds int32, input map[string]any) {
+func (c *OffChain) PlantRewoke(seconds int32, pointId string, input map[string]any) {
 	tagO, tagL := bytesToPointer([]byte("alarm"))
-	piO, piL := bytesToPointer([]byte("alarm"))
+	piO, piL := bytesToPointer([]byte(pointId))
 	b, _ := json.Marshal(input)
 	inputO, inputL := bytesToPointer(b)
 	plantTrigger(tagO, tagL, inputO, inputL, piO, piL, seconds)
@@ -912,9 +912,9 @@ type FileResponse struct {
 	File File `json:"file"`
 }
 
-func answer(pointId string, userId string, data any) {
+func answer(pointId string, userId string, data any, temp bool) {
 	res, _ := json.Marshal(data)
-	SendSignal("single", pointId, userId, string(res), true)
+	SendSignal("single", pointId, userId, string(res), temp)
 }
 
 func broadcast(pointId string, data any) {
@@ -987,24 +987,54 @@ func run(a int64) int64 {
 	}
 	actRaw, ok := input["type"]
 	if !ok {
-		answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 1})
+		answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 1}, true)
 	}
 	act, ok := actRaw.(string)
 	if !ok {
-		answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 2})
+		answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 2}, true)
 	}
 
 	switch act {
-	case "adminInit":
+	case "adminStart":
 		{
-			for {
+			trx.Db.BaseDB.Put("shouldRun", []byte("true"))
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"message": "pexel app started."}, true)
+			points := trx.Db.Points.Read("all", "", "")
+			for _, point := range points {
+				res := network.Request("GET", "https://api.pexels.com/v1/curated?per_page=1", map[string]string{"Authorization": API_KEY}, map[string]any{})
+				m := map[string]any{}
+				j, _ := base64.StdEncoding.DecodeString(res)
+				json.Unmarshal([]byte(j), &m)
+				url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["large"].(string)
+				data := network.Request("GET", url, map[string]string{}, map[string]any{})
+				inp := model.UploadPointEntityInput{
+					EntityId: "background",
+					PointId:  point.Id,
+					Data:     data,
+				}
+				trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/storage/uploadPointEntity", "", "", "", inp)
+			}
+			trx.Offchain.PlantRewoke(120, signal.Point.Id, map[string]any{
+				"type": "updateWallpapers",
+			})
+			break
+		}
+	case "adminStop":
+		{
+			trx.Db.BaseDB.Put("shouldRun", []byte("false"))
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"message": "pexel app stopped."}, true)
+			break
+		}
+	case "updateWallpapers":
+		{
+			if string(trx.Db.BaseDB.Get("shouldRun")) == "true" {
 				points := trx.Db.Points.Read("all", "", "")
 				for _, point := range points {
-					res := network.Request("GET", "https://api.pexels.com/v1/curated?per_page=1", map[string]string{"Authorization": API_KEY}, map[string]any{})
+					res := network.Request("GET", "https://api.pexels.com/v1/curated?per_page=50", map[string]string{"Authorization": API_KEY}, map[string]any{})
 					m := map[string]any{}
 					j, _ := base64.StdEncoding.DecodeString(res)
 					json.Unmarshal([]byte(j), &m)
-					url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["large"].(string)
+					url := m["photos"].([]any)[rand.Intn(len(m["photos"].([]any)))].(map[string]any)["src"].(map[string]any)["large"].(string)
 					data := network.Request("GET", url, map[string]string{}, map[string]any{})
 					inp := model.UploadPointEntityInput{
 						EntityId: "background",
@@ -1013,7 +1043,9 @@ func run(a int64) int64 {
 					}
 					trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/storage/uploadPointEntity", "", "", "", inp)
 				}
-				time.Sleep(60000)
+				trx.Offchain.PlantRewoke(120, signal.Point.Id, map[string]any{
+					"type": "updateWallpapers",
+				})
 			}
 		}
 	case "textMessage":
@@ -1023,7 +1055,7 @@ func run(a int64) int64 {
 				trx.Db.Points.CreateAndInsert(&Point{
 					Id: signal.Point.Id,
 				})
-				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": "pexel activated"})
+				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": "pexel activated"}, false)
 			}
 			break
 		}
