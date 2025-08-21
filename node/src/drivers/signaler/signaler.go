@@ -73,7 +73,11 @@ func (p *Signaler) SignalUser(key string, listenerId string, data any, pack bool
 	if username == "" {
 		return
 	}
-	origin := strings.Split(username, "@")[1]
+	uParts := strings.Split(username, "@")
+	if len(uParts) < 2 {
+		return
+	}
+	origin := uParts[1]
 	if origin == p.app.Id() {
 		listener, found := p.listeners.Get(listenerId)
 		if found && (listener != nil) {
@@ -144,7 +148,11 @@ func (p *Signaler) SignalGroup(key string, groupId string, data any, pack bool, 
 			if username == "" {
 				continue
 			}
-			userOrigin := strings.Split(username, "@")[1]
+			uParts := strings.Split(username, "@")
+			if len(uParts) < 2 {
+				continue
+			}
+			userOrigin := uParts[1]
 			log.Println(p.app.Id() + " " + userOrigin)
 			if (userOrigin == p.app.Id()) || (userOrigin == "global") {
 				if !p.LGroupDisabled || !group.Override {
