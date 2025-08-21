@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bufio"
 	"errors"
 	"kasper/src/abstract/adapters/docker"
 	"kasper/src/abstract/adapters/file"
@@ -350,54 +351,11 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 
 	defer imageBuildResponse.Body.Close()
 
-	var outBuf, errBuf bytes.Buffer
-	outputDone := make(chan error, 1)
-
-	go func() {
-		_, err = stdcopy.StdCopy(&outBuf, &errBuf, imageBuildResponse.Body)
-		outputDone <- err
-		go func() {
-			oBuf := make([]byte, 128)
-			for {
-				len, err := outBuf.Read(oBuf)
-				if err != nil {
-					log.Println(err)
-					outputDone <- err
-					break
-				}
-				if len == 0 {
-					outputChan <- ""
-					break
-				}
-				outputChan <- string(oBuf[:len])
-			}
-		}()
-		go func() {
-			oBuf := make([]byte, 128)
-			for {
-				len, err := errBuf.Read(oBuf)
-				if err != nil {
-					log.Println(err)
-					outputDone <- err
-					break
-				}
-				outputChan <- string(oBuf[:len])
-			}
-		}()
-	}()
-
-	select {
-	case err := <-outputDone:
-		if err != nil {
-			log.Println(err)
-			outputChan <- err.Error()
-			return err
-		}
-		break
-
-	case <-ctx.Done():
-		outputChan <- ctx.Err().Error()
+	scanner := bufio.NewScanner(imageBuildResponse.Body)
+	for scanner.Scan() {
+		outputChan <- scanner.Text()
 	}
+	outputChan <- ""
 
 	return nil
 }
