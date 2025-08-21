@@ -351,15 +351,43 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 	defer imageBuildResponse.Body.Close()
 
 	var outBuf, errBuf bytes.Buffer
-	outputDone := make(chan error)
+	outputDone := make(chan error, 1)
 
 	go func() {
 		_, err = stdcopy.StdCopy(&outBuf, &errBuf, imageBuildResponse.Body)
-		outputChan <- outBuf.String()
-		outBuf.Reset()
-		outputChan <- errBuf.String()
-		outBuf.Reset()
 		outputDone <- err
+		go func() {
+			for {
+				oBuf := make([]byte, 128)
+				len, err := outBuf.Read(oBuf)
+				if err != nil {
+					log.Println(err)
+					outputDone <- err
+					break
+				}
+				if len == 0 {
+					outputChan <- ""
+					break
+				}
+				outputChan <- string(oBuf[:len])
+			}
+		}()
+		go func() {
+			for {
+				oBuf := make([]byte, 128)
+				len, err := errBuf.Read(oBuf)
+				if err != nil {
+					log.Println(err)
+					outputDone <- err
+					break
+				}
+				if len == 0 {
+					outputChan <- ""
+					break
+				}
+				outputChan <- string(oBuf[:len])
+			}
+		}()
 	}()
 
 	select {
