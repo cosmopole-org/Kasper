@@ -837,9 +837,9 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 		if point.PersHist && !input.Temp {
 			packet := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
 			trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", packet, false)
-			var p = updates_points.Send{Id: packet.Id, Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
 			point.SignalCount++
 			point.Push(trx)
+			var p = updates_points.Send{Id: packet.Id, Action: "broadcast", Point: point, User: user, Data: input.Data, Time: t}
 			future.Async(func() {
 				a.App.Tools().Signaler().SignalGroup("points/signal", point.Id, p, true, []string{state.Info().UserId()})
 			}, false)
@@ -856,9 +856,9 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 			if point.PersHist && !input.Temp {
 				packet := a.App.Tools().Storage().LogTimeSieries(point.Id, user.Id, input.Data, t)
 				trx.PutJson("PointMeta::"+point.Id, "metadata.public.lastPacket", packet, false)
-				var p = updates_points.Send{Id: packet.Id, Action: "single", Point: point, User: user, Data: input.Data, Time: t}
 				point.SignalCount++
 				point.Push(trx)
+				var p = updates_points.Send{Id: packet.Id, Action: "single", Point: point, User: user, Data: input.Data, Time: t}
 				future.Async(func() {
 					a.App.Tools().Signaler().SignalUser("points/signal", input.UserId, p, true)
 				}, false)

@@ -187,6 +187,23 @@ func (tw *TrxWrapper) PutObj(typ string, key string, keys map[string][]byte) {
 	}
 }
 
+func mergeObjects(dst map[string]any, src map[string]any) map[string]any {
+	for k, v := range src {
+		if mSrc, ok := v.(map[string]any); ok {
+			if dst[k] == nil {
+				dst[k] = v
+			} else if mDst, ok := dst[k].(map[string]any); ok {
+				dst[k] = mergeObjects(mDst, mSrc)
+			} else {
+				dst[k] = v
+			}
+		} else {
+			dst[k] = v
+		}
+	}
+	return dst
+}
+
 func (tw *TrxWrapper) indexJson(key string, path string, obj map[string]any, merge bool) {
 	old := map[string]any{}
 	if merge {
@@ -198,12 +215,12 @@ func (tw *TrxWrapper) indexJson(key string, path string, obj map[string]any, mer
 		}
 	}
 	keys := make([]string, 0, len(obj))
-	for k, v := range obj {
+	for k, _ := range obj {
 		keys = append(keys, k)
-		old[k] = v
 	}
 	sort.Strings(keys)
-	b, _ := json.Marshal(obj)
+	old = mergeObjects(old, obj)
+	b, _ := json.Marshal(old)
 	tw.PutBytes("json::"+key+"::"+path, b)
 	for _, k := range keys {
 		v := obj[k]
