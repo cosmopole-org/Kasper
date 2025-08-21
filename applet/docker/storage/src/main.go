@@ -27,7 +27,6 @@ func getClient(config *oauth2.Config) any {
 	return getTokenFromWeb(config)
 }
 
-// Request a token from the web, then returns the retrieved token.
 func getTokenFromWeb(config *oauth2.Config) string {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+

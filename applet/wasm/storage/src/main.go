@@ -930,7 +930,7 @@ func run(a int64) int64 {
 	switch act {
 	case "adminInit":
 		{
-			vm.RunDocker("gdrive", "gdrive", map[string]string{})
+			vm.RunDocker("storage", "storage", map[string]string{})
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "adminInitRes", "response": "initialized successfully"})
 			break
 		}
@@ -955,7 +955,7 @@ func run(a int64) int64 {
 				return 0
 			}
 			logger.Log("step 4")
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=createStorage --redirectUrl="+redirectUrl+" --userId="+signal.User.Id)
+			res := vm.ExecDocker("storage", "storage", "/app/storage --command=createStorage --redirectUrl="+redirectUrl+" --userId="+signal.User.Id)
 			logger.Log("step 5")
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "initStorageRes", "response": res})
 			break
@@ -977,13 +977,13 @@ func run(a int64) int64 {
 				Name:     signal.User.Username,
 				AuthCode: authCode,
 			})
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=authorizeStorage --userId="+signal.User.Id+" --authCode="+authCode)
+			res := vm.ExecDocker("storage", "storage", "/app/storage --command=authorizeStorage --userId="+signal.User.Id+" --authCode="+authCode)
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "authStorageRes", "response": res})
 			break
 		}
 	case "listFiles":
 		{
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=listFiles --userId="+signal.User.Id)
+			res := vm.ExecDocker("storage", "storage", "/app/storage --command=listFiles --userId="+signal.User.Id)
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "listFilesRes", "response": res})
 			break
 		}
@@ -1037,8 +1037,8 @@ func run(a int64) int64 {
 					fileKey = fk
 				}
 			}
-			vm.CopyToDocker("gdrive", "gdrive", fileKey, content)
-			res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=upload --userId="+signal.User.Id+" --fileContentType="+mimeType+" --file="+fileKey+" --totalSize="+fmt.Sprintf("%d", int(totalSize)))
+			vm.CopyToDocker("storage", "storage", fileKey, content)
+			res := vm.ExecDocker("storage", "storage", "/app/storage --command=upload --userId="+signal.User.Id+" --fileContentType="+mimeType+" --file="+fileKey+" --totalSize="+fmt.Sprintf("%d", int(totalSize)))
 			resObj := map[string]any{}
 			res = "{" + strings.Join(strings.Split(res, "{")[1:], "{")
 			resObj = map[string]any{}
@@ -1079,7 +1079,7 @@ func run(a int64) int64 {
 					answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 6})
 					return 0
 				}
-				res := vm.ExecDocker("gdrive", "gdrive", "/app/gdrive --command=download --userId="+doc.CreatorId+" --fileId="+doc.FileId)
+				res := vm.ExecDocker("storage", "storage", "/app/storage --command=download --userId="+doc.CreatorId+" --fileId="+doc.FileId)
 				resObj := map[string]any{}
 				res = "{" + strings.Join(strings.Split(res, "{")[1:], "{")
 				resObj = map[string]any{}
