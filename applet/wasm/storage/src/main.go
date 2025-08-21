@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/google/uuid"
@@ -747,8 +748,10 @@ type User struct {
 }
 
 type Point struct {
-	Id   string
-	Docs *EntityGroup[Doc] `json:"-"`
+	Id         string
+	IsPublic   bool
+	LastUpdate int64
+	Docs       *EntityGroup[Doc] `json:"-"`
 }
 
 type Doc struct {
@@ -987,7 +990,8 @@ func run(a int64) int64 {
 	case "upload":
 		{
 			trx.Db.Points.CreateAndInsert(&Point{
-				Id: signal.Point.Id,
+				Id:       signal.Point.Id,
+				IsPublic: signal.Point.IsPublic,
 			})
 			point := trx.Db.Points.FindById(signal.Point.Id)
 			logger.Log("test 1")
@@ -1092,7 +1096,9 @@ func run(a int64) int64 {
 				return 0
 			}
 			trx.Db.Points.CreateAndInsert(&Point{
-				Id: signal.Point.Id,
+				Id:         signal.Point.Id,
+				IsPublic:   signal.Point.IsPublic,
+				LastUpdate: time.Now().UnixMilli(),
 			})
 			point := trx.Db.Points.FindById(signal.Point.Id)
 			if point.Id == "" {
@@ -1103,6 +1109,22 @@ func run(a int64) int64 {
 			docs := point.Docs.Read("all", "", "")
 			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "pointFilesRes", "docs": docs})
 			break
+		}
+	case "listTopMedia":
+		{
+			points := trx.Db.Points.Read("all", "LastUpdate", "desc")
+			step := 0
+			docs := []Doc{}
+			for _, point := range points {
+				if step > 5 {
+					break
+				}
+				if point.IsPublic {
+					docs = append(docs, point.Docs.Read("all", "", "")...)
+					step++
+				}
+			}
+			answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "listTopMediaRes", "docs": docs})
 		}
 	}
 

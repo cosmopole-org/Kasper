@@ -264,7 +264,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 	return file, nil
 }
 
-func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName string) error {
+func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName string, outputChan chan string) error {
 	ctx := context.Background()
 
 	buf := new(bytes.Buffer)
@@ -349,9 +349,32 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 	}
 
 	defer imageBuildResponse.Body.Close()
-	_, err = io.Copy(os.Stdout, imageBuildResponse.Body)
-	if err != nil {
-		return err
+
+	var outBuf, errBuf bytes.Buffer
+	outputDone := make(chan error)
+
+	go func() {
+		_, err = stdcopy.StdCopy(&outBuf, &errBuf, imageBuildResponse.Body)
+		outputChan <- outBuf.String()
+		outBuf.Reset()
+		outputChan <- errBuf.String()
+		outBuf.Reset()
+		outputDone <- err
+	}()
+
+	select {
+	case err := <-outputDone:
+		if err != nil {
+			log.Println(err)
+			outputChan <- err.Error()
+			outputChan <- ""
+			return err
+		}
+		break
+
+	case <-ctx.Done():
+		outputChan <- ctx.Err().Error()
+		outputChan <- ""
 	}
 
 	return nil

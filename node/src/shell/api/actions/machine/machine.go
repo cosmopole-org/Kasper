@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/state"
 	inputs_machiner "kasper/src/shell/api/inputs/machine"
@@ -283,8 +284,18 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 				return nil, err2
 			}
 		}
+		outputChan := make(chan string)
 		future.Async(func() {
-			err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath, vm.MachineId, in)
+			for {
+				data := <-outputChan
+				if data == "" {
+					break
+				}
+				a.App.Tools().Signaler().SignalUser("docker/build", state.Info().UserId(), packet.ResponseSimpleMessage{Message: data}, true)
+			}
+		}, false)
+		future.Async(func() {
+			err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath, vm.MachineId, in, outputChan)
 			if err3 != nil {
 				log.Println(err3)
 			}
