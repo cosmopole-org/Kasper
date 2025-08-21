@@ -548,15 +548,54 @@ func (eg *EntityGroup[T]) Read(filterBy string, sortBy string, sortOrder string)
 	for _, v := range eg.Map {
 		list = append(list, v)
 	}
+	if len(list) == 0 {
+		return []T{}
+	}
 	if sortBy != "" {
 		if sortOrder == "desc" {
-			sort.Slice(list, func(i, j int) bool {
-				return list[i].Props[sortBy].(int32) > list[j].Props[sortBy].(int32)
-			})
+			if _, ok := list[0].Props[sortBy].(int16); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(int16) > list[j].Props[sortBy].(int16)
+				})
+			} else if _, ok := list[0].Props[sortBy].(int16); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(int32) > list[j].Props[sortBy].(int32)
+				})
+			} else if _, ok := list[0].Props[sortBy].(int64); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(int64) > list[j].Props[sortBy].(int64)
+				})
+			} else if _, ok := list[0].Props[sortBy].(float32); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(float32) > list[j].Props[sortBy].(float32)
+				})
+			} else if _, ok := list[0].Props[sortBy].(float64); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(float64) > list[j].Props[sortBy].(float64)
+				})
+			}
 		} else {
-			sort.Slice(list, func(i, j int) bool {
-				return list[i].Props[sortBy].(int32) < list[j].Props[sortBy].(int32)
-			})
+			if _, ok := list[0].Props[sortBy].(int16); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(int16) < list[j].Props[sortBy].(int16)
+				})
+			} else if _, ok := list[0].Props[sortBy].(int16); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(int32) < list[j].Props[sortBy].(int32)
+				})
+			} else if _, ok := list[0].Props[sortBy].(int64); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(int64) < list[j].Props[sortBy].(int64)
+				})
+			} else if _, ok := list[0].Props[sortBy].(float32); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(float32) < list[j].Props[sortBy].(float32)
+				})
+			} else if _, ok := list[0].Props[sortBy].(float64); ok {
+				sort.Slice(list, func(i, j int) bool {
+					return list[i].Props[sortBy].(float64) < list[j].Props[sortBy].(float64)
+				})
+			}
 		}
 	}
 	result := []T{}
@@ -990,8 +1029,9 @@ func run(a int64) int64 {
 	case "upload":
 		{
 			trx.Db.Points.CreateAndInsert(&Point{
-				Id:       signal.Point.Id,
-				IsPublic: signal.Point.IsPublic,
+				Id:         signal.Point.Id,
+				IsPublic:   signal.Point.IsPublic,
+				LastUpdate: time.Now().UnixMilli(),
 			})
 			point := trx.Db.Points.FindById(signal.Point.Id)
 			logger.Log("test 1")
@@ -1095,11 +1135,14 @@ func run(a int64) int64 {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 3})
 				return 0
 			}
-			trx.Db.Points.CreateAndInsert(&Point{
-				Id:         signal.Point.Id,
-				IsPublic:   signal.Point.IsPublic,
-				LastUpdate: time.Now().UnixMilli(),
-			})
+			p := trx.Db.Points.FindById(signal.Point.Id)
+			if p.Id == "" {
+				trx.Db.Points.CreateAndInsert(&Point{
+					Id:         signal.Point.Id,
+					IsPublic:   signal.Point.IsPublic,
+					LastUpdate: 0,
+				})
+			}
 			point := trx.Db.Points.FindById(signal.Point.Id)
 			if point.Id == "" {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 4})

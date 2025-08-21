@@ -10,6 +10,6 @@ RUN touch /app/output
 RUN echo "building... 2"
 
 RUN go mod tidy
-RUN go build -o gdrive
+RUN go build -o storage
 
-ENTRYPOINT [ "/app/gdrive", "--command=adminInit" ]
+ENTRYPOINT [ "/app/storage", "--command=adminInit" ]
