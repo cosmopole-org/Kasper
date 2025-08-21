@@ -357,8 +357,8 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 		_, err = stdcopy.StdCopy(&outBuf, &errBuf, imageBuildResponse.Body)
 		outputDone <- err
 		go func() {
+			oBuf := make([]byte, 128)
 			for {
-				oBuf := make([]byte, 128)
 				len, err := outBuf.Read(oBuf)
 				if err != nil {
 					log.Println(err)
@@ -373,8 +373,8 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 			}
 		}()
 		go func() {
+			oBuf := make([]byte, 128)
 			for {
-				oBuf := make([]byte, 128)
 				len, err := errBuf.Read(oBuf)
 				if err != nil {
 					log.Println(err)
@@ -395,14 +395,12 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 		if err != nil {
 			log.Println(err)
 			outputChan <- err.Error()
-			outputChan <- ""
 			return err
 		}
 		break
 
 	case <-ctx.Done():
 		outputChan <- ctx.Err().Error()
-		outputChan <- ""
 	}
 
 	return nil
