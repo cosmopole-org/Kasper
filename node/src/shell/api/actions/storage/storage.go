@@ -1,6 +1,7 @@
 package actions_user
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type Actions struct {
@@ -56,8 +58,8 @@ func registerRoute(mux *http.ServeMux, path string, handler func(w http.Response
 func Install(a *Actions) error {
 	mux := http.NewServeMux()
 	server := &http.Server{
-		Addr: fmt.Sprintf(":%d", 3000),	
-		Handler: mux,
+		Addr:      fmt.Sprintf(":%d", 3000),
+		Handler:   mux,
 		TLSConfig: a.App.Tools().Network().TlsConfig(),
 	}
 	registerRoute(mux, "/storage/downloadUserEntity", func(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +72,6 @@ func Install(a *Actions) error {
 			return
 		}
 		inputLength := int(ilI64)
-		var input inputs_storage.DownloadUserEntityInput
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			log.Printf("Error reading body: %v", err)
@@ -83,61 +84,89 @@ func Install(a *Actions) error {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
 		}
-		err = json.Unmarshal(inputBody, &input)
+		origin := ""
+		a.App.ModifyState(true, func(trx trx.ITrx) error {
+			uParts := strings.Split(string(trx.GetColumn("User", userId, "username")), "@")
+			if len(uParts) < 2 {
+				return nil
+			}
+			origin = uParts[1]
+			return nil
+		})
+		if origin == a.App.Id() {
+			var input inputs_storage.DownloadUserEntityInput
+			err = json.Unmarshal(inputBody, &input)
+			if err != nil {
+				log.Printf("Error parsing body: %v", err)
+				http.Error(w, "can't parse body", http.StatusBadRequest)
+				return
+			}
+			data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+input.UserId, input.EntityId)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "can't read file", http.StatusBadRequest)
+				return
+			}
+			w.Write([]byte(data))
+		} else {
+			r.Body = ioutil.NopCloser(bytes.NewReader(body))
+			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader(body))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			for h, val := range r.Header {
+				proxyReq.Header[h] = val
+			}
+			httpClient := http.Client{}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			resp.Write(w)
+		}
+	})
+	registerRoute(mux, "/storage/uploadUserEntity", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("User-Id")
+		inputStr := r.Header.Get("Input")
+		signature := r.Header.Get("Signature")
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, []byte(inputStr), signature); !success {
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		var input inputs_storage.UploadUserEntityInput
+		err := json.Unmarshal([]byte(inputStr), &input)
 		if err != nil {
 			log.Printf("Error parsing body: %v", err)
 			http.Error(w, "can't parse body", http.StatusBadRequest)
 			return
 		}
-		data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+input.UserId, input.EntityId)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, "can't read file", http.StatusBadRequest)
-			return
-		}
-		w.Write([]byte(data))
-	})
-	registerRoute(mux, "/storage/uploadUserEntity", func(w http.ResponseWriter, r *http.Request) {
-		userId := r.Header.Get("User-Id")
-		inputLengthStr := r.Header.Get("Input-Length")
-		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
+		data, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			log.Printf("Error reading body: %v", err)
 			http.Error(w, "can't read body", http.StatusBadRequest)
 			return
 		}
-		inputLength := int(ilI64)
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			log.Printf("Error reading body: %v", err)
-			http.Error(w, "can't read body", http.StatusBadRequest)
-			return
-		}
-		inputBody := body[0:inputLength]
-		signature := body[inputLength:]
-		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
-			http.Error(w, "signature verification failed", http.StatusForbidden)
-			return
-		}
-		machineId := r.Header.Get("Machine-Id")
-		entityId := r.Header.Get("Entity-Id")
 		var e error
 		a.App.ModifyState(false, func(trx trx.ITrx) error {
-			data := inputBody
-			if machineId == "" {
-				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+userId, data, entityId, true); err != nil {
+			if input.MachineId == "" {
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+userId, data, input.EntityId, true); err != nil {
 					log.Println(err)
 					e = err
 					return err
 				}
 			} else {
-				vm := models.Vm{MachineId: machineId}.Pull(trx)
+				vm := models.Vm{MachineId: input.MachineId}.Pull(trx)
 				app := models.App{Id: vm.AppId}.Pull(trx)
 				if app.OwnerId != userId {
 					e = errors.New("you are not owner of this machine")
 					return err
 				}
-				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, entityId, true); err != nil {
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, input.EntityId, true); err != nil {
 					log.Println(err)
 					e = err
 					return err
@@ -157,53 +186,71 @@ func Install(a *Actions) error {
 	})
 	registerRoute(mux, "/storage/uploadPointEntity", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("User-Id")
-		inputLengthStr := r.Header.Get("Input-Length")
-		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
-		if err != nil {
-			log.Printf("Error reading body: %v", err)
-			http.Error(w, "can't read body", http.StatusBadRequest)
-			return
-		}
-		inputLength := int(ilI64)
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			log.Printf("Error reading body: %v", err)
-			http.Error(w, "can't read body", http.StatusBadRequest)
-			return
-		}
-		inputBody := body[0:inputLength]
-		signature := body[inputLength:]
-		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+		inputStr := r.Header.Get("Input")
+		signature := r.Header.Get("Signature")
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, []byte(inputStr), signature); !success {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
 		}
-		pointId := r.Header.Get("Point-Id")
-		entityId := r.Header.Get("Entity-Id")
-		var e error
-		a.App.ModifyState(false, func(trx trx.ITrx) error {
-			data := inputBody
-			if trx.GetLink("admin::"+pointId+"::"+userId) == "" {
-				e = errors.New("you are not admin")
-				return err
+		var input inputs_storage.UploadPointEntityInput
+		err := json.Unmarshal([]byte(inputStr), &input)
+		if err != nil {
+			log.Printf("Error parsing body: %v", err)
+			http.Error(w, "can't parse body", http.StatusBadRequest)
+			return
+		}
+		origin := strings.Split(input.PointId, "@")[1]
+		if origin == a.App.Id() || origin == "global" {
+			data, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				log.Printf("Error reading body: %v", err)
+				http.Error(w, "can't read body", http.StatusBadRequest)
+				return
 			}
-			if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+pointId, data, entityId, true); err != nil {
-				log.Println(err)
-				e = err
-				return err
-			}
-			future.Async(func() {
-				a.App.Tools().Signaler().SignalGroup("storage/updatePointEntity", pointId, map[string]any{"pointId": pointId, "entityId": entityId}, true, []string{})
-			}, false)
-			return nil
-		})
-		if e == nil {
-			w.Write([]byte("{ \"resCode\": 0, \"obj\": {} }"))
-		} else {
-			b, _ := json.Marshal(map[string]any{
-				"resCode": 1,
-				"message": e.Error(),
+			var e error
+			a.App.ModifyState(false, func(trx trx.ITrx) error {
+				if trx.GetLink("admin::"+input.PointId+"::"+userId) == "" {
+					e = errors.New("you are not admin")
+					return err
+				}
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, data, input.EntityId, true); err != nil {
+					log.Println(err)
+					e = err
+					return err
+				}
+				future.Async(func() {
+					a.App.Tools().Signaler().SignalGroup("storage/updatePointEntity", input.PointId, map[string]any{"pointId": input.PointId, "entityId": input.EntityId}, true, []string{})
+				}, false)
+				return nil
 			})
-			w.Write(b)
+			if e == nil {
+				w.Write([]byte("{ \"resCode\": 0, \"obj\": {} }"))
+			} else {
+				b, _ := json.Marshal(map[string]any{
+					"resCode": 1,
+					"message": e.Error(),
+				})
+				w.Write(b)
+			}
+		} else {
+			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			proxyReq, err := http.NewRequest(r.Method, url, r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			for h, val := range r.Header {
+				proxyReq.Header[h] = val
+			}
+			httpClient := http.Client{}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			resp.Write(w)
 		}
 	})
 	registerRoute(mux, "/storage/downloadPointEntity", func(w http.ResponseWriter, r *http.Request) {
@@ -229,19 +276,50 @@ func Install(a *Actions) error {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
 		}
-		err = json.Unmarshal(inputBody, &input)
-		if err != nil {
-			log.Printf("Error parsing body: %v", err)
-			http.Error(w, "can't parse body", http.StatusBadRequest)
-			return
+		origin := ""
+		a.App.ModifyState(true, func(trx trx.ITrx) error {
+			uParts := strings.Split(string(trx.GetColumn("User", userId, "username")), "@")
+			if len(uParts) < 2 {
+				return nil
+			}
+			origin = uParts[1]
+			return nil
+		})
+		if origin == a.App.Id() {
+			err = json.Unmarshal(inputBody, &input)
+			if err != nil {
+				log.Printf("Error parsing body: %v", err)
+				http.Error(w, "can't parse body", http.StatusBadRequest)
+				return
+			}
+			data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, input.EntityId)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "can't read file", http.StatusBadRequest)
+				return
+			}
+			w.Write([]byte(data))
+		} else {
+			r.Body = ioutil.NopCloser(bytes.NewReader(body))
+			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader(body))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			for h, val := range r.Header {
+				proxyReq.Header[h] = val
+			}
+			httpClient := http.Client{}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			resp.Write(w)
 		}
-		data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, input.EntityId)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, "can't read file", http.StatusBadRequest)
-			return
-		}
-		w.Write([]byte(data))
 	})
 	future.Async(func() {
 		server.ListenAndServeTLS("", "")
