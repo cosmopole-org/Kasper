@@ -55804,7 +55804,7 @@ m=n+o.length
 l=new Uint8Array(m)
 B.B.cN(l,0,n,a)
 B.B.cN(l,n,m,o)
-m=A.dN("http://"+i.c+":3000/storage/uploadUserEntity",0,null)
+m=A.dN("https://"+i.c+":3000/storage/uploadUserEntity",0,null)
 k=i.ay
 k.toString
 j=t.N
@@ -55835,7 +55835,7 @@ k=l+m.length
 j=new Uint8Array(k)
 B.B.cN(j,0,l,n)
 B.B.cN(j,l,k,m)
-k=A.dN("http://"+h.c+":3000/storage/downloadUserEntity",0,null)
+k=A.dN("https://"+h.c+":3000/storage/downloadUserEntity",0,null)
 h=h.ay
 h.toString
 s=4
@@ -55862,7 +55862,7 @@ m=n+o.length
 l=new Uint8Array(m)
 B.B.cN(l,0,n,a)
 B.B.cN(l,n,m,o)
-m=A.dN("http://"+j.c+":3000/storage/uploadPointEntity",0,null)
+m=A.dN("https://"+j.c+":3000/storage/uploadPointEntity",0,null)
 j=j.ay
 j.toString
 k=t.N
@@ -55911,7 +55911,7 @@ k=l+m.length
 j=new Uint8Array(k)
 B.B.cN(j,0,l,n)
 B.B.cN(j,l,k,m)
-k=A.dN("http://"+h.c+":3000/storage/downloadPointEntity",0,null)
+k=A.dN("https://"+h.c+":3000/storage/downloadPointEntity",0,null)
 h=h.ay
 h.toString
 s=4
