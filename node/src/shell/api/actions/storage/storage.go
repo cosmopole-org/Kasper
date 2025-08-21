@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
@@ -20,8 +21,8 @@ type Actions struct {
 	App core.ICore
 }
 
-func registerRoute(path string, handler func(w http.ResponseWriter, r *http.Request)) {
-	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+func registerRoute(mux *http.ServeMux, path string, handler func(w http.ResponseWriter, r *http.Request)) {
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			r := recover()
 			if r != nil {
@@ -53,7 +54,13 @@ func registerRoute(path string, handler func(w http.ResponseWriter, r *http.Requ
 }
 
 func Install(a *Actions) error {
-	registerRoute("/storage/downloadUserEntity", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	server := &http.Server{
+		Addr: fmt.Sprintf(":%d", 3000),	
+		Handler: mux,
+		TLSConfig: a.App.Tools().Network().TlsConfig(),
+	}
+	registerRoute(mux, "/storage/downloadUserEntity", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("User-Id")
 		inputLengthStr := r.Header.Get("Input-Length")
 		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
@@ -90,7 +97,7 @@ func Install(a *Actions) error {
 		}
 		w.Write([]byte(data))
 	})
-	registerRoute("/storage/uploadUserEntity", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute(mux, "/storage/uploadUserEntity", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("User-Id")
 		inputLengthStr := r.Header.Get("Input-Length")
 		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
@@ -148,7 +155,7 @@ func Install(a *Actions) error {
 			w.Write(b)
 		}
 	})
-	registerRoute("/storage/uploadPointEntity", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute(mux, "/storage/uploadPointEntity", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("User-Id")
 		inputLengthStr := r.Header.Get("Input-Length")
 		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
@@ -199,7 +206,7 @@ func Install(a *Actions) error {
 			w.Write(b)
 		}
 	})
-	registerRoute("/storage/downloadPointEntity", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute(mux, "/storage/downloadPointEntity", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("User-Id")
 		inputLengthStr := r.Header.Get("Input-Length")
 		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
@@ -237,7 +244,7 @@ func Install(a *Actions) error {
 		w.Write([]byte(data))
 	})
 	future.Async(func() {
-		http.ListenAndServe(":3000", nil)
+		server.ListenAndServeTLS("", "")
 	}, false)
 	return nil
 }
