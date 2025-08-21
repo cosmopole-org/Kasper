@@ -415,15 +415,15 @@ func (a *Actions) DeleteUserEntity(state state.IState, input inputs_storage.Dele
 
 // UploadPointEntity /storage/uploadPointEntity check [ true true true ] access [ true false false false POST ]
 func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.UploadPointEntityInput) (any, error) {
-	trx := state.Trx()
+	// trx := state.Trx()
 	data, err := base64.StdEncoding.DecodeString(input.Data)
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
-	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) == "" {
-		return nil, errors.New("you are not admin")
-	}
+	// if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) == "" {
+	// 	return nil, errors.New("you are not admin")
+	// }
 	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+state.Info().PointId(), data, input.EntityId, true); err != nil {
 		log.Println(err)
 		return nil, err
