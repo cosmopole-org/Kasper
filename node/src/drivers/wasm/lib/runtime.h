@@ -644,13 +644,22 @@ void WasmMac::executeOnUpdate(std::string input)
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
-    WasmEdge_String FuncName = WasmEdge_StringCreateByCString("run");
-    WasmEdge_Value Params2[1] = {WasmEdge_ValueGenI64(c)};
-    WasmEdge_Value Returns2[1] = {WasmEdge_ValueGenI64(0)};
-    auto Res2 = WasmEdge_VMExecute(this->vm, FuncName, Params2, 1, Returns2, 0);
+    WasmEdge_String FuncName = WasmEdge_StringCreateByCString("_start");
+    WasmEdge_Value Params2[0] = {};
+    WasmEdge_Value Returns2[0] = {};
+    auto Res2 = WasmEdge_VMExecute(this->vm, FuncName, Params2, 0, Returns2, 0);
     if (!WasmEdge_ResultOK(Res2))
     {
         printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res2));
+    }
+
+    WasmEdge_String FuncName = WasmEdge_StringCreateByCString("run");
+    WasmEdge_Value Params3[1] = {WasmEdge_ValueGenI64(c)};
+    WasmEdge_Value Returns3[1] = {WasmEdge_ValueGenI64(0)};
+    auto Res3 = WasmEdge_VMExecute(this->vm, FuncName, Params3, 1, Returns3, 0);
+    if (!WasmEdge_ResultOK(Res2))
+    {
+        printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res3));
     }
     // WasmEdge_StringDelete(FuncName);
     // WasmEdge_StringDelete(memName);
@@ -739,13 +748,22 @@ void WasmMac::executeOnChain(std::string input, std::string userId, void *crRaw)
         WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
         int64_t c = ((ino64_t)valOffset << 32) | valL;
 
-        WasmEdge_String FuncName = WasmEdge_StringCreateByCString("run");
-        WasmEdge_Value Params2[1] = {WasmEdge_ValueGenI64(c)};
-        WasmEdge_Value Returns2[1] = {WasmEdge_ValueGenI64(0)};
-        auto Res = WasmEdge_VMExecute(this->vm, FuncName, Params2, 1, Returns2, 0);
-        if (!WasmEdge_ResultOK(Res))
+        WasmEdge_String FuncName = WasmEdge_StringCreateByCString("_start");
+        WasmEdge_Value Params2[0] = {};
+        WasmEdge_Value Returns2[0] = {};
+        auto Res2 = WasmEdge_VMExecute(this->vm, FuncName, Params2, 0, Returns2, 0);
+        if (!WasmEdge_ResultOK(Res2))
         {
-            printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res));
+            printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res2));
+        }
+
+        WasmEdge_String FuncName = WasmEdge_StringCreateByCString("run");
+        WasmEdge_Value Params3[1] = {WasmEdge_ValueGenI64(c)};
+        WasmEdge_Value Returns3[1] = {WasmEdge_ValueGenI64(0)};
+        auto Res3 = WasmEdge_VMExecute(this->vm, FuncName, Params3, 1, Returns3, 0);
+        if (!WasmEdge_ResultOK(Res3))
+        {
+            printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res3));
         }
         WasmEdge_StringDelete(FuncName);
     }
