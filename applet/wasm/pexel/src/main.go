@@ -1,4 +1,4 @@
-package applet
+package main
 
 import (
 	model "applet/src/models"
