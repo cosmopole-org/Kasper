@@ -101,6 +101,20 @@ func Run(signal model.Send) {
 						Id: signal.Point.Id,
 					})
 					trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "textMessage", "text": "pexel activated"}, false)
+
+					point := trx.Db.Points.FindById(signal.Point.Id)
+					res := trx.Network.Request("GET", "https://api.pexels.com/v1/curated?per_page=1", map[string]string{"Authorization": API_KEY}, map[string]any{})
+					m := map[string]any{}
+					j, _ := base64.StdEncoding.DecodeString(res)
+					json.Unmarshal([]byte(j), &m)
+					url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["large"].(string)
+					data := trx.Network.Request("GET", url, map[string]string{}, map[string]any{})
+					inp := model.UploadPointEntityInput{
+						EntityId: "background",
+						PointId:  point.Id,
+						Data:     data,
+					}
+					trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/storage/uploadPointEntity", "", "", "", inp)
 				}
 			}
 			break
