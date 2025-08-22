@@ -653,10 +653,10 @@ void WasmMac::executeOnUpdate(std::string input)
         printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res2));
     }
 
-    WasmEdge_String FuncName = WasmEdge_StringCreateByCString("run");
+    WasmEdge_String FuncName2 = WasmEdge_StringCreateByCString("run");
     WasmEdge_Value Params3[1] = {WasmEdge_ValueGenI64(c)};
     WasmEdge_Value Returns3[1] = {WasmEdge_ValueGenI64(0)};
-    auto Res3 = WasmEdge_VMExecute(this->vm, FuncName, Params3, 1, Returns3, 0);
+    auto Res3 = WasmEdge_VMExecute(this->vm, FuncName2, Params3, 1, Returns3, 0);
     if (!WasmEdge_ResultOK(Res2))
     {
         printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res3));
@@ -757,10 +757,10 @@ void WasmMac::executeOnChain(std::string input, std::string userId, void *crRaw)
             printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res2));
         }
 
-        WasmEdge_String FuncName = WasmEdge_StringCreateByCString("run");
+        WasmEdge_String FuncName2 = WasmEdge_StringCreateByCString("run");
         WasmEdge_Value Params3[1] = {WasmEdge_ValueGenI64(c)};
         WasmEdge_Value Returns3[1] = {WasmEdge_ValueGenI64(0)};
-        auto Res3 = WasmEdge_VMExecute(this->vm, FuncName, Params3, 1, Returns3, 0);
+        auto Res3 = WasmEdge_VMExecute(this->vm, FuncName2, Params3, 1, Returns3, 0);
         if (!WasmEdge_ResultOK(Res3))
         {
             printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res3));
