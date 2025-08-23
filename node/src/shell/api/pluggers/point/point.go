@@ -54,6 +54,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateMachineAccess)
 		}
 		
+		func (c *Plugger) GetDefaultAccess() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.GetDefaultAccess)
+		}
+		
 		func (c *Plugger) ReadMembers() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.ReadMembers)
 		}

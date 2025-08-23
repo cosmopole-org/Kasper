@@ -482,6 +482,11 @@ func (a *Actions) UpdateMachineAccess(state state.IState, input inputs_points.Up
 	return map[string]any{}, nil
 }
 
+// GetDefaultAccess /points/getDefaultAccess check [ true true true ] access [ true false false false POST ]
+func (a *Actions) GetDefaultAccess(state state.IState, input inputs_points.GetDefaultAccessInput) (any, error) {
+	return map[string]any{"access": access}, nil
+}
+
 // ReadMembers /points/readMembers check [ true true false ] access [ true false false false POST ]
 func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMemberInput) (any, error) {
 	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
