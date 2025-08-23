@@ -1,8 +1,8 @@
 {
     "name": "decillion ai",
     "short_name": "decillion ai",
-    "start_url": "/?standalone=true",
-    "display": "standalone",
+    "start_url": ".",
+    "display": "fullscreen",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
     "description": "A new Flutter project.",
