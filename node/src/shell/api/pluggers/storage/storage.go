@@ -14,6 +14,10 @@
 		Core core.ICore
 	}
 	
+		func (c *Plugger) Preflight() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Preflight)
+		}
+		
 		func (c *Plugger) Upload() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Upload)
 		}
@@ -28,6 +32,14 @@
 		
 		func (c *Plugger) UploadPointEntity() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.UploadPointEntity)
+		}
+		
+		func (c *Plugger) trx() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.trx)
+		}
+		
+		func (c *Plugger) if() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.if)
 		}
 		
 		func (c *Plugger) DeletePointEntity() iaction.IAction {

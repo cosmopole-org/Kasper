@@ -35,8 +35,35 @@ func Install(a *Actions) error {
 	return nil
 }
 
+type Access struct {
+	Name string `json:"name"`
+}
+
+var access = map[string]bool{
+	"createSubPoint": false,
+	"deleteSubPoint": false,
+	"uploadEntity":   false,
+	"updateMetadata": true,
+	"sendSignal":     true,
+	"readHistory":    true,
+	"addApp":         true,
+	"addMachine":     true,
+	"updateMachine":  true,
+	"removeMachine":  true,
+	"removeApp":      true,
+	"addMember":      false,
+	"updateMember":   false,
+	"readMembers":    false,
+	"removeMember":   false,
+}
+
 // AddApp /points/addApp check [ true true false ] access [ true false false false POST ]
 func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["addApp"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
 	locker, _ := a.Locks.Get(state.Info().PointId())
@@ -82,8 +109,18 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 			Comment:    vm.Comment,
 			Metadata:   machine.Metadata,
 			Identifier: machine.Identifier,
+			Access:     machine.Access,
 		}
 		m[fn.UserId+"::"+fn.Identifier] = fn
+		acc := map[string]bool{}
+		for k, v := range machine.Access {
+			if v2, ok := machine.Access[k]; ok {
+				acc[k] = v2
+			} else {
+				acc[k] = v
+			}
+		}
+		trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId+"::"+fn.Identifier, "metadata", acc, false)
 		trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+machine.Identifier, "metadata", machine.Metadata, true)
 		trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+app.Id+"::"+machine.MachineId+"::"+machine.Identifier, "true")
 		uniqueMacs[fn.UserId] = append(uniqueMacs[fn.UserId], machine.Identifier)
@@ -156,6 +193,11 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 
 // UpdateMachine /points/updateMachine check [ true true false ] access [ true false false false POST ]
 func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMachineInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["updateMachine"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
 	locker, _ := a.Locks.Get(state.Info().PointId())
@@ -189,6 +231,11 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMa
 
 // RemoveApp /points/removeApp check [ true true false ] access [ true false false false POST ]
 func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["removeApp"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
 	locker, _ := a.Locks.Get(state.Info().PointId())
@@ -217,6 +264,7 @@ func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInp
 		if slices.Contains(macArr, machine.Id) {
 			trx.DelKey("link::member::" + state.Info().PointId() + "::" + machine.Id)
 			trx.DelKey("link::memberof::" + machine.Id + "::" + state.Info().PointId())
+			trx.DelJson("PointAccess::"+state.Info().PointId()+"::"+machine.Id, "metadata")
 			a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), machine.Id)
 		}
 	}
@@ -240,6 +288,11 @@ func (a *Actions) RemoveApp(state state.IState, input inputs_points.RemoveAppInp
 
 // AddMachine /points/addMachine check [ true true false ] access [ true false false false POST ]
 func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["addMachine"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
 	locker, _ := a.Locks.Get(state.Info().PointId())
@@ -269,10 +322,21 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		Comment:    vm.Comment,
 		Identifier: input.MachineMeta.Identifier,
 		Metadata:   input.MachineMeta.Metadata,
+		Access:     input.MachineMeta.Access,
 	}
+	acc := map[string]bool{}
+	for k, v := range input.MachineMeta.Access {
+		if v2, ok := input.MachineMeta.Access[k]; ok {
+			acc[k] = v2
+		} else {
+			acc[k] = v
+		}
+	}
+	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId+"::"+fn.Identifier, "metadata", acc, false)
 	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "true")
 	trx.PutLink("memberof::"+input.MachineMeta.MachineId+"::"+state.Info().PointId(), "true")
+	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "metadata", access, false)
 	trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineMeta.MachineId+"::"+input.MachineMeta.Identifier, "true")
 	a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), input.MachineMeta.MachineId)
 	future.Async(func() {
@@ -283,6 +347,11 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 
 // RemoveMachine /points/removeMachine check [ true true false ] access [ true false false false POST ]
 func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMachineInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["removeMachine"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
 	locker, _ := a.Locks.Get(state.Info().PointId())
@@ -314,6 +383,7 @@ func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMa
 	if arr, err := trx.GetLinksList("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineId+"::", 0, 100); err == nil && len(arr) == 0 {
 		trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.MachineId)
 		trx.DelKey("link::memberof::" + input.MachineId + "::" + state.Info().PointId())
+		trx.DelJson("PointAccess::"+state.Info().PointId()+"::"+input.MachineId, "metadata")
 		a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), input.MachineId)
 	}
 	future.Async(func() {
@@ -324,6 +394,11 @@ func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMa
 
 // AddMember /points/addMember check [ true true false ] access [ true false false false POST ]
 func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["addMember"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
 	locker, _ := a.Locks.Get(state.Info().PointId())
@@ -341,6 +416,16 @@ func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInp
 	}
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.UserId, "true")
 	trx.PutLink("memberof::"+input.UserId+"::"+state.Info().PointId(), "true")
+	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.UserId, "metadata", access, false)
+	acc := map[string]bool{}
+	for k, v := range input.Access {
+		if v2, ok := input.Access[k]; ok {
+			acc[k] = v2
+		} else {
+			acc[k] = v
+		}
+	}
+	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.UserId, "metadata", acc, false)
 	point.MemberCount++
 	point.Push(trx)
 	a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), input.UserId)
@@ -353,6 +438,11 @@ func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInp
 
 // UpdateMember /points/updateMember check [ true true true ] access [ true false false false POST ]
 func (a *Actions) UpdateMember(state state.IState, input inputs_points.UpdateMemberInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["updateMember"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	if state.Info().PointId() == "" {
 		return nil, errors.New("member not found")
@@ -372,8 +462,33 @@ func (a *Actions) UpdateMember(state state.IState, input inputs_points.UpdateMem
 	return outputs_points.UpdateMemberOutput{Metadata: obj}, nil
 }
 
+// UpdateMemberAccess /points/updateMemberAccess check [ true true true ] access [ true false false false POST ]
+func (a *Actions) UpdateMemberAccess(state state.IState, input inputs_points.UpdateMemberAccessInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("access not permitted")
+	}
+	trx := state.Trx()
+	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.UserId, "metadata", input.Access, true)
+	return map[string]any{}, nil
+}
+
+// UpdateMachineAccess /points/updateMachineAccess check [ true true true ] access [ true false false false POST ]
+func (a *Actions) UpdateMachineAccess(state state.IState, input inputs_points.UpdateMachineAccessInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		return nil, errors.New("access not permitted")
+	}
+	trx := state.Trx()
+	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.MachineId+"::"+input.Identifier, "metadata", input.Access, true)
+	return map[string]any{}, nil
+}
+
 // ReadMembers /points/readMembers check [ true true false ] access [ true false false false POST ]
 func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMemberInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["readMembers"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	members, err := model.User{}.List(trx, "member::"+state.Info().PointId()+"::", map[string]string{"type": "human"})
 	if err != nil {
@@ -401,15 +516,21 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 
 // RemoveMember /points/removeMember check [ true true false ] access [ true false false false POST ]
 func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMemberInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["removeMember"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
 	locker, _ := a.Locks.Get(state.Info().PointId())
 	locker.Lock.Lock()
 	defer locker.Lock.Unlock()
-	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
-		return nil, errors.New("you are not admin")
-	}
 	if trx.GetLink("member::"+state.Info().PointId()+"::"+input.UserId) != "true" {
+		return nil, errors.New("member not found")
+	}
+	user := model.User{Id: input.UserId}.Pull(trx)
+	if user.Typ != "human" {
 		return nil, errors.New("member not found")
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
@@ -421,10 +542,10 @@ func (a *Actions) RemoveMember(state state.IState, input inputs_points.RemoveMem
 	}
 	trx.DelKey("link::member::" + state.Info().PointId() + "::" + input.UserId)
 	trx.DelKey("link::memberof::" + input.UserId + "::" + state.Info().PointId())
+	trx.DelJson("PointAccess::"+state.Info().PointId()+"::"+input.UserId, "metadata")
 	point.MemberCount--
 	point.Push(trx)
 	a.App.Tools().Signaler().LeaveGroup(state.Info().PointId(), input.UserId)
-	user := model.User{Id: input.UserId}.Pull(trx)
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/removeMember", state.Info().PointId(), updates_points.AddMember{PointId: state.Info().PointId(), User: user}, true, []string{state.Info().UserId()})
 	}, false)
@@ -475,10 +596,10 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 			log.Println(err)
 			return nil, err
 		}
-		if trx.GetLink("admin::"+input.ParentId+"::"+state.Info().UserId()) != "true" {
-			err := errors.New("access to point denied")
-			log.Println(err)
-			return nil, err
+		if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+			if meta, err := state.Trx().GetJson("PointAccess::"+input.ParentId+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["creaetSubPoint"].(bool) {
+				return nil, errors.New("access not permitted")
+			}
 		}
 	}
 	point := model.Point{Id: a.App.Tools().Storage().GenId(trx, orig), MemberCount: int32(len(input.Members)), Tag: input.Tag, IsPublic: *input.IsPublic, PersHist: *input.PersHist, ParentId: input.ParentId}
@@ -491,6 +612,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		for userId, isAdmin := range input.Members {
 			trx.PutLink("memberof::"+userId+"::"+point.Id, "true")
 			trx.PutLink("member::"+point.Id+"::"+userId, "true")
+			trx.PutJson("PointAccess::"+point.Id+"::"+userId, "metadata", access, false)
 			if isAdmin {
 				trx.PutLink("admin::"+point.Id+"::"+userId, "true")
 				trx.PutLink("adminof::"+userId+"::"+point.Id, "true")
@@ -539,8 +661,10 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 	locker, _ := a.Locks.Get(state.Info().PointId())
 	locker.Lock.Lock()
 	defer locker.Lock.Unlock()
-	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
-		return nil, errors.New("you are not admin")
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["updatePoint"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
 	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
 	if input.IsPublic != nil {
@@ -596,10 +720,14 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 	if len(trx.GetColumn("Point", state.Info().PointId(), "|")) == 0 {
 		return nil, errors.New("point does not exist")
 	}
-	if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
-		return nil, errors.New("you are not admin")
-	}
 	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	if point.ParentId != "" {
+		if trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+			if meta, err := state.Trx().GetJson("PointAccess::"+point.ParentId+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["deleteSubPoint"].(bool) {
+				return nil, errors.New("access not permitted")
+			}
+		}
+	}
 	if point.Tag == "home" {
 		return nil, errors.New("your home can not be deleted")
 	}
@@ -614,8 +742,9 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 	usersList := []string{}
 	for _, member := range members {
 		parts := strings.Split(member, "::")
-		trx.DelKey("link::memberof::" + parts[1] + "::" + parts[2])
+		trx.DelKey("link::memberof::" + parts[2] + "::" + parts[1])
 		trx.DelKey("link::" + member)
+		trx.DelJson("PointAccess::"+parts[2]+"::"+parts[1], "metadata")
 		usersList = append(usersList, parts[1])
 	}
 	prefix := "admin::" + point.Id + "::"
@@ -773,6 +902,7 @@ func (a *Actions) Join(state state.IState, input inputs_points.JoinInput) (any, 
 	}
 	trx.PutLink("member::"+point.Id+"::"+state.Info().UserId(), "true")
 	trx.PutLink("memberof::"+state.Info().UserId()+"::"+point.Id, "true")
+	trx.PutJson("PointAccess::"+point.Id+"::"+state.Info().UserId(), "metadata", access, false)
 	point.MemberCount++
 	point.Push(trx)
 	a.App.Tools().Signaler().JoinGroup(point.Id, state.Info().UserId())
@@ -802,6 +932,7 @@ func (a *Actions) Leave(state state.IState, input inputs_points.JoinInput) (any,
 	}
 	trx.DelKey("link::member::" + point.Id + "::" + state.Info().UserId())
 	trx.DelKey("link::memberof::" + state.Info().UserId() + "::" + point.Id)
+	trx.DelJson("PointAccess::"+point.Id+"::"+state.Info().UserId(), "metadata")
 	if trx.GetLink("admin::"+point.Id+"::"+state.Info().UserId()) == "true" {
 		trx.DelKey("link::admin::" + point.Id + "::" + state.Info().UserId())
 		trx.DelKey("lnik::adminof::" + state.Info().UserId() + "::" + point.Id)
@@ -828,6 +959,11 @@ func (a *Actions) Leave(state state.IState, input inputs_points.JoinInput) (any,
 
 // Signal /points/signal check [ true true true ] access [ true false false false POST ]
 func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["sendSignal"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	trx := state.Trx()
 	a.Locks.SetIfAbsent(state.Info().PointId(), &LockHolder{})
 	locker, _ := a.Locks.Get(state.Info().PointId())
@@ -880,6 +1016,11 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 
 // History /points/history check [ true true true ] access [ true false false false POST ]
 func (a *Actions) History(state state.IState, input inputs_points.HistoryInput) (any, error) {
+	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if meta, err := state.Trx().GetJson("PointAccess::"+state.Info().PointId()+"::"+state.Info().UserId(), "metadata"); err != nil && !meta["readHistory"].(bool) {
+			return nil, errors.New("access not permitted")
+		}
+	}
 	return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().ReadPointLogs(state.Info().PointId(), input.BeforeId, input.Count)}, nil
 }
 

@@ -46,6 +46,14 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateMember)
 		}
 		
+		func (c *Plugger) UpdateMemberAccess() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateMemberAccess)
+		}
+		
+		func (c *Plugger) UpdateMachineAccess() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateMachineAccess)
+		}
+		
 		func (c *Plugger) ReadMembers() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.ReadMembers)
 		}
