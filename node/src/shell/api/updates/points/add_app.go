@@ -14,7 +14,7 @@ type Fn struct {
 	Comment    string          `json:"comment"`
 	Identifier string          `json:"identifier"`
 	Metadata   map[string]any  `json:"metadata"`
-	Access     map[string]bool `json:"metadata"`
+	Access     map[string]bool `json:"access"`
 }
 
 type AddApp struct {

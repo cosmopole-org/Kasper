@@ -44,16 +44,6 @@ func authorizeAndGEtToken(userId string, authCode string) *http.Client {
 	return config.Client(context.Background(), tok)
 }
 
-func saveToken(path string, token *oauth2.Token) {
-	fmt.Printf("Saving credential file to: %s\n", path)
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		log.Println("Unable to cache oauth token: " + err.Error())
-	}
-	defer f.Close()
-	json.NewEncoder(f).Encode(token)
-}
-
 var tokens = map[string]string{}
 var clients = map[string]*http.Client{}
 var configs = map[string]*oauth2.Config{}
@@ -133,7 +123,7 @@ func runHttpServer() {
 			ctx := context.Background()
 			srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
 			if err != nil {
-				log.Fatalf("Unable to retrieve Drive client: %v", err)
+				log.Println("Unable to retrieve Drive client: " + err.Error())
 			}
 			services[userId] = srv
 		}
