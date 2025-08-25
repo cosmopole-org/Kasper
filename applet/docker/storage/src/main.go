@@ -12,13 +12,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
 	"sync"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/googleapi"
 
 	"google.golang.org/api/option"
 )
@@ -158,133 +157,22 @@ func runHttpServer() {
 	})
 	registerRoute("/api/upload", func(w http.ResponseWriter, r *http.Request) {
 		file := r.Header.Get("file")
-		fileId := r.Header.Get("fileId")
 		userId := r.Header.Get("userId")
-
-		fileKey := userId + "_" + fileId
-
-		token, ok := tokens[userId]
-		if !ok {
-			http.Error(w, "Failed to find user token", http.StatusInternalServerError)
-			return
-		}
 
 		payloadB64, _ := os.ReadFile("/app/input/" + file)
 		payload, _ := base64.StdEncoding.DecodeString(string(payloadB64))
 
-		totalHeader := r.Header.Get("X-Total-Size")
-		var total *int64
-		if totalHeader != "" {
-			t, _ := strconv.ParseInt(totalHeader, 10, 64)
-			total = &t
+		srv := services[userId]
+		res, err := srv.Files.Create(&drive.File{
+			Name: file,
+		}).Media(bytes.NewBuffer(payload), googleapi.ChunkSize(len(payload))).Do()
+
+		if err != nil {
+			http.Error(w, "Failed to upload "+err.Error(), http.StatusInternalServerError)
 		}
 
-		sessionsMu.Lock()
-		sess := sessions[fileKey]
-		sessionsMu.Unlock()
-
-		if sess == nil {
-			endpoint := "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable"
-			method := "POST"
-			if fileId != "" {
-				endpoint = fmt.Sprintf("https://www.googleapis.com/upload/drive/v3/files/%s?uploadType=resumable", fileId)
-				method = "PATCH"
-			}
-
-			metaBytes, _ := json.Marshal(map[string]any{"name": file})
-			meta := string(metaBytes)
-
-			initReq, _ := http.NewRequest(method, endpoint, io.NopCloser(strings.NewReader(meta)))
-			initReq.Header.Set("Authorization", "Bearer "+token)
-			initReq.Header.Set("Content-Type", "application/json; charset=UTF-8")
-			initReq.Header.Set("X-Upload-Content-Type", r.Header.Get("fileContentType"))
-			if total != nil {
-				initReq.Header.Set("X-Upload-Content-Length", fmt.Sprint(*total))
-			}
-
-			initResp, err := http.DefaultClient.Do(initReq)
-			if err != nil {
-				http.Error(w, "Failed to init session: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-			defer initResp.Body.Close()
-
-			sessionURI := initResp.Header.Get("Location")
-			if sessionURI == "" {
-				http.Error(w, "No resumable session URI", http.StatusInternalServerError)
-				return
-			}
-
-			sess = &SessionInfo{SessionURI: sessionURI, Uploaded: 0, TotalSize: total, FileID: fileId}
-			sessionsMu.Lock()
-			sessions[fileKey] = sess
-			sessionsMu.Unlock()
-		}
-
-		// Step 2: Upload chunk via PUT to session URI
-		chunkSize := int64(len(payload))
-		end := sess.Uploaded + chunkSize - 1
-		totalStr := "*"
-		if sess.TotalSize != nil {
-			totalStr = fmt.Sprint(*sess.TotalSize)
-		}
-
-		ctx := context.Background()
-
-		putReq, _ := http.NewRequest("PUT", sess.SessionURI, bytes.NewBuffer(payload))
-		putReq.Header.Set("Content-Length", fmt.Sprint(chunkSize))
-		putReq.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%s", sess.Uploaded, end, totalStr))
-		putReq = putReq.WithContext(ctx)
-		putReq.Header.Set("Authorization", "Bearer "+token)
-
-		resp, err := http.DefaultClient.Do(putReq)
-		if err != nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusPermanentRedirect) {
-			status := "<no response>"
-			if resp != nil {
-				status = resp.Status
-				resp.Body.Close()
-			}
-			http.Error(w, "Upload failed: "+status, http.StatusInternalServerError)
-			return
-		}
-		defer resp.Body.Close()
-
-		// Retrieve file metadata after upload completion
-		var buf bytes.Buffer
-		if _, err := io.Copy(&buf, resp.Body); err != nil {
-			http.Error(w, "Failed to read response body: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		result := buf.Bytes()
-		log.Println(string(result))
-
-		sess.Uploaded += chunkSize
-		fmt.Fprintf(w, "Uploaded total: %d bytes\n", sess.Uploaded)
-		os.Remove("/app/input/" + file)
-
-		// Parse the response to extract file ID
-		var metadata map[string]interface{}
-		if err := json.Unmarshal(result, &metadata); err != nil {
-			response, _ := json.Marshal(map[string]any{"success": true})
-			w.Write(response)
-			return
-		} else {
-			if id, ok := metadata["id"].(string); ok {
-				sess.FileID = id
-			} else {
-				http.Error(w, "File ID not found in response", http.StatusInternalServerError)
-				return
-			}
-			if sess.FileID != "" {
-				delete(sessions, fileKey)
-				response, _ := json.Marshal(map[string]any{"success": true, "fileId": sess.FileID})
-				w.Write(response)
-			} else {
-				response, _ := json.Marshal(map[string]any{"success": true, "key": file})
-				w.Write(response)
-			}
-		}
+		response, _ := json.Marshal(map[string]any{"success": true, "fileId": res.Id})
+		w.Write(response)
 	})
 	registerRoute("/api/download", func(w http.ResponseWriter, req *http.Request) {
 		userId := req.Header.Get("userId")
