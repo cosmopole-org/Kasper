@@ -38,12 +38,19 @@ void wasmRunVm(
     char *input,
     char *machineId)
 {
-  json j = json::parse(input);
-  json point = j["point"];
-  std::string pointId = point["id"].template get<std::string>();
-  auto rt = new WasmMac(machineId, pointId, astPath, wasmCallback);
-  rt->executeOnUpdate(input);
-  rt->finalize();
+  try
+  {
+    json j = json::parse(input);
+    json point = j["point"];
+    std::string pointId = point["id"].template get<std::string>();
+    auto rt = new WasmMac(machineId, pointId, astPath, wasmCallback);
+    rt->executeOnUpdate(input);
+    rt->finalize();
+  }
+  catch (int errCode)
+  {
+    std::cout << errCode << std::endl;
+  }
 }
 
 void wasmRunEffects(char *effectsStr)
@@ -77,17 +84,24 @@ void wasmRunTrxs(
     char *astStorePath,
     char *input)
 {
-  json j = json::parse(input);
-  vector<ChainTrx *> trxs{};
-  for (json::iterator item = j.begin(); item != j.end(); ++item)
+  try
   {
-    trxs.push_back(new ChainTrx(
-        item.value()["machineId"].template get<std::string>(),
-        item.value()["key"].template get<std::string>(),
-        item.value()["payload"].template get<std::string>(),
-        item.value()["userId"].template get<std::string>(),
-        item.value()["callbackId"].template get<std::string>()));
+    json j = json::parse(input);
+    vector<ChainTrx *> trxs{};
+    for (json::iterator item = j.begin(); item != j.end(); ++item)
+    {
+      trxs.push_back(new ChainTrx(
+          item.value()["machineId"].template get<std::string>(),
+          item.value()["key"].template get<std::string>(),
+          item.value()["payload"].template get<std::string>(),
+          item.value()["userId"].template get<std::string>(),
+          item.value()["callbackId"].template get<std::string>()));
+    }
+    ConcurrentRunner *cr = new ConcurrentRunner(astStorePath, trxs);
+    cr->run();
   }
-  ConcurrentRunner *cr = new ConcurrentRunner(astStorePath, trxs);
-  cr->run();
+  catch (int errCode)
+  {
+    std::cout << errCode << std::endl;
+  }
 }
