@@ -120,7 +120,7 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 				acc[k] = v
 			}
 		}
-		trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId+"::"+fn.Identifier, "metadata", acc, false)
+		trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId, "metadata", acc, false)
 		trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+machine.Identifier, "metadata", machine.Metadata, true)
 		trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+app.Id+"::"+machine.MachineId+"::"+machine.Identifier, "true")
 		uniqueMacs[fn.UserId] = append(uniqueMacs[fn.UserId], machine.Identifier)
@@ -332,11 +332,10 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 			acc[k] = v
 		}
 	}
-	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId+"::"+fn.Identifier, "metadata", acc, false)
+	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId, "metadata", acc, false)
 	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "true")
 	trx.PutLink("memberof::"+input.MachineMeta.MachineId+"::"+state.Info().PointId(), "true")
-	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "metadata", access, false)
 	trx.PutLink("pointAppMachine::"+state.Info().PointId()+"::"+input.AppId+"::"+input.MachineMeta.MachineId+"::"+input.MachineMeta.Identifier, "true")
 	a.App.Tools().Signaler().JoinGroup(state.Info().PointId(), input.MachineMeta.MachineId)
 	future.Async(func() {
@@ -478,7 +477,7 @@ func (a *Actions) UpdateMachineAccess(state state.IState, input inputs_points.Up
 		return nil, errors.New("access not permitted")
 	}
 	trx := state.Trx()
-	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.MachineId+"::"+input.Identifier, "metadata", input.Access, true)
+	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.MachineId, "metadata", input.Access, true)
 	return map[string]any{}, nil
 }
 
