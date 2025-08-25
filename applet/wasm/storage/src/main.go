@@ -797,6 +797,8 @@ type Doc struct {
 	Id        string
 	Title     string
 	FileId    string
+	MimeType  string
+	Category  string
 	CreatorId string
 	PointId   string
 }
@@ -1034,9 +1036,7 @@ func run(a int64) int64 {
 				LastUpdate: time.Now().UnixMilli(),
 			})
 			point := trx.Db.Points.FindById(signal.Point.Id)
-			logger.Log("test 1")
 			user := trx.Db.Users.FindById(signal.User.Id)
-			logger.Log("test 2")
 			if user.Id == "" {
 				answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "uploadRes", "success": false, "errCode": 3})
 				return 0
@@ -1083,9 +1083,21 @@ func run(a int64) int64 {
 			res = "{" + strings.Join(strings.Split(res, "{")[1:], "{")
 			resObj = map[string]any{}
 			json.Unmarshal([]byte(res), &resObj)
+			fileType := ""
+			if strings.HasPrefix(mimeType, "image/") {
+				fileType = "image"
+			} else if strings.HasPrefix(mimeType, "audio/") {
+				fileType = "audio"
+			} else if strings.HasPrefix(mimeType, "video/") {
+				fileType = "video"
+			} else {
+				fileType = "document"
+			}
 			doc := &Doc{
 				Id:        strings.ReplaceAll(uuid.NewString(), "-", ""),
 				FileId:    resObj["fileId"].(string),
+				MimeType:  mimeType,
+				Category:  fileType,
 				CreatorId: signal.User.Id,
 				PointId:   signal.Point.Id,
 				Title:     fileKey,

@@ -113,7 +113,7 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 		}
 		m[fn.UserId+"::"+fn.Identifier] = fn
 		acc := map[string]bool{}
-		for k, v := range machine.Access {
+		for k, v := range access {
 			if v2, ok := machine.Access[k]; ok {
 				acc[k] = v2
 			} else {
@@ -325,7 +325,7 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		Access:     input.MachineMeta.Access,
 	}
 	acc := map[string]bool{}
-	for k, v := range input.MachineMeta.Access {
+	for k, v := range access {
 		if v2, ok := input.MachineMeta.Access[k]; ok {
 			acc[k] = v2
 		} else {
@@ -418,7 +418,7 @@ func (a *Actions) AddMember(state state.IState, input inputs_points.AddMemberInp
 	trx.PutLink("memberof::"+input.UserId+"::"+state.Info().PointId(), "true")
 	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+input.UserId, "metadata", access, false)
 	acc := map[string]bool{}
-	for k, v := range input.Access {
+	for k, v := range access {
 		if v2, ok := input.Access[k]; ok {
 			acc[k] = v2
 		} else {
