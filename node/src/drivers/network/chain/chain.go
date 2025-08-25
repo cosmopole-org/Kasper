@@ -211,6 +211,17 @@ func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 				continue
 			}
 			log.Println("new client connected")
+			initialWord := []byte("I_WANNA_JOIN_NETWORK")
+			question := make([]byte, len(initialWord))
+			n, err := conn.Read(question)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			if (n != len(initialWord)) || (string(initialWord) != string(question)) {
+				log.Println("notice: connected chain peer is not verified, skipping...")
+				continue
+			}
 			b.handleConnection(conn)
 		}
 	}, true)
@@ -976,6 +987,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 		return false
 	}
 	log.Println("connected to the server..")
+	conn.Write([]byte("I_WANNA_JOIN_NETWORK"))
 	chain.handleConnection(conn)
 	return true
 }
@@ -1006,9 +1018,9 @@ func (b *Blockchain) CreateWorkChain(peers map[string]int64) int64 {
 	m3 := cmap.New[bool]()
 	m3.Set(fmt.Sprintf("%d", sc.id), true)
 	chain := &Chain{
-		id:        sc.id,
-		SubChains: &m2,
-		MyShards:  &m3,
+		id:         sc.id,
+		SubChains:  &m2,
+		MyShards:   &m3,
 		blockchain: b,
 	}
 	chain.sharder = NewSharder(chain)
@@ -1100,9 +1112,9 @@ func (b *Blockchain) CreateTempChain(peers map[string]int64) int64 {
 	m3 := cmap.New[bool]()
 	m3.Set(fmt.Sprintf("%d", sc.id), true)
 	chain := &Chain{
-		id:        sc.id,
-		SubChains: &m2,
-		MyShards:  &m3,
+		id:         sc.id,
+		SubChains:  &m2,
+		MyShards:   &m3,
 		blockchain: b,
 	}
 	chain.sharder = NewSharder(chain)

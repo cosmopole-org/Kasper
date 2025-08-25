@@ -623,13 +623,26 @@ void WasmMac::enqueue(function<void()> task)
 
 void WasmMac::executeOnUpdate(std::string input)
 {
+    WasmEdge_String memName = WasmEdge_StringCreateByCString("memory");
+    WasmEdge_String mallocName = WasmEdge_StringCreateByCString("malloc");
+    WasmEdge_String FuncName = WasmEdge_StringCreateByCString("_start");
+    WasmEdge_String FuncName2 = WasmEdge_StringCreateByCString("run");
     try
     {
-        auto memName = WasmEdge_StringCreateByCString("memory");
-        auto mallocName = WasmEdge_StringCreateByCString("malloc");
+        WasmEdge_Value Params2[0] = {};
+        WasmEdge_Value Returns2[0] = {};
+        auto Res2 = WasmEdge_VMExecute(this->vm, FuncName, Params2, 0, Returns2, 0);
+        if (!WasmEdge_ResultOK(Res2))
+        {
+            printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res2));
+        }
 
         auto mod = WasmEdge_VMGetActiveModule(this->vm);
         auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
+
+        std::cout << std::endl;
+        std::cout << input << input.size() << std::endl;
+        std::cout << std::endl;
 
         int valL = input.size();
 
@@ -646,16 +659,6 @@ void WasmMac::executeOnUpdate(std::string input)
         WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
         int64_t c = ((ino64_t)valOffset << 32) | valL;
 
-        WasmEdge_String FuncName = WasmEdge_StringCreateByCString("_start");
-        WasmEdge_Value Params2[0] = {};
-        WasmEdge_Value Returns2[0] = {};
-        auto Res2 = WasmEdge_VMExecute(this->vm, FuncName, Params2, 0, Returns2, 0);
-        if (!WasmEdge_ResultOK(Res2))
-        {
-            printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res2));
-        }
-
-        WasmEdge_String FuncName2 = WasmEdge_StringCreateByCString("run");
         WasmEdge_Value Params3[1] = {WasmEdge_ValueGenI64(c)};
         WasmEdge_Value Returns3[1] = {WasmEdge_ValueGenI64(0)};
         auto Res3 = WasmEdge_VMExecute(this->vm, FuncName2, Params3, 1, Returns3, 0);
@@ -668,18 +671,19 @@ void WasmMac::executeOnUpdate(std::string input)
     {
         std::cout << errCode << std::endl;
     }
-    // WasmEdge_StringDelete(FuncName);
-    // WasmEdge_StringDelete(memName);
-    // WasmEdge_StringDelete(mallocName);
+    WasmEdge_StringDelete(FuncName2);
+    WasmEdge_StringDelete(FuncName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 }
 
 void WasmMac::runTask(std::string taskId)
 {
+    WasmEdge_String memName = WasmEdge_StringCreateByCString("memory");
+    WasmEdge_String mallocName = WasmEdge_StringCreateByCString("malloc");
+    WasmEdge_String FuncName = WasmEdge_StringCreateByCString("runTask");
     try
     {
-        auto memName = WasmEdge_StringCreateByCString("memory");
-        auto mallocName = WasmEdge_StringCreateByCString("malloc");
-
         auto mod = WasmEdge_VMGetActiveModule(this->vm);
         auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
 
@@ -698,7 +702,6 @@ void WasmMac::runTask(std::string taskId)
         WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
         int64_t c = ((ino64_t)valOffset << 32) | valL;
 
-        WasmEdge_String FuncName = WasmEdge_StringCreateByCString("runTask");
         WasmEdge_Value Params2[1] = {WasmEdge_ValueGenI64(c)};
         WasmEdge_Value Returns2[1] = {WasmEdge_ValueGenI32(0)};
         auto Res = WasmEdge_VMExecute(this->vm, FuncName, Params2, 1, Returns2, 1);
@@ -711,7 +714,9 @@ void WasmMac::runTask(std::string taskId)
     {
         std::cout << errCode << std::endl;
     }
-    // WasmEdge_StringDelete(FuncName);
+    WasmEdge_StringDelete(FuncName);
+    WasmEdge_StringDelete(mallocName);
+    WasmEdge_StringDelete(memName);
 }
 
 void WasmMac::executeOnChain(std::string input, std::string userId, void *crRaw)
@@ -741,13 +746,26 @@ void WasmMac::executeOnChain(std::string input, std::string userId, void *crRaw)
         WasmEdge_String memName = WasmEdge_StringCreateByCString("memory");
         WasmEdge_String mallocName = WasmEdge_StringCreateByCString("malloc");
         WasmEdge_String FuncName = WasmEdge_StringCreateByCString("_start");
+        WasmEdge_String FuncName2 = WasmEdge_StringCreateByCString("run");
         try
         {
             this->isTokenValid = true;
             WasmEdge_StatisticsSetCostLimit(WasmEdge_VMGetStatisticsContext(this->vm), gasLimit);
 
+            WasmEdge_Value Params2[0] = {};
+            WasmEdge_Value Returns2[0] = {};
+            auto Res2 = WasmEdge_VMExecute(this->vm, FuncName, Params2, 0, Returns2, 0);
+            if (!WasmEdge_ResultOK(Res2))
+            {
+                printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res2));
+            }
+
             auto mod = WasmEdge_VMGetActiveModule(this->vm);
             auto mem = WasmEdge_ModuleInstanceFindMemory(mod, memName);
+
+            std::cout << std::endl;
+            std::cout << params << params.size() << std::endl;
+            std::cout << std::endl;
 
             int valL = params.size();
 
@@ -764,14 +782,6 @@ void WasmMac::executeOnChain(std::string input, std::string userId, void *crRaw)
             WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
             int64_t c = ((ino64_t)valOffset << 32) | valL;
 
-            WasmEdge_Value Params2[0] = {};
-            WasmEdge_Value Returns2[0] = {};
-            auto Res2 = WasmEdge_VMExecute(this->vm, FuncName, Params2, 0, Returns2, 0);
-            if (!WasmEdge_ResultOK(Res2))
-            {
-                printf("Execution phase failed: %s\n", WasmEdge_ResultGetMessage(Res2));
-            }
-            WasmEdge_String FuncName2 = WasmEdge_StringCreateByCString("run");
             WasmEdge_Value Params3[1] = {WasmEdge_ValueGenI64(c)};
             WasmEdge_Value Returns3[1] = {WasmEdge_ValueGenI64(0)};
             auto Res3 = WasmEdge_VMExecute(this->vm, FuncName2, Params3, 1, Returns3, 0);
@@ -787,6 +797,7 @@ void WasmMac::executeOnChain(std::string input, std::string userId, void *crRaw)
         WasmEdge_StringDelete(memName);
         WasmEdge_StringDelete(mallocName);
         WasmEdge_StringDelete(FuncName);
+        WasmEdge_StringDelete(FuncName2);
     }
 
     if (this->onchain)
