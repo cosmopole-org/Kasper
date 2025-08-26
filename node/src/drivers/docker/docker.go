@@ -927,7 +927,7 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 		client:      client,
 	}
 
-	address := "127.0.0.1:8074"
+	address := "0.0.0.0:8074"
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatal("listen error:", err)
