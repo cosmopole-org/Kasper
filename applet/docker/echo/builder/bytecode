@@ -10,4 +10,4 @@ RUN touch /app/output
 RUN go mod tidy
 RUN go build -o echo
 
-ENTRYPOINT [ "bash", "/app/run.sh" ]
+ENTRYPOINT [ "/app/echo" ]
