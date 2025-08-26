@@ -657,8 +657,8 @@ func (wm *Docker) Assign(machineId string) {
 	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
 	future.Async(func() {
 		socketPath := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main" + ".sock"
-		_, _ = net.Dial("unix", socketPath)
-		_, _ = net.Listen("unix", socketPath)
+		lnDef, _ := net.Listen("unix", socketPath)
+		lnDef.Close()
 		ln, err := net.Listen("unix", socketPath)
 		if err != nil {
 			log.Fatal("listen error:", err)
