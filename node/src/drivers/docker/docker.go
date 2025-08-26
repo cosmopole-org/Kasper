@@ -39,7 +39,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
 	network "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -663,8 +662,6 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 
 	ctx := context.Background()
 
-	socketPath := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main" + ".sock"
-
 	config := &container.Config{
 		Image: strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
 		Env:   []string{},
@@ -679,9 +676,6 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 				Config: map[string]string{},
 			},
 			Runtime: "runsc",
-			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: socketPath, Target: "/app/app.sock"},
-			},
 		},
 		&network.NetworkingConfig{},
 		nil,
