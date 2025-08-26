@@ -7,9 +7,7 @@ COPY . .
 RUN mkdir /app/input
 RUN touch /app/output
 
-RUN echo "building... 2"
-
 RUN go mod tidy
-RUN go build -o storage
+RUN go build -o echo
 
-ENTRYPOINT [ "/app/storage", "--command=adminInit" ]
+ENTRYPOINT [ "/app/echo" ]

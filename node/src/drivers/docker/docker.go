@@ -683,12 +683,12 @@ func (wm *Docker) Assign(machineId string) {
 			}
 		},
 	})
-	fifoReader, err := os.OpenFile("/tmp/"+strings.Join(strings.Split(machineId, "@"), "_")+"_main_main_output", os.O_RDONLY, os.ModeNamedPipe)
-	if err != nil {
-		log.Fatal("open fifo_out:", err)
-	}
-	defer fifoReader.Close()
 	future.Async(func() {
+		fifoReader, err := os.OpenFile("/tmp/"+strings.Join(strings.Split(machineId, "@"), "_")+"_main_main_output", os.O_RDONLY, os.ModeNamedPipe)
+		if err != nil {
+			log.Fatal("open fifo_out:", err)
+		}
+		defer fifoReader.Close()
 		lenBuf := make([]byte, 4)
 		buf := make([]byte, 1024)
 		nextBuf := make([]byte, 2048)
