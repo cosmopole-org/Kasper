@@ -200,7 +200,7 @@ func checkField[T any](input map[string]any, fieldName string, defVal T) (T, err
 	return f, nil
 }
 
-func (wm *Docker) dockerCallback(dataRaw string) string {
+func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 	log.Println(dataRaw)
 	data := map[string]any{}
 	err := json.Unmarshal([]byte(dataRaw), &data)
@@ -219,11 +219,6 @@ func (wm *Docker) dockerCallback(dataRaw string) string {
 		return err.Error()
 	}
 	if key == "runDocker" {
-		machineId, err := checkField(input, "machineId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
 		pointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			log.Println(err)
@@ -287,11 +282,6 @@ func (wm *Docker) dockerCallback(dataRaw string) string {
 			return string(str)
 		}
 	} else if key == "execDocker" {
-		machineId, err := checkField(input, "machineId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
 		imageName, err := checkField(input, "imageName", "")
 		if err != nil {
 			log.Println(err)
@@ -314,11 +304,6 @@ func (wm *Docker) dockerCallback(dataRaw string) string {
 		}
 		return output
 	} else if key == "copyToDocker" {
-		machineId, err := checkField(input, "machineId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
 		imageName, err := checkField(input, "imageName", "")
 		if err != nil {
 			log.Println(err)
@@ -470,11 +455,6 @@ func (wm *Docker) dockerCallback(dataRaw string) string {
 		})
 		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), "#appletsign", int(resCode), e, []update.Update{{Val: []byte("consumeToken: " + string(i))}, {Val: []byte("applet: " + changes)}})
 	} else if key == "submitOnchainTrx" {
-		machineId, err := checkField(input, "machineId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
 		targetMachineId, err := checkField(input, "targetMachineId", "")
 		if err != nil {
 			log.Println(err)
@@ -609,11 +589,6 @@ func (wm *Docker) dockerCallback(dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		machineId, err := checkField(input, "machineId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
 		tag, err := checkField(input, "tag", "")
 		if err != nil {
 			log.Println(err)
@@ -633,11 +608,6 @@ func (wm *Docker) dockerCallback(dataRaw string) string {
 			wm.app.PlantChainTrigger(int(count), machineId, tag, machineId, pointId, data)
 		}
 	} else if key == "signalPoint" {
-		machineId, err := checkField(input, "machineId", "")
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
 		typAndTemp, err := checkField(input, "type", "")
 		if err != nil {
 			log.Println(err)
@@ -705,16 +675,19 @@ func (wm *Docker) Assign(machineId string) {
 					lenBytes := make([]byte, 4)
 					binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
 					writer.Write(lenBytes)
+					cbBytes := make([]byte, 8)
+					binary.LittleEndian.PutUint64(cbBytes, uint64(0))
+					writer.Write(cbBytes)
 					writer.Write(data)
 				}
 			}
 		},
 	})
-	reader, err := os.OpenFile("/tmp/"+strings.Join(strings.Split(machineId, "@"), "_")+"_main_main_output", os.O_RDONLY, os.ModeNamedPipe)
+	fifoReader, err := os.OpenFile("/tmp/"+strings.Join(strings.Split(machineId, "@"), "_")+"_main_main_output", os.O_RDONLY, os.ModeNamedPipe)
 	if err != nil {
 		log.Fatal("open fifo_out:", err)
 	}
-	defer reader.Close()
+	defer fifoReader.Close()
 	future.Async(func() {
 		lenBuf := make([]byte, 4)
 		buf := make([]byte, 1024)
@@ -727,7 +700,7 @@ func (wm *Docker) Assign(machineId string) {
 		readLength := 0
 		remainedReadLength := 0
 		var readData []byte
-		reader := bufio.NewReader(reader)
+		reader := bufio.NewReader(fifoReader)
 		for {
 			if !enough {
 				var err error
@@ -789,13 +762,11 @@ func (wm *Docker) Assign(machineId string) {
 
 					log.Println("docker", "stat 3:", remainedReadLength, oldReadCount, readCount)
 
-					callbackId := int64(binary.LittleEndian.Uint64(packet[:8]))
+					callbackId := packet[:8]
 					packet = packet[8:]
 
-					data := []byte(wm.dockerCallback(string(packet)))
+					data := []byte(wm.dockerCallback(machineId, string(packet)))
 					locker, found := wm.lockers.Get(machineId)
-					response := map[string]any{"payload": data, "type": "callback", "callbackId": callbackId}
-					data, _ = json.Marshal(response)
 					if found {
 						func() {
 							locker.Lock.Lock()
@@ -809,6 +780,7 @@ func (wm *Docker) Assign(machineId string) {
 							lenBytes := make([]byte, 4)
 							binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
 							writer.Write(lenBytes)
+							writer.Write(callbackId)
 							writer.Write(data)
 						}()
 					}
