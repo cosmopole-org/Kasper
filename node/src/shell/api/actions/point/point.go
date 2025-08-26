@@ -158,6 +158,16 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 		if err != nil {
 			log.Println(err)
 		}
+		acc := map[string]bool{}
+		rawAcc, err := trx.GetJson("PointAccess::"+state.Info().PointId()+"::"+machineId, "metadata")
+		if err != nil {
+			acc = access
+			log.Println(err)
+		} else {
+			for k, v := range rawAcc {
+				acc[k] = v.(bool)
+			}
+		}
 		meta, err := trx.GetJson("MachineMeta::"+machineId, "metadata")
 		if err != nil {
 			log.Println(err)
@@ -181,6 +191,7 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 			Comment:    vm.Comment,
 			Metadata:   metadata,
 			Identifier: identifier,
+			Access:     acc,
 		}
 
 		if _, ok := apps[fn.AppId]; !ok {
@@ -499,6 +510,7 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 		return nil, err
 	}
 	membersArr := []map[string]any{}
+	isAdmin := trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) == "true"
 	for _, member := range members {
 		if member.Typ == "human" {
 			metadata, err := trx.GetJson("UserMeta::"+member.Id, "metadata.public.profile")
@@ -506,13 +518,27 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 				log.Println(err)
 				return nil, err
 			}
-			membersArr = append(membersArr, map[string]any{
+			memberData := map[string]any{
 				"id":        member.Id,
 				"publicKey": member.PublicKey,
 				"type":      member.Typ,
 				"username":  member.Username,
 				"name":      metadata["name"],
-			})
+			}
+			if isAdmin {
+				acc := map[string]bool{}
+				rawAcc, err := trx.GetJson("PointAccess::"+state.Info().PointId()+"::"+member.Id, "metadata")
+				if err != nil {
+					acc = access
+					log.Println(err)
+				} else {
+					for k, v := range rawAcc {
+						acc[k] = v.(bool)
+					}
+				}
+				memberData["access"] = acc
+			}
+			membersArr = append(membersArr, memberData)
 		}
 	}
 	return outputs_points.ReadMemberOutput{Members: membersArr}, nil
