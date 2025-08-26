@@ -14,10 +14,8 @@ var conn net.Conn
 func main() {
 
 	log.Println("started echo machine.")
-
-	socketPath := "/app/app.sock"
 	
-	conn, err := net.Dial("unix", socketPath)
+	conn, err := net.Dial("tcp", "host.docker.internal:12345")
 	if err != nil {
 		log.Fatal("dial error:", err)
 	}
