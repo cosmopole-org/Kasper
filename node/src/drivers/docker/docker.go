@@ -23,9 +23,9 @@ import (
 	models "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
+	"net"
 	"net/http"
 	"sync"
-	"syscall"
 
 	"archive/tar"
 	"bytes"
@@ -655,145 +655,141 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 
 func (wm *Docker) Assign(machineId string) {
 	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
-	createFIFO(machineId, "main", "main", "input")
-	createFIFO(machineId, "main", "main", "output")
-	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
-		Id: machineId,
-		Signal: func(key string, a any) {
-			if key == "points/signal" {
-				data := a.([]byte)
-				locker, found := wm.lockers.Get(machineId)
-				if found {
-					locker.Lock.Lock()
-					defer locker.Lock.Unlock()
-					cn := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_main_main_input"
-					writer, err := os.OpenFile(cn, os.O_WRONLY, os.ModeNamedPipe)
-					if err != nil {
-						log.Println("open fifo_in:", err.Error())
-					}
-					defer writer.Close()
-					lenBytes := make([]byte, 4)
-					binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
-					writer.Write(lenBytes)
-					cbBytes := make([]byte, 8)
-					binary.LittleEndian.PutUint64(cbBytes, uint64(0))
-					writer.Write(cbBytes)
-					writer.Write(data)
-				}
-			}
-		},
-	})
 	future.Async(func() {
-		fifoReader, err := os.OpenFile("/tmp/"+strings.Join(strings.Split(machineId, "@"), "_")+"_main_main_output", os.O_RDONLY, os.ModeNamedPipe)
+		socketPath := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main" + ".sock"
+		_, _ = net.Dial("unix", socketPath)
+		_, _ = net.Listen("unix", socketPath)
+		ln, err := net.Listen("unix", socketPath)
 		if err != nil {
-			log.Fatal("open fifo_out:", err)
+			log.Fatal("listen error:", err)
 		}
-		defer fifoReader.Close()
-		lenBuf := make([]byte, 4)
-		buf := make([]byte, 1024)
-		nextBuf := make([]byte, 2048)
-		readCount := 0
-		oldReadCount := 0
-		enough := false
-		beginning := true
-		length := 0
-		readLength := 0
-		remainedReadLength := 0
-		var readData []byte
-		reader := bufio.NewReader(fifoReader)
+		defer ln.Close()
 		for {
-			if !enough {
-				var err error
-				readLength, err = reader.Read(buf)
-				if err != nil {
-					log.Println("docker", err)
-					return
-				}
-				log.Println("docker", "stat 0: reading data...")
-
-				readCount += readLength
-				copy(nextBuf[remainedReadLength:remainedReadLength+readLength], buf[0:readLength])
-				remainedReadLength += readLength
-
-				log.Println("docker", "stat 1:", readLength, oldReadCount, readCount, remainedReadLength)
+			conn, err := ln.Accept()
+			if err != nil {
+				log.Println("accept error:", err)
+				continue
 			}
-
-			if beginning {
-				if readCount >= 4 {
-					log.Println("docker", "stating stat 2...")
-					copy(lenBuf, nextBuf[0:4])
-					log.Println("docker", "nextBuf", nextBuf[0:4])
-					log.Println("docker", "lenBuf", lenBuf[0:4])
-					remainedReadLength -= 4
-					copy(nextBuf[0:remainedReadLength], nextBuf[4:remainedReadLength+4])
-					length = int(binary.BigEndian.Uint32(lenBuf))
-					if length > 20000000 {
-						return
-					}
-					readData = make([]byte, length)
-					readCount -= 4
-					beginning = false
-					enough = true
-
-					log.Println("docker", "stat 2:", remainedReadLength, length, readCount)
-				} else {
-					enough = false
-				}
-			} else {
-				if remainedReadLength == 0 {
-					enough = false
-				} else if readCount >= length {
-					log.Println("docker", "stating stat 3...")
-					log.Println("docker", "stat 3 step 1", oldReadCount, length)
-					copy(readData[oldReadCount:length], nextBuf[0:length-oldReadCount])
-					log.Println("docker", "stat 3 step 2", readLength, readCount, length)
-					readCount -= length
-					copy(nextBuf[0:readCount], nextBuf[length-oldReadCount:(length-oldReadCount)+readCount])
-					log.Println("docker", "nextBuf", nextBuf[0:readCount])
-					log.Println("docker", "stat 3 step 3", readCount, length)
-					remainedReadLength = readCount
-					log.Println("docker", "packet received")
-					packet := make([]byte, length)
-					copy(packet, readData)
-					log.Println("docker", "stat 3 step 4")
-					oldReadCount = 0
-					enough = true
-					beginning = true
-
-					log.Println("docker", "stat 3:", remainedReadLength, oldReadCount, readCount)
-
-					callbackId := packet[:8]
-					packet = packet[8:]
-
-					data := []byte(wm.dockerCallback(machineId, string(packet)))
-					locker, found := wm.lockers.Get(machineId)
-					if found {
-						func() {
+			log.Println("Machine bridge server listening on", socketPath)
+			wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
+				Id: machineId,
+				Signal: func(key string, a any) {
+					if key == "points/signal" {
+						data := a.([]byte)
+						locker, found := wm.lockers.Get(machineId)
+						if found {
 							locker.Lock.Lock()
 							defer locker.Lock.Unlock()
-							cn := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_main_main_input"
-							writer, err := os.OpenFile(cn, os.O_WRONLY, os.ModeNamedPipe)
-							if err != nil {
-								log.Println("open fifo_in:", err.Error())
-							}
-							defer writer.Close()
 							lenBytes := make([]byte, 4)
 							binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
-							writer.Write(lenBytes)
-							writer.Write(callbackId)
-							writer.Write(data)
-						}()
+							conn.Write(lenBytes)
+							cbBytes := make([]byte, 8)
+							binary.LittleEndian.PutUint64(cbBytes, uint64(0))
+							conn.Write(cbBytes)
+							conn.Write(data)
+						}
 					}
+				},
+			})
+			lenBuf := make([]byte, 4)
+			buf := make([]byte, 1024)
+			nextBuf := make([]byte, 2048)
+			readCount := 0
+			oldReadCount := 0
+			enough := false
+			beginning := true
+			length := 0
+			readLength := 0
+			remainedReadLength := 0
+			var readData []byte
+			for {
+				if !enough {
+					var err error
+					readLength, err = conn.Read(buf)
+					if err != nil {
+						log.Println("docker", err)
+						return
+					}
+					log.Println("docker", "stat 0: reading data...")
 
+					readCount += readLength
+					copy(nextBuf[remainedReadLength:remainedReadLength+readLength], buf[0:readLength])
+					remainedReadLength += readLength
+
+					log.Println("docker", "stat 1:", readLength, oldReadCount, readCount, remainedReadLength)
+				}
+
+				if beginning {
+					if readCount >= 4 {
+						log.Println("docker", "stating stat 2...")
+						copy(lenBuf, nextBuf[0:4])
+						log.Println("docker", "nextBuf", nextBuf[0:4])
+						log.Println("docker", "lenBuf", lenBuf[0:4])
+						remainedReadLength -= 4
+						copy(nextBuf[0:remainedReadLength], nextBuf[4:remainedReadLength+4])
+						length = int(binary.BigEndian.Uint32(lenBuf))
+						if length > 20000000 {
+							return
+						}
+						readData = make([]byte, length)
+						readCount -= 4
+						beginning = false
+						enough = true
+
+						log.Println("docker", "stat 2:", remainedReadLength, length, readCount)
+					} else {
+						enough = false
+					}
 				} else {
-					log.Println("docker", "stating stat 4...")
+					if remainedReadLength == 0 {
+						enough = false
+					} else if readCount >= length {
+						log.Println("docker", "stating stat 3...")
+						log.Println("docker", "stat 3 step 1", oldReadCount, length)
+						copy(readData[oldReadCount:length], nextBuf[0:length-oldReadCount])
+						log.Println("docker", "stat 3 step 2", readLength, readCount, length)
+						readCount -= length
+						copy(nextBuf[0:readCount], nextBuf[length-oldReadCount:(length-oldReadCount)+readCount])
+						log.Println("docker", "nextBuf", nextBuf[0:readCount])
+						log.Println("docker", "stat 3 step 3", readCount, length)
+						remainedReadLength = readCount
+						log.Println("docker", "packet received")
+						packet := make([]byte, length)
+						copy(packet, readData)
+						log.Println("docker", "stat 3 step 4")
+						oldReadCount = 0
+						enough = true
+						beginning = true
 
-					copy(readData[oldReadCount:oldReadCount+(readCount-oldReadCount)], nextBuf[0:readCount-oldReadCount])
-					remainedReadLength = 0
-					oldReadCount = readCount
-					enough = true
+						log.Println("docker", "stat 3:", remainedReadLength, oldReadCount, readCount)
 
-					log.Println("docker", "stat 4:", remainedReadLength)
+						callbackId := packet[:8]
+						packet = packet[8:]
+
+						data := []byte(wm.dockerCallback(machineId, string(packet)))
+						locker, found := wm.lockers.Get(machineId)
+						if found {
+							func() {
+								locker.Lock.Lock()
+								defer locker.Lock.Unlock()
+								lenBytes := make([]byte, 4)
+								binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
+								conn.Write(lenBytes)
+								conn.Write(callbackId)
+								conn.Write(data)
+							}()
+						}
+
+					} else {
+						log.Println("docker", "stating stat 4...")
+
+						copy(readData[oldReadCount:oldReadCount+(readCount-oldReadCount)], nextBuf[0:readCount-oldReadCount])
+						remainedReadLength = 0
+						oldReadCount = readCount
+						enough = true
+
+						log.Println("docker", "stat 4:", remainedReadLength)
+					}
 				}
 			}
 		}
@@ -806,8 +802,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 
 	ctx := context.Background()
 
-	inputPath := createFIFO(machineId, imageName, containerName, "input")
-	outputPath := createFIFO(machineId, imageName, containerName, "output")
+	socketPath := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main" + ".sock"
 
 	config := &container.Config{
 		Image: strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
@@ -824,8 +819,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 			},
 			Runtime: "runsc",
 			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: inputPath, Target: "/app/fifo_in"},
-				{Type: mount.TypeBind, Source: outputPath, Target: "/app/fifo_out"},
+				{Type: mount.TypeBind, Source: socketPath, Target: "/app/app.sock"},
 			},
 		},
 		&network.NetworkingConfig{},
@@ -1004,15 +998,6 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 	outputChan <- ""
 
 	return nil
-}
-
-func createFIFO(machineId string, imageName string, containerName string, key string) string {
-	path := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName + "_" + key
-	if err := syscall.Mkfifo(path, 0666); err != nil && err.Error() != "file exists" {
-		log.Println("Failed to create FIFO", path, err)
-	}
-	log.Println("FIFO ready:", path)
-	return path
 }
 
 func (wm *Docker) ExecContainer(machineId string, imageName string, containerName string, command string) (string, error) {

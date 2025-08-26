@@ -1,37 +1,27 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"log"
-	"os"
+	"net"
 	"sync"
 )
 
 var lock sync.Mutex
-var writer *os.File
+var conn net.Conn
 
 func main() {
 
 	log.Println("started echo machine.")
 
-	fifoIn := "/app/fifo_in"
-	fifoOut := "/app/fifo_out"
-
-	var err error
-
-	writer, err = os.OpenFile(fifoIn, os.O_WRONLY, os.ModeNamedPipe)
+	socketPath := "/app/app.sock"
+	
+	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
-		log.Fatal("open fifo_in:", err)
+		log.Fatal("dial error:", err)
 	}
-	defer writer.Close()
-
-	fifoReader, err := os.OpenFile(fifoOut, os.O_RDONLY, os.ModeNamedPipe)
-	if err != nil {
-		log.Fatal("open fifo_out:", err)
-	}
-	defer fifoReader.Close()
+	defer conn.Close()
 
 	lenBuf := make([]byte, 4)
 	buf := make([]byte, 1024)
@@ -44,11 +34,10 @@ func main() {
 	readLength := 0
 	remainedReadLength := 0
 	var readData []byte
-	reader := bufio.NewReader(fifoReader)
 	for {
 		if !enough {
 			var err error
-			readLength, err = reader.Read(buf)
+			readLength, err = conn.Read(buf)
 			if err != nil {
 				log.Println("docker", err)
 				return
@@ -129,8 +118,8 @@ func writePacket(data []byte) {
 	defer lock.Unlock()
 	lenBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
-	writer.Write(lenBytes)
-	writer.Write(data)
+	conn.Write(lenBytes)
+	conn.Write(data)
 }
 
 func processPacket(callbackId int64, data []byte) {
