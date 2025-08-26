@@ -343,7 +343,9 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 			acc[k] = v
 		}
 	}
-	trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId, "metadata", acc, false)
+	if arr, err := trx.GetLinksList("pointAppMachine::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::", 0, 100); err != nil || len(arr) == 0 {
+		trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId, "metadata", acc, false)
+	}
 	trx.PutJson("FnMeta::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::"+input.MachineMeta.Identifier, "metadata", input.MachineMeta.Metadata, true)
 	trx.PutLink("member::"+state.Info().PointId()+"::"+input.MachineMeta.MachineId, "true")
 	trx.PutLink("memberof::"+input.MachineMeta.MachineId+"::"+state.Info().PointId(), "true")
