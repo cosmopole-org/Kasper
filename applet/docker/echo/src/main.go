@@ -16,8 +16,8 @@ func main() {
 
 	log.Println("started echo machine.")
 
-	fifoIn := "/fifo_in"
-	fifoOut := "/fifo_out"
+	fifoIn := "/app/fifo_in"
+	fifoOut := "/app/fifo_out"
 
 	var err error
 
