@@ -39,7 +39,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	network "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	cmap "github.com/orcaman/concurrent-map/v2"
@@ -675,9 +674,10 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 				Type:   "json-file",
 				Config: map[string]string{},
 			},
-			Runtime: "runsc",
+			Runtime:     "runsc",
+			NetworkMode: "host",
 		},
-		&network.NetworkingConfig{},
+		nil,
 		nil,
 		cn,
 	)
@@ -942,6 +942,7 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 			}
 			ip, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 			cn := strings.Split(GetContainerByIP(ip), "_")
+			log.Println(cn)
 			machineId := cn[0] + "@" + cn[1]
 			future.Async(func() {
 				wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{

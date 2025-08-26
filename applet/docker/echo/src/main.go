@@ -15,11 +15,13 @@ func main() {
 
 	log.Println("started echo machine.")
 	
-	conn, err := net.Dial("tcp", "host.docker.internal:12345")
+	conn, err := net.Dial("tcp", "127.0.0.1:8074")
 	if err != nil {
 		log.Fatal("dial error:", err)
 	}
 	defer conn.Close()
+
+	log.Println("connected.")
 
 	lenBuf := make([]byte, 4)
 	buf := make([]byte, 1024)
@@ -95,6 +97,8 @@ func main() {
 
 				callbackId := int64(binary.LittleEndian.Uint64(packet[:8]))
 				packet = packet[8:]
+
+				log.Println("received ", string(packet))
 
 				processPacket(callbackId, packet)
 			} else {
