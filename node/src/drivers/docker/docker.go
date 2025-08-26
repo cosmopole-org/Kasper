@@ -824,8 +824,8 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 			},
 			Runtime: "runsc",
 			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: inputPath, Target: "/fifo_in"},
-				{Type: mount.TypeBind, Source: outputPath, Target: "/fifo_out"},
+				{Type: mount.TypeBind, Source: inputPath, Target: "/tmp/fifo_in"},
+				{Type: mount.TypeBind, Source: outputPath, Target: "/tmp/fifo_out"},
 			},
 		},
 		&network.NetworkingConfig{},

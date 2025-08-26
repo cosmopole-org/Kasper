@@ -238,7 +238,9 @@ func (a *Actions) RunMachine(state state.IState, input inputs_machiner.RunMachin
 	if app.OwnerId != state.Info().UserId() {
 		return nil, errors.New("you are not owner of this machine")
 	}
-	a.App.Tools().Docker().RunContainer(input.MachineId, "", "main", "main", map[string]string{}, true)
+	future.Async(func() {
+		a.App.Tools().Docker().RunContainer(input.MachineId, "", "main", "main", map[string]string{}, true)
+	}, false)
 	return map[string]any{}, nil
 }
 
