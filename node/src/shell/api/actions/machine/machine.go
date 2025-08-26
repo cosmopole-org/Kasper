@@ -31,6 +31,8 @@ func Install(a *Actions) error {
 				a.App.Tools().Wasm().Assign(vm.MachineId)
 			} else if vm.Runtime == "elpis" {
 				a.App.Tools().Elpis().Assign(vm.MachineId)
+			} else if vm.Runtime == "docker" {
+				a.App.Tools().Docker().Assign(vm.MachineId)
 			}
 			var pointIds []string
 			prefix := "memberof::" + vm.MachineId + "::"
@@ -225,6 +227,21 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_machiner.Update
 	return map[string]any{}, nil
 }
 
+// RunMachine /apps/runMachine check [ true false false ] access [ true false false false POST ]
+func (a *Actions) RunMachine(state state.IState, input inputs_machiner.RunMachineInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("User", input.MachineId) {
+		return nil, errors.New("machine does not exist")
+	}
+	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
+	app := model.App{Id: vm.AppId}.Pull(trx)
+	if app.OwnerId != state.Info().UserId() {
+		return nil, errors.New("you are not owner of this machine")
+	}
+	a.App.Tools().Docker().RunContainer(input.MachineId, "", "main", "main", map[string]string{}, true)
+	return map[string]any{}, nil
+}
+
 // Deploy /machines/deploy check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) (any, error) {
 	trx := state.Trx()
@@ -243,17 +260,31 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 	if err != nil {
 		return nil, err
 	}
+	var standalone bool
 	if input.Runtime == "docker" {
 		if input.Metadata == nil {
 			return nil, errors.New("image name not provided")
 		}
-		imageName, ok := input.Metadata["imageName"]
-		if !ok {
-			return nil, errors.New("image name not provided")
+		saRaw, ok := input.Metadata["standalone"]
+		if ok {
+			sa, ok2 := saRaw.(bool)
+			if ok2 {
+				standalone = sa
+			}
 		}
-		in, ok2 := imageName.(string)
-		if !ok2 {
-			return nil, errors.New("image name is not string")
+		var imageName string
+		if !standalone {
+			iName, ok := input.Metadata["imageName"]
+			if !ok {
+				return nil, errors.New("image name not provided")
+			}
+			in, ok2 := iName.(string)
+			if !ok2 {
+				return nil, errors.New("image name is not string")
+			}
+			imageName = in
+		} else {
+			imageName = "main"
 		}
 		filesRaw, ok := input.Metadata["files"]
 		if !ok {
@@ -263,7 +294,7 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 		if !ok2 {
 			return nil, errors.New("files is not map")
 		}
-		dockerfileFolderPath := a.App.Tools().Storage().StorageRoot() + pluginsTemplateName + vm.MachineId + "/" + in
+		dockerfileFolderPath := a.App.Tools().Storage().StorageRoot() + pluginsTemplateName + vm.MachineId + "/" + imageName
 		err2 := a.App.Tools().File().SaveDataToGlobalStorage(dockerfileFolderPath, data, "Dockerfile", true)
 		if err2 != nil {
 			return nil, err2
@@ -295,7 +326,7 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 			}
 		}, false)
 		future.Async(func() {
-			err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath, vm.MachineId, in, outputChan)
+			err3 := a.App.Tools().Docker().BuildImage(dockerfileFolderPath, vm.MachineId, imageName, outputChan)
 			if err3 != nil {
 				log.Println(err3)
 			}
@@ -305,12 +336,18 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 		if err2 != nil {
 			return nil, err2
 		}
-		vm.Runtime = input.Runtime
+		if input.Runtime == "docker" && standalone {
+			vm.Runtime = input.Runtime
+		} else if input.Runtime != "docker" {
+			vm.Runtime = input.Runtime
+		}
 		vm.Push(trx)
 		if vm.Runtime == "wasm" {
 			a.App.Tools().Wasm().Assign(vm.MachineId)
 		} else if vm.Runtime == "elpis" {
 			a.App.Tools().Elpis().Assign(vm.MachineId)
+		} else if vm.Runtime == "docker" {
+			a.App.Tools().Docker().Assign(vm.MachineId)
 		}
 	}
 	return outputs_machiner.PlugInput{}, nil

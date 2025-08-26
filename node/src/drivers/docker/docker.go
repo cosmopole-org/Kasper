@@ -2,15 +2,30 @@ package docker
 
 import (
 	"bufio"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"kasper/src/abstract/adapters/docker"
 	"kasper/src/abstract/adapters/file"
+	"kasper/src/abstract/adapters/signaler"
 	"kasper/src/abstract/adapters/storage"
+	iaction "kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/trx"
+	"kasper/src/abstract/models/update"
+	"kasper/src/abstract/state"
+	"kasper/src/core/module/actor/model/base"
+	inputs_points "kasper/src/shell/api/inputs/points"
+	inputs_storage "kasper/src/shell/api/inputs/storage"
 	models "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
+	"net/http"
+	"sync"
+	"syscall"
 
 	"archive/tar"
 	"bytes"
@@ -24,9 +39,11 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	network "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
 type Docker struct {
@@ -34,6 +51,7 @@ type Docker struct {
 	storageRoot string
 	storage     storage.IStorage
 	file        file.IFile
+	lockers     cmap.ConcurrentMap[string, *IOLocker]
 	client      *client.Client
 }
 
@@ -166,11 +184,658 @@ func (wm *Docker) CopyToContainer(machineId string, imageName string, containerN
 	return nil
 }
 
-func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string) (*models.File, error) {
+type IOLocker struct {
+	Lock sync.Mutex
+}
+
+func checkField[T any](input map[string]any, fieldName string, defVal T) (T, error) {
+	fRaw, ok := input[fieldName]
+	if !ok {
+		return defVal, errors.New("{\"error\":1}}")
+	}
+	f, ok := fRaw.(T)
+	if !ok {
+		return defVal, errors.New("{\"error\":2}}")
+	}
+	return f, nil
+}
+
+func (wm *Docker) dockerCallback(dataRaw string) string {
+	log.Println(dataRaw)
+	data := map[string]any{}
+	err := json.Unmarshal([]byte(dataRaw), &data)
+	if err != nil {
+		log.Println(err)
+		return err.Error()
+	}
+	key, err := checkField(data, "key", "")
+	if err != nil {
+		log.Println(err)
+		return err.Error()
+	}
+	input, err := checkField[map[string]any](data, "input", nil)
+	if err != nil {
+		log.Println(err)
+		return err.Error()
+	}
+	if key == "runDocker" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		pointId, err := checkField(input, "pointId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		found := false
+		wm.app.ModifyState(true, func(trx trx.ITrx) error {
+			if trx.GetLink("member::"+pointId+"::"+machineId) == "true" {
+				found = true
+			}
+			return nil
+		})
+		if !found {
+			err := errors.New("access denied")
+			log.Println(err)
+			return err.Error()
+		}
+		inputFilesStr, err := checkField(input, "inputFiles", "{}")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		inputFiles := map[string]string{}
+		err = json.Unmarshal([]byte(inputFilesStr), &inputFiles)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		finalInputFiles := map[string]string{}
+		for k, v := range inputFiles {
+			if !wm.file.CheckFileFromStorage(wm.storageRoot, pointId, k) {
+				err := errors.New("input file does not exist")
+				log.Println(err)
+				return err.Error()
+			}
+			path := fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, pointId, k)
+			finalInputFiles[path] = v
+		}
+		imageName, err := checkField(input, "imageName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		containerName, err := checkField(input, "containerName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		wm.SaRContainer(machineId, imageName, containerName)
+		outputFile, err := wm.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles, false)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		if outputFile != nil {
+			str, err := json.Marshal(outputFile)
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			return string(str)
+		}
+	} else if key == "execDocker" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		imageName, err := checkField(input, "imageName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		containerName, err := checkField(input, "containerName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		command, err := checkField(input, "command", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		output, err := wm.ExecContainer(machineId, imageName, containerName, command)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		return output
+	} else if key == "copyToDocker" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		imageName, err := checkField(input, "imageName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		containerName, err := checkField(input, "containerName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		fileName, err := checkField(input, "fileName", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		content, err := checkField(input, "content", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		err = wm.CopyToContainer(machineId, imageName, containerName, fileName, content)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		return ""
+	} else if key == "log" {
+		_, err := checkField(input, "text", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		// log.Println("elpis vm:", text)
+	} else if key == "httpPost" {
+		url, err := checkField(input, "url", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		method := strings.Split(url, "|")[0]
+		url = url[len(method)+1:]
+		headers, err := checkField(input, "headers", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		body, err := checkField(input, "body", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		req, err := http.NewRequest(method, url, bytes.NewBuffer([]byte(body)))
+		if err != nil {
+			log.Println("Error creating request:" + err.Error())
+			return err.Error()
+		}
+		heads := map[string]string{}
+		err = json.Unmarshal([]byte(headers), &heads)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		for k, v := range heads {
+			req.Header.Set(k, v)
+		}
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println("Request failed:" + err.Error())
+			return err.Error()
+		}
+		defer resp.Body.Close()
+		log.Println("Response status:" + resp.Status)
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("Error reading response body:" + err.Error())
+			return err.Error()
+		}
+		return base64.StdEncoding.EncodeToString(bodyBytes)
+	} else if key == "checkTokenValidity" {
+		tokenOwnerId, err := checkField(input, "tokenOwnerId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tokenId, err := checkField(input, "tokenId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		gasLimit := int64(0)
+		wm.app.ModifyState(true, func(trx trx.ITrx) error {
+			if trx.GetString("Temp::User::"+tokenOwnerId+"::consumedTokens::"+tokenId) == "true" {
+				return nil
+			}
+			if m, e := trx.GetJson("Json::User::"+tokenOwnerId, "lockedTokens."+tokenId); e == nil {
+				gasLimit = int64(m["amount"].(float64))
+			}
+			return nil
+		})
+		jsn, _ := json.Marshal(map[string]any{"gasLimit": gasLimit})
+		return string(jsn)
+	} else if key == "submitOnchainResponse" {
+		callbackId, err := checkField(input, "callbackId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		cost, err := checkField[float64](input, "cost", 0)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tokenOwnerId, err := checkField(input, "tokenOwnerId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tokenId, err := checkField(input, "tokenId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		pack, err := checkField(input, "packet", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		changes, err := checkField(input, "changes", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		resCode, err := checkField[float64](input, "resCode", 0)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		e, err := checkField(input, "error", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		trxInp := packet.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost), TokenOwnerId: tokenOwnerId}
+		i, _ := json.Marshal(trxInp)
+		wm.app.ModifyState(false, func(trx trx.ITrx) error {
+			trx.PutString("Temp::User::"+tokenOwnerId+"::consumedTokens::"+tokenId, "true")
+			return nil
+		})
+		wm.app.ExecAppletResponseOnChain(callbackId, []byte(pack), "#appletsign", int(resCode), e, []update.Update{{Val: []byte("consumeToken: " + string(i))}, {Val: []byte("applet: " + changes)}})
+	} else if key == "submitOnchainTrx" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		targetMachineId, err := checkField(input, "targetMachineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		isRequesterOnchain, err := checkField(input, "isRequesterOnchain", false)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		kRaw, err := checkField(input, "key", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		kParts := strings.Split(kRaw, "|")
+		dstPointId := kParts[0]
+		srcPointId, err := checkField(input, "pointId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		k := kParts[1]
+		userId := kParts[2]
+		userSignature := kParts[3]
+		tokenId := kParts[4]
+		onchainReq := kParts[5] == "true"
+		isFile, err := checkField(input, "isFile", false)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		isBase, err := checkField(input, "isBase", false)
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tag, err := checkField(input, "tag", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		pack, err := checkField(input, "packet", "{}")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		var data []byte
+		if isFile {
+			if wm.file.CheckFileFromStorage(wm.storageRoot, srcPointId, pack) {
+				b, err := wm.file.ReadFileFromStorage(wm.storageRoot, srcPointId, pack)
+				if err != nil {
+					log.Println(err)
+					return err.Error()
+				}
+				data = b
+			}
+		} else {
+			data = []byte(pack)
+		}
+
+		if userId == "" && userSignature == "" {
+			userId = machineId
+			userSignature = "#appletsign"
+		}
+
+		result := []byte("{}")
+		outputCnan := make(chan int)
+		if isBase {
+			if k == "/storage/upload" {
+				inp := inputs_storage.UploadDataInput{
+					Data:    base64.StdEncoding.EncodeToString(data),
+					PointId: dstPointId,
+				}
+				data, _ = json.Marshal(inp)
+			}
+			if onchainReq {
+				wm.app.ExecBaseRequestOnChain(k, data, userSignature, userId, tag, func(b []byte, i int, err error) {
+					if err != nil {
+						log.Println(err)
+						return
+					}
+					result = b
+					if isRequesterOnchain {
+						outputCnan <- 1
+					}
+				})
+			} else {
+				action := wm.app.Actor().FetchAction(k)
+				if action == nil {
+					return "action not found"
+				}
+				var err error
+				inp, err := action.(iaction.ISecureAction).ParseInput("tcp", data)
+				if err != nil {
+					log.Println(err)
+					return err.Error()
+				}
+				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "")
+				log.Println(result)
+				if err != nil {
+					return err.Error()
+				}
+				str, _ := json.Marshal(result)
+				return string(str)
+			}
+		} else {
+			if onchainReq {
+				wm.app.ExecAppletRequestOnChain(dstPointId, targetMachineId, k, data, userSignature, userId, tag, tokenId, func(b []byte, i int, err error) {
+					if err != nil {
+						log.Println(err)
+						return
+					}
+					result = b
+					if isRequesterOnchain {
+						outputCnan <- 1
+					}
+				})
+			}
+		}
+		if isRequesterOnchain {
+			<-outputCnan
+		}
+		if isRequesterOnchain {
+			return string(result)
+		} else {
+			return "{}"
+		}
+	} else if key == "plantTrigger" {
+		count, err := checkField(input, "count", float64(0))
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		tag, err := checkField(input, "tag", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		pointId, err := checkField(input, "pointId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		data, err := checkField(input, "input", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		if tag != "alarm" {
+			wm.app.PlantChainTrigger(int(count), machineId, tag, machineId, pointId, data)
+		}
+	} else if key == "signalPoint" {
+		machineId, err := checkField(input, "machineId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		typAndTemp, err := checkField(input, "type", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		parts := strings.Split(typAndTemp, "|")
+		typ := parts[0]
+		temp := false
+		if len(parts) > 1 {
+			if parts[1] == "true" {
+				temp = true
+			} else if parts[1] == "false" {
+				temp = false
+			}
+		}
+		pointId, err := checkField(input, "pointId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		userId, err := checkField(input, "userId", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		data, err := checkField(input, "data", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		wm.app.ModifyStateSecurly(false, base.NewInfo(machineId, pointId), func(s state.IState) error {
+			_, _, err := wm.app.Actor().FetchAction("/points/signal").Act(s, inputs_points.SignalInput{
+				Type:    typ,
+				Data:    data,
+				PointId: pointId,
+				UserId:  userId,
+				Temp:    temp,
+			})
+			return err
+		})
+	}
+
+	return "{}"
+}
+
+func (wm *Docker) Assign(machineId string) {
+	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
+	createFIFO(machineId, "main", "main", "input")
+	createFIFO(machineId, "main", "main", "output")
+	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
+		Id: machineId,
+		Signal: func(key string, a any) {
+			if key == "points/signal" {
+				data := a.([]byte)
+				locker, found := wm.lockers.Get(machineId)
+				if found {
+					locker.Lock.Lock()
+					defer locker.Lock.Unlock()
+					cn := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_main_main_input"
+					writer, err := os.OpenFile(cn, os.O_WRONLY, os.ModeNamedPipe)
+					if err != nil {
+						log.Println("open fifo_in:", err.Error())
+					}
+					defer writer.Close()
+					lenBytes := make([]byte, 4)
+					binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
+					writer.Write(lenBytes)
+					writer.Write(data)
+				}
+			}
+		},
+	})
+	reader, err := os.OpenFile("/tmp/"+strings.Join(strings.Split(machineId, "@"), "_")+"_main_main_output", os.O_RDONLY, os.ModeNamedPipe)
+	if err != nil {
+		log.Fatal("open fifo_out:", err)
+	}
+	defer reader.Close()
+	future.Async(func() {
+		lenBuf := make([]byte, 4)
+		buf := make([]byte, 1024)
+		nextBuf := make([]byte, 2048)
+		readCount := 0
+		oldReadCount := 0
+		enough := false
+		beginning := true
+		length := 0
+		readLength := 0
+		remainedReadLength := 0
+		var readData []byte
+		reader := bufio.NewReader(reader)
+		for {
+			if !enough {
+				var err error
+				readLength, err = reader.Read(buf)
+				if err != nil {
+					log.Println("docker", err)
+					return
+				}
+				log.Println("docker", "stat 0: reading data...")
+
+				readCount += readLength
+				copy(nextBuf[remainedReadLength:remainedReadLength+readLength], buf[0:readLength])
+				remainedReadLength += readLength
+
+				log.Println("docker", "stat 1:", readLength, oldReadCount, readCount, remainedReadLength)
+			}
+
+			if beginning {
+				if readCount >= 4 {
+					log.Println("docker", "stating stat 2...")
+					copy(lenBuf, nextBuf[0:4])
+					log.Println("docker", "nextBuf", nextBuf[0:4])
+					log.Println("docker", "lenBuf", lenBuf[0:4])
+					remainedReadLength -= 4
+					copy(nextBuf[0:remainedReadLength], nextBuf[4:remainedReadLength+4])
+					length = int(binary.BigEndian.Uint32(lenBuf))
+					if length > 20000000 {
+						return
+					}
+					readData = make([]byte, length)
+					readCount -= 4
+					beginning = false
+					enough = true
+
+					log.Println("docker", "stat 2:", remainedReadLength, length, readCount)
+				} else {
+					enough = false
+				}
+			} else {
+				if remainedReadLength == 0 {
+					enough = false
+				} else if readCount >= length {
+					log.Println("docker", "stating stat 3...")
+					log.Println("docker", "stat 3 step 1", oldReadCount, length)
+					copy(readData[oldReadCount:length], nextBuf[0:length-oldReadCount])
+					log.Println("docker", "stat 3 step 2", readLength, readCount, length)
+					readCount -= length
+					copy(nextBuf[0:readCount], nextBuf[length-oldReadCount:(length-oldReadCount)+readCount])
+					log.Println("docker", "nextBuf", nextBuf[0:readCount])
+					log.Println("docker", "stat 3 step 3", readCount, length)
+					remainedReadLength = readCount
+					log.Println("docker", "packet received")
+					packet := make([]byte, length)
+					copy(packet, readData)
+					log.Println("docker", "stat 3 step 4")
+					oldReadCount = 0
+					enough = true
+					beginning = true
+
+					log.Println("docker", "stat 3:", remainedReadLength, oldReadCount, readCount)
+
+					callbackId := int64(binary.LittleEndian.Uint64(packet[:8]))
+					packet = packet[8:]
+
+					data := []byte(wm.dockerCallback(string(packet)))
+					locker, found := wm.lockers.Get(machineId)
+					response := map[string]any{"payload": data, "type": "callback", "callbackId": callbackId}
+					data, _ = json.Marshal(response)
+					if found {
+						func() {
+							locker.Lock.Lock()
+							defer locker.Lock.Unlock()
+							cn := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_main_main_input"
+							writer, err := os.OpenFile(cn, os.O_WRONLY, os.ModeNamedPipe)
+							if err != nil {
+								log.Println("open fifo_in:", err.Error())
+							}
+							defer writer.Close()
+							lenBytes := make([]byte, 4)
+							binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
+							writer.Write(lenBytes)
+							writer.Write(data)
+						}()
+					}
+
+				} else {
+					log.Println("docker", "stating stat 4...")
+
+					copy(readData[oldReadCount:oldReadCount+(readCount-oldReadCount)], nextBuf[0:readCount-oldReadCount])
+					remainedReadLength = 0
+					oldReadCount = readCount
+					enough = true
+
+					log.Println("docker", "stat 4:", remainedReadLength)
+				}
+			}
+		}
+	}, false)
+}
+
+func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string, standalone bool) (*models.File, error) {
 
 	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
 
 	ctx := context.Background()
+
+	inputPath := createFIFO(machineId, imageName, containerName, "input")
+	outputPath := createFIFO(machineId, imageName, containerName, "output")
 
 	config := &container.Config{
 		Image: strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
@@ -186,6 +851,10 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 				Config: map[string]string{},
 			},
 			Runtime: "runsc",
+			Mounts: []mount.Mount{
+				{Type: mount.TypeBind, Source: inputPath, Target: "/fifo_in"},
+				{Type: mount.TypeBind, Source: outputPath, Target: "/fifo_out"},
+			},
 		},
 		&network.NetworkingConfig{},
 		nil,
@@ -197,10 +866,12 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 		return nil, err
 	}
 	defer wm.SaRContainer(machineId, imageName, containerName)
-	future.Async(func() {
-		time.Sleep(60 * time.Minute)
-		// wm.SaRContainer(cn)
-	}, false)
+	if !standalone {
+		future.Async(func() {
+			time.Sleep(60 * time.Minute)
+			wm.SaRContainer(machineId, imageName, containerName)
+		}, false)
+	}
 
 	tarId := WriteToTar(inputFile)
 	tarStream, err := os.Open(tarId)
@@ -249,20 +920,23 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 		}
 	case <-statusCh:
 	}
-
-	reader, _, err := wm.client.CopyFromContainer(ctx, cn, "/app/output")
-	if err != nil {
-		log.Println(err)
+	if !standalone {
+		reader, _, err := wm.client.CopyFromContainer(ctx, cn, "/app/output")
+		if err != nil {
+			log.Println(err)
+			return nil, nil
+		}
+		defer reader.Close()
+		r := tar.NewReader(reader)
+		file, err := wm.readFromTar(r, machineId, pointId)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		return file, nil
+	} else {
 		return nil, nil
 	}
-	defer reader.Close()
-	r := tar.NewReader(reader)
-	file, err := wm.readFromTar(r, machineId, pointId)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	return file, nil
 }
 
 func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName string, outputChan chan string) error {
@@ -360,6 +1034,15 @@ func (wm *Docker) BuildImage(dockerfile string, machineId string, imageName stri
 	return nil
 }
 
+func createFIFO(machineId string, imageName string, containerName string, key string) string {
+	path := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName + "_" + key
+	if err := syscall.Mkfifo(path, 0666); err != nil && err.Error() != "file exists" {
+		log.Println("Failed to create FIFO", path, err)
+	}
+	log.Println("FIFO ready:", path)
+	return path
+}
+
 func (wm *Docker) ExecContainer(machineId string, imageName string, containerName string, command string) (string, error) {
 
 	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
@@ -428,6 +1111,7 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 		storageRoot: storageRoot,
 		storage:     storage,
 		file:        file,
+		lockers:     cmap.New[*IOLocker](),
 		client:      client,
 	}
 	return wm
