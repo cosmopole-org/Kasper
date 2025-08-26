@@ -657,8 +657,11 @@ func (wm *Docker) Assign(machineId string) {
 	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
 	future.Async(func() {
 		socketPath := "/tmp/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main" + ".sock"
-		lnDef, _ := net.Listen("unix", socketPath)
-		lnDef.Close()
+		if _, err := os.Stat(socketPath); err == nil {
+			if err := os.Remove(socketPath); err != nil {
+				log.Println("failed to remove existing socket:", err.Error())
+			}
+		}
 		ln, err := net.Listen("unix", socketPath)
 		if err != nil {
 			log.Fatal("listen error:", err)
