@@ -932,7 +932,6 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 	if err != nil {
 		log.Fatal("listen error:", err)
 	}
-	defer ln.Close()
 	log.Println("Docker host listening on", address)
 	future.Async(func() {
 		for {
