@@ -481,7 +481,7 @@ func (a *Actions) UpdateMachineAccess(state state.IState, input inputs_points.Up
 	return map[string]any{}, nil
 }
 
-// GetDefaultAccess /points/getDefaultAccess check [ true true true ] access [ true false false false POST ]
+// GetDefaultAccess /points/getDefaultAccess check [ true false false ] access [ true false false false POST ]
 func (a *Actions) GetDefaultAccess(state state.IState, input inputs_points.GetDefaultAccessInput) (any, error) {
 	return map[string]any{"access": access}, nil
 }
