@@ -242,6 +242,21 @@ func (a *Actions) RunMachine(state state.IState, input inputs_machiner.RunMachin
 	return map[string]any{}, nil
 }
 
+// StopMachine /apps/stopMachine check [ true false false ] access [ true false false false POST ]
+func (a *Actions) StopMachine(state state.IState, input inputs_machiner.RunMachineInput) (any, error) {
+	trx := state.Trx()
+	if !trx.HasObj("User", input.MachineId) {
+		return nil, errors.New("machine does not exist")
+	}
+	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
+	app := model.App{Id: vm.AppId}.Pull(trx)
+	if app.OwnerId != state.Info().UserId() {
+		return nil, errors.New("you are not owner of this machine")
+	}
+	a.App.Tools().Docker().SaRContainer(input.MachineId, "main", "main")
+	return map[string]any{}, nil
+}
+
 // Deploy /machines/deploy check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) (any, error) {
 	trx := state.Trx()

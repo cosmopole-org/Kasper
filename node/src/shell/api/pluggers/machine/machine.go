@@ -46,6 +46,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.RunMachine)
 		}
 		
+		func (c *Plugger) StopMachine() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.StopMachine)
+		}
+		
 		func (c *Plugger) Deploy() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Deploy)
 		}
