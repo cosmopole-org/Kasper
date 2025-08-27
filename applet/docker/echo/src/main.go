@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -19,45 +18,37 @@ func main() {
 
 	log.Println("started echo machine.")
 
-	sockPath := "/app/sockets/socket.sock"
-
-	l, err := net.Listen("unix", sockPath)
+	var err error
+	conn, err = net.Dial("tcp", "0.0.0.0:8084")
 	if err != nil {
-		log.Fatalf("listen error: %v", err)
+		log.Fatalf("dial error: %v", err)
 	}
-	defer l.Close()
-	fmt.Println("Container server listening on", sockPath)
+	defer conn.Close()
+	log.Println("Container client connected on", "172.17.0.1:8084")
 
+	r := bufio.NewReader(conn)
 	for {
-		conn, err := l.Accept()
-		if err != nil {
-			log.Println("accept error:", err)
-			continue
+		var ln uint32
+		if err := binary.Read(r, binary.LittleEndian, &ln); err != nil {
+			if err != io.EOF {
+				log.Printf("read len err: %v", err)
+			}
+			os.Exit(0)
 		}
-		r := bufio.NewReader(conn)
-		for {
-			var ln uint32
-			if err := binary.Read(r, binary.LittleEndian, &ln); err != nil {
-				if err != io.EOF {
-					log.Printf("read len err: %v", err)
-				}
-				os.Exit(0)
+		var callbackId uint64
+		if err := binary.Read(r, binary.LittleEndian, &callbackId); err != nil {
+			if err != io.EOF {
+				log.Printf("read len err: %v", err)
 			}
-			var callbackId uint64
-			if err := binary.Read(r, binary.LittleEndian, &callbackId); err != nil {
-				if err != io.EOF {
-					log.Printf("read len err: %v", err)
-				}
-				os.Exit(0)
-			}
-			buf := make([]byte, ln)
-			if _, err := io.ReadFull(r, buf); err != nil {
-				log.Printf("read body err: %v", err)
-				os.Exit(0)
-			}
-			log.Printf("recv: %s", string(buf))
-			processPacket(int64(callbackId), buf)
+			os.Exit(0)
 		}
+		buf := make([]byte, ln)
+		if _, err := io.ReadFull(r, buf); err != nil {
+			log.Printf("read body err: %v", err)
+			os.Exit(0)
+		}
+		log.Printf("recv: %s", string(buf))
+		processPacket(int64(callbackId), buf)
 	}
 }
 
