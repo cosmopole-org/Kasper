@@ -15,6 +15,7 @@ import (
 	"kasper/src/shell/utils/future"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -56,8 +57,13 @@ func registerRoute(mux *http.ServeMux, path string, handler func(w http.Response
 
 func Install(a *Actions) error {
 	mux := http.NewServeMux()
+	portStr := os.Getenv("ENTITY_API_PORT")
+	port, err := strconv.ParseInt(portStr, 10, 32)
+	if err != nil {
+		panic(err)
+	}
 	server := &http.Server{
-		Addr:      fmt.Sprintf(":%d", 3000),
+		Addr:      fmt.Sprintf(":%d", port),
 		Handler:   mux,
 		TLSConfig: a.App.Tools().Network().TlsConfig(),
 	}
