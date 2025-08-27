@@ -19,7 +19,7 @@ func main() {
 	log.Println("started echo machine.")
 
 	var err error
-	conn, err = net.Dial("tcp", "0.0.0.0:8084")
+	conn, err = net.Dial("tcp", "172.18.0.1:8084")
 	if err != nil {
 		log.Fatalf("dial error: %v", err)
 	}
