@@ -134,12 +134,12 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	if err != nil {
 		panic(err)
 	}
-	// cluster := gocql.NewCluster(logsDbPath)
-	// cluster.Keyspace = "kasper"
-	// cluster.Consistency = gocql.Quorum
-	// session, err := cluster.CreateSession()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	return &StorageManager{core: core, tsdb: /*session*/ nil, kvdb: kvdb, storageRoot: storageRoot}
+	cluster := gocql.NewCluster(logsDbPath)
+	cluster.Keyspace = "kasper"
+	cluster.Consistency = gocql.Quorum
+	session, err := cluster.CreateSession()
+	if err != nil {
+		panic(err)
+	}
+	return &StorageManager{core: core, tsdb: session, kvdb: kvdb, storageRoot: storageRoot}
 }
