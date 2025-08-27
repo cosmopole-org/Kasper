@@ -683,11 +683,9 @@ func (wm *Docker) Assign(machineId string) {
 			}
 		},
 	})
-	future.Async(func() {
-		if err := os.RemoveAll(socketPath); err != nil {
-			log.Fatalf("remove old socket: %v", err)
-		}
-	}, false)
+	if err := os.RemoveAll(socketPath); err != nil {
+		log.Fatalf("remove old socket: %v", err)
+	}
 }
 
 func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string, standalone bool) (*models.File, error) {
@@ -759,7 +757,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 	}
 
 	log.Println("Container ", cn, " is created")
-	
+
 	socketPath := socketFolder + "/socket.sock"
 
 	future.Async(func() {
@@ -809,6 +807,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 			}
 		}
 		for {
+			time.Sleep(time.Duration(5) * time.Second)
 			conn, err := net.Dial("unix", socketPath)
 			if err != nil {
 				log.Printf("accept err: %v", err)
@@ -819,7 +818,6 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 				locker.conn = conn
 			}
 			acceptConn(conn)
-			time.Sleep(time.Duration(2) * time.Second)
 		}
 	}, false)
 
