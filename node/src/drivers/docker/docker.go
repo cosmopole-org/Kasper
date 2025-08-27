@@ -939,26 +939,30 @@ func (wm *Docker) ExecContainer(machineId string, imageName string, containerNam
 func getContainerNameByIP(ip string, cli *client.Client) string {
 	ctx := context.Background()
 
-	// Get a list of all networks
+	// Get a list of all Docker networks.
 	networks, err := cli.NetworkList(ctx, network.ListOptions{})
 	if err != nil {
 		log.Println("Failed to list Docker networks:", err)
 		return ""
 	}
 
+	// Iterate through each network to inspect its connected containers.
 	for _, net := range networks {
-		// Inspect each network to get connected containers
+		log.Println(net.Name)
 		netInspect, err := cli.NetworkInspect(ctx, net.ID, network.InspectOptions{})
 		if err != nil {
 			log.Println("Failed to inspect network:", err)
 			continue
 		}
+		log.Println(net.Name)
 
-		// Iterate through all containers connected to this network
+		// Look for a container on this network that has the matching IP.
 		for _, container := range netInspect.Containers {
-			// Find the container with the matching IP address
-			if container.IPv4Address == ip {
-				// The container name is prefixed with a slash; remove it
+			log.Println(container.Name)
+			// Check if the container's IPv4 address matches the client's IP.
+			if strings.Split(container.IPv4Address, "/")[0] == ip {
+				log.Println(container.Name)
+				// The container name is prefixed with a slash; remove it.
 				return strings.TrimPrefix(container.Name, "/")
 			}
 		}
