@@ -147,7 +147,7 @@ func NewCore(ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
 	localAddr := conn.LocalAddr().(*net.UDPAddr).IP.String()
 	id := localAddr
 	execs := map[string]bool{}
-	execs["165.232.32.106"] = true
+	execs[id] = true
 	return &Core{
 		ownerId:          ownerId,
 		ownerPrivKey:     ownerPrivateKey,

@@ -125,7 +125,7 @@ func NewChain(core core.ICore) *Blockchain {
 		blocks:                []*Event{},
 		remainedCount:         0,
 		peers: map[string]int64{
-			"165.232.32.106": 1,
+			core.Id(): 1,
 		},
 	}
 	m2 := cmap.New[*SubChain]()
@@ -1325,7 +1325,7 @@ func (c *SubChain) Run() {
 	future.Async(func() {
 		log.Println("trying to connect to other peers...")
 		peersArr := []string{
-			"165.232.32.106",
+			c.chain.blockchain.app.Id(),
 		}
 		completed := false
 		for !completed {
