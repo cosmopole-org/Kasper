@@ -698,7 +698,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 				Config: map[string]string{},
 			},
 			Runtime:     "runsc",
-			NetworkMode: "host",
+			NetworkMode: "kasper",
 		},
 		nil,
 		nil,
