@@ -184,6 +184,7 @@ func (wm *Docker) CopyToContainer(machineId string, imageName string, containerN
 
 type IOLocker struct {
 	Lock sync.Mutex
+	conn net.Conn
 }
 
 func checkField[T any](input map[string]any, fieldName string, defVal T) (T, error) {
@@ -653,6 +654,97 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 
 func (wm *Docker) Assign(machineId string) {
 	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
+
+	socketPath := "/app/sockets/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main" + ".sock"
+
+	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
+		Id: machineId,
+		Signal: func(key string, a any) {
+			if key == "points/signal" {
+				data := a.([]byte)
+				locker, found := wm.lockers.Get(machineId)
+				if found && locker.conn != nil {
+					locker.Lock.Lock()
+					defer locker.Lock.Unlock()
+					lenBytes := make([]byte, 4)
+					binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
+					locker.conn.Write(lenBytes)
+					cbBytes := make([]byte, 8)
+					binary.LittleEndian.PutUint64(cbBytes, uint64(0))
+					locker.conn.Write(cbBytes)
+					locker.conn.Write(data)
+				}
+			}
+		},
+	})
+	future.Async(func() {
+		if err := os.RemoveAll(socketPath); err != nil {
+			log.Fatalf("remove old socket: %v", err)
+		}
+		ln, err := net.Listen("unix", socketPath)
+		if err != nil {
+			log.Fatalf("listen unix: %v", err)
+		}
+		defer ln.Close()
+		log.Printf("listening on %s", socketPath)
+		acceptConn := func(c net.Conn) {
+			defer func() {
+				c.Close()
+				log.Printf("docker container disconnected")
+			}()
+
+			log.Printf("docker container connected")
+			r := bufio.NewReader(c)
+			for {
+				var ln uint32
+				if err := binary.Read(r, binary.LittleEndian, &ln); err != nil {
+					if err != io.EOF {
+						log.Printf("read len err: %v", err)
+					}
+					return
+				}
+				var cbId uint64
+				if err := binary.Read(r, binary.LittleEndian, &cbId); err != nil {
+					if err != io.EOF {
+						log.Printf("read len err: %v", err)
+					}
+					return
+				}
+				buf := make([]byte, ln)
+				if _, err := io.ReadFull(r, buf); err != nil {
+					log.Printf("read body err: %v", err)
+					return
+				}
+				data := []byte(wm.dockerCallback(machineId, string(buf)))
+				locker, found := wm.lockers.Get(machineId)
+				if found {
+					func() {
+						locker.Lock.Lock()
+						defer locker.Lock.Unlock()
+						lenBytes := make([]byte, 4)
+						binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
+						locker.conn.Write(lenBytes)
+						callbackId := make([]byte, 8)
+						binary.LittleEndian.PutUint64(callbackId, cbId)
+						locker.conn.Write(callbackId)
+						locker.conn.Write(data)
+					}()
+				}
+			}
+		}
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				log.Printf("accept err: %v", err)
+				continue
+			}
+			locker, found := wm.lockers.Get(machineId)
+			if found {
+				locker.conn = conn
+			}
+			acceptConn(conn)
+		}
+	}, false)
 }
 
 func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string, standalone bool) (*models.File, error) {
@@ -926,163 +1018,6 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 		lockers:     cmap.New[*IOLocker](),
 		client:      client,
 	}
-
-	address := "0.0.0.0:8074"
-	ln, err := net.Listen("tcp", address)
-	if err != nil {
-		log.Fatal("listen error:", err)
-	}
-	log.Println("Docker host listening on", address)
-	future.Async(func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				log.Println("accept error:", err)
-				continue
-			}
-			ip, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-			cn := strings.Split(GetContainerByIP(ip), "_")
-			log.Println(cn)
-			machineId := cn[0] + "@" + cn[1]
-			future.Async(func() {
-				wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
-					Id: machineId,
-					Signal: func(key string, a any) {
-						if key == "points/signal" {
-							data := a.([]byte)
-							locker, found := wm.lockers.Get(machineId)
-							if found {
-								locker.Lock.Lock()
-								defer locker.Lock.Unlock()
-								lenBytes := make([]byte, 4)
-								binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
-								conn.Write(lenBytes)
-								cbBytes := make([]byte, 8)
-								binary.LittleEndian.PutUint64(cbBytes, uint64(0))
-								conn.Write(cbBytes)
-								conn.Write(data)
-							}
-						}
-					},
-				})
-				lenBuf := make([]byte, 4)
-				buf := make([]byte, 1024)
-				nextBuf := make([]byte, 2048)
-				readCount := 0
-				oldReadCount := 0
-				enough := false
-				beginning := true
-				length := 0
-				readLength := 0
-				remainedReadLength := 0
-				var readData []byte
-				for {
-					if !enough {
-						var err error
-						readLength, err = conn.Read(buf)
-						if err != nil {
-							log.Println("docker", err)
-							return
-						}
-						log.Println("docker", "stat 0: reading data...")
-
-						readCount += readLength
-						copy(nextBuf[remainedReadLength:remainedReadLength+readLength], buf[0:readLength])
-						remainedReadLength += readLength
-
-						log.Println("docker", "stat 1:", readLength, oldReadCount, readCount, remainedReadLength)
-					}
-
-					if beginning {
-						if readCount >= 4 {
-							log.Println("docker", "stating stat 2...")
-							copy(lenBuf, nextBuf[0:4])
-							log.Println("docker", "nextBuf", nextBuf[0:4])
-							log.Println("docker", "lenBuf", lenBuf[0:4])
-							remainedReadLength -= 4
-							copy(nextBuf[0:remainedReadLength], nextBuf[4:remainedReadLength+4])
-							length = int(binary.BigEndian.Uint32(lenBuf))
-							if length > 20000000 {
-								return
-							}
-							readData = make([]byte, length)
-							readCount -= 4
-							beginning = false
-							enough = true
-
-							log.Println("docker", "stat 2:", remainedReadLength, length, readCount)
-						} else {
-							enough = false
-						}
-					} else {
-						if remainedReadLength == 0 {
-							enough = false
-						} else if readCount >= length {
-							log.Println("docker", "stating stat 3...")
-							log.Println("docker", "stat 3 step 1", oldReadCount, length)
-							copy(readData[oldReadCount:length], nextBuf[0:length-oldReadCount])
-							log.Println("docker", "stat 3 step 2", readLength, readCount, length)
-							readCount -= length
-							copy(nextBuf[0:readCount], nextBuf[length-oldReadCount:(length-oldReadCount)+readCount])
-							log.Println("docker", "nextBuf", nextBuf[0:readCount])
-							log.Println("docker", "stat 3 step 3", readCount, length)
-							remainedReadLength = readCount
-							log.Println("docker", "packet received")
-							packet := make([]byte, length)
-							copy(packet, readData)
-							log.Println("docker", "stat 3 step 4")
-							oldReadCount = 0
-							enough = true
-							beginning = true
-
-							log.Println("docker", "stat 3:", remainedReadLength, oldReadCount, readCount)
-
-							callbackId := packet[:8]
-							packet = packet[8:]
-
-							data := []byte(wm.dockerCallback(machineId, string(packet)))
-							locker, found := wm.lockers.Get(machineId)
-							if found {
-								func() {
-									locker.Lock.Lock()
-									defer locker.Lock.Unlock()
-									lenBytes := make([]byte, 4)
-									binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
-									conn.Write(lenBytes)
-									conn.Write(callbackId)
-									conn.Write(data)
-								}()
-							}
-
-						} else {
-							log.Println("docker", "stating stat 4...")
-
-							copy(readData[oldReadCount:oldReadCount+(readCount-oldReadCount)], nextBuf[0:readCount-oldReadCount])
-							remainedReadLength = 0
-							oldReadCount = readCount
-							enough = true
-
-							log.Println("docker", "stat 4:", remainedReadLength)
-						}
-					}
-				}
-			}, false)
-		}
-	}, false)
-
 	return wm
 }
 
-func GetContainerByIP(ip string) string {
-	cli, _ := client.NewClientWithOpts(client.FromEnv)
-	ctx := context.Background()
-	containers, _ := cli.ContainerList(ctx, container.ListOptions{})
-	for _, c := range containers {
-		for _, network := range c.NetworkSettings.Networks {
-			if network.IPAddress == ip {
-				return c.Names[0]
-			}
-		}
-	}
-	return ""
-}
