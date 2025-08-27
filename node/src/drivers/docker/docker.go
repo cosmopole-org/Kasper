@@ -655,7 +655,7 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 func (wm *Docker) Assign(machineId string) {
 	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
 
-	socketFolder := "/app/sockets/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
+	socketFolder := "/tmp/sockets/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
 	err := os.MkdirAll(socketFolder, os.ModePerm)
 	if err != nil {
 		log.Println(err)
@@ -759,7 +759,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 
 	ctx := context.Background()
 
-	socketPath := "/app/sockets/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
+	socketPath := "/tmp/sockets/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
 
 	config := &container.Config{
 		Image: strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
@@ -1027,7 +1027,7 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 		lockers:     cmap.New[*IOLocker](),
 		client:      client,
 	}
-	err = os.MkdirAll("/app/sockets", os.ModePerm)
+	err = os.MkdirAll("/tmp/sockets", os.ModePerm)
 	if err != nil {
 		panic(err)
 	}

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"log"
 	"net"
+	"os"
 	"sync"
 )
 
@@ -14,113 +17,61 @@ var conn net.Conn
 func main() {
 
 	log.Println("started echo machine.")
-	
-	conn, err := net.Dial("tcp", "127.0.0.1:8074")
+
+	conn, err := net.Dial("unix", "/app/sockets/socket.sock")
 	if err != nil {
-		log.Fatal("dial error:", err)
+		log.Fatalf("dial unix: %v", err)
 	}
 	defer conn.Close()
 
-	log.Println("connected.")
+	log.Printf("connected to bus")
 
-	lenBuf := make([]byte, 4)
-	buf := make([]byte, 1024)
-	nextBuf := make([]byte, 2048)
-	readCount := 0
-	oldReadCount := 0
-	enough := false
-	beginning := true
-	length := 0
-	readLength := 0
-	remainedReadLength := 0
-	var readData []byte
-	for {
-		if !enough {
-			var err error
-			readLength, err = conn.Read(buf)
-			if err != nil {
-				log.Println("docker", err)
-				return
-			}
-			log.Println("docker", "stat 0: reading data...")
-
-			readCount += readLength
-			copy(nextBuf[remainedReadLength:remainedReadLength+readLength], buf[0:readLength])
-			remainedReadLength += readLength
-
-			log.Println("docker", "stat 1:", readLength, oldReadCount, readCount, remainedReadLength)
-		}
-
-		if beginning {
-			if readCount >= 4 {
-				log.Println("docker", "stating stat 2...")
-				copy(lenBuf, nextBuf[0:4])
-				log.Println("docker", "nextBuf", nextBuf[0:4])
-				log.Println("docker", "lenBuf", lenBuf[0:4])
-				remainedReadLength -= 4
-				copy(nextBuf[0:remainedReadLength], nextBuf[4:remainedReadLength+4])
-				length = int(binary.BigEndian.Uint32(lenBuf))
-				if length > 20000000 {
-					return
+	go func() {
+		r := bufio.NewReader(conn)
+		for {
+			var ln uint32
+			if err := binary.Read(r, binary.LittleEndian, &ln); err != nil {
+				if err != io.EOF {
+					log.Printf("read len err: %v", err)
 				}
-				readData = make([]byte, length)
-				readCount -= 4
-				beginning = false
-				enough = true
-
-				log.Println("docker", "stat 2:", remainedReadLength, length, readCount)
-			} else {
-				enough = false
+				os.Exit(0)
 			}
-		} else {
-			if remainedReadLength == 0 {
-				enough = false
-			} else if readCount >= length {
-				log.Println("docker", "stating stat 3...")
-				log.Println("docker", "stat 3 step 1", oldReadCount, length)
-				copy(readData[oldReadCount:length], nextBuf[0:length-oldReadCount])
-				log.Println("docker", "stat 3 step 2", readLength, readCount, length)
-				readCount -= length
-				copy(nextBuf[0:readCount], nextBuf[length-oldReadCount:(length-oldReadCount)+readCount])
-				log.Println("docker", "nextBuf", nextBuf[0:readCount])
-				log.Println("docker", "stat 3 step 3", readCount, length)
-				remainedReadLength = readCount
-				log.Println("docker", "packet received")
-				packet := make([]byte, length)
-				copy(packet, readData)
-				log.Println("docker", "stat 3 step 4")
-				oldReadCount = 0
-				enough = true
-				beginning = true
-
-				log.Println("docker", "stat 3:", remainedReadLength, oldReadCount, readCount)
-
-				callbackId := int64(binary.LittleEndian.Uint64(packet[:8]))
-				packet = packet[8:]
-
-				log.Println("received ", string(packet))
-
-				processPacket(callbackId, packet)
-			} else {
-				log.Println("docker", "stating stat 4...")
-
-				copy(readData[oldReadCount:oldReadCount+(readCount-oldReadCount)], nextBuf[0:readCount-oldReadCount])
-				remainedReadLength = 0
-				oldReadCount = readCount
-				enough = true
-
-				log.Println("docker", "stat 4:", remainedReadLength)
+			var callbackId uint64
+			if err := binary.Read(r, binary.LittleEndian, &callbackId); err != nil {
+				if err != io.EOF {
+					log.Printf("read len err: %v", err)
+				}
+				os.Exit(0)
 			}
+			buf := make([]byte, ln)
+			if _, err := io.ReadFull(r, buf); err != nil {
+				log.Printf("read body err: %v", err)
+				os.Exit(0)
+			}
+			log.Printf("recv: %s", string(buf))
+			processPacket(int64(callbackId), buf)
 		}
-	}
+	}()
 }
 
-func writePacket(data []byte) {
+var cbCounter = int64(0)
+
+func writePacket(data []byte, noCallback bool) {
 	lock.Lock()
 	defer lock.Unlock()
 	lenBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
 	conn.Write(lenBytes)
+	if noCallback {
+		cbId := make([]byte, 8)
+		binary.LittleEndian.PutUint64(cbId, uint64(0))
+		conn.Write(cbId)
+	} else {
+		cbCounter++
+		cbId := make([]byte, 8)
+		binary.LittleEndian.PutUint64(cbId, uint64(cbCounter))
+		conn.Write(cbId)
+	}
 	conn.Write(data)
 }
 
@@ -162,5 +113,5 @@ func signalPoint(typ string, pointId string, userId string, data any) {
 		"userId":  userId,
 		"data":    string(dataBytes),
 	}})
-	writePacket(packet)
+	writePacket(packet, false)
 }
