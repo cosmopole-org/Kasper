@@ -656,14 +656,6 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 func (wm *Docker) Assign(machineId string) {
 	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
 
-	socketFolder := "/var/run/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
-	err := os.MkdirAll(socketFolder, os.ModePerm)
-	if err != nil {
-		log.Println(err)
-	}
-
-	socketPath := socketFolder + "/socket.sock"
-
 	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: machineId,
 		Signal: func(key string, a any) {
@@ -684,9 +676,6 @@ func (wm *Docker) Assign(machineId string) {
 			}
 		},
 	})
-	if err := os.RemoveAll(socketPath); err != nil {
-		log.Fatalf("remove old socket: %v", err)
-	}
 }
 
 func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string, standalone bool) (*models.File, error) {
@@ -1010,6 +999,12 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 			log.Println(containerName)
 			cnParts := strings.Split(containerName, "_")
 			machineId := cnParts[0] + "@" + cnParts[1]
+
+			locker, found := wm.lockers.Get(machineId)
+			if found {
+				locker.conn = c
+			}
+
 			future.Async(func() {
 				defer func() {
 					c.Close()
