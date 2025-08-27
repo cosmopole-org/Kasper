@@ -39,6 +39,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	network "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	cmap "github.com/orcaman/concurrent-map/v2"
@@ -694,19 +695,12 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 
 	ctx := context.Background()
 
-	socketFolder := "/var/run/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
-
-	err := os.MkdirAll(socketFolder, os.ModePerm)
-	if err != nil {
-		log.Println(err)
-	}
-
 	config := &container.Config{
 		Image: strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
 		Env:   []string{},
 	}
 
-	_, err = wm.client.ContainerCreate(
+	_, err := wm.client.ContainerCreate(
 		ctx,
 		config,
 		&container.HostConfig{
@@ -716,7 +710,6 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 			},
 			Runtime:     "runsc",
 			NetworkMode: "host",
-			Binds:       []string{socketFolder + ":" + "/app/sockets"},
 		},
 		nil,
 		nil,
@@ -757,69 +750,6 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 	}
 
 	log.Println("Container ", cn, " is created")
-
-	socketPath := socketFolder + "/socket.sock"
-
-	future.Async(func() {
-		acceptConn := func(c net.Conn) {
-			defer func() {
-				c.Close()
-				log.Printf("docker container disconnected")
-			}()
-
-			log.Printf("docker container connected")
-			r := bufio.NewReader(c)
-			for {
-				var ln uint32
-				if err := binary.Read(r, binary.LittleEndian, &ln); err != nil {
-					if err != io.EOF {
-						log.Printf("read len err: %v", err)
-					}
-					return
-				}
-				var cbId uint64
-				if err := binary.Read(r, binary.LittleEndian, &cbId); err != nil {
-					if err != io.EOF {
-						log.Printf("read len err: %v", err)
-					}
-					return
-				}
-				buf := make([]byte, ln)
-				if _, err := io.ReadFull(r, buf); err != nil {
-					log.Printf("read body err: %v", err)
-					return
-				}
-				data := []byte(wm.dockerCallback(machineId, string(buf)))
-				locker, found := wm.lockers.Get(machineId)
-				if found {
-					func() {
-						locker.Lock.Lock()
-						defer locker.Lock.Unlock()
-						lenBytes := make([]byte, 4)
-						binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
-						locker.conn.Write(lenBytes)
-						callbackId := make([]byte, 8)
-						binary.LittleEndian.PutUint64(callbackId, cbId)
-						locker.conn.Write(callbackId)
-						locker.conn.Write(data)
-					}()
-				}
-			}
-		}
-		for {
-			time.Sleep(time.Duration(5) * time.Second)
-			conn, err := net.Dial("unix", socketPath)
-			if err != nil {
-				log.Printf("accept err: %v", err)
-				continue
-			}
-			locker, found := wm.lockers.Get(machineId)
-			if found {
-				locker.conn = conn
-			}
-			acceptConn(conn)
-		}
-	}, false)
 
 	waiter, err := wm.client.ContainerAttach(ctx, cn, container.AttachOptions{
 		Stderr: true,
@@ -1017,6 +947,36 @@ func (wm *Docker) ExecContainer(machineId string, imageName string, containerNam
 	return string(stdout) + string(stderr), nil
 }
 
+func getContainerNameByIP(ip string, cli *client.Client) string {
+	ctx := context.Background()
+
+	// Get a list of all networks
+	networks, err := cli.NetworkList(ctx, network.ListOptions{})
+	if err != nil {
+		log.Println("Failed to list Docker networks:", err)
+		return ""
+	}
+
+	for _, net := range networks {
+		// Inspect each network to get connected containers
+		netInspect, err := cli.NetworkInspect(ctx, net.ID, network.InspectOptions{})
+		if err != nil {
+			log.Println("Failed to inspect network:", err)
+			continue
+		}
+
+		// Iterate through all containers connected to this network
+		for _, container := range netInspect.Containers {
+			// Find the container with the matching IP address
+			if container.IPv4Address == ip {
+				// The container name is prefixed with a slash; remove it
+				return strings.TrimPrefix(container.Name, "/")
+			}
+		}
+	}
+	return ""
+}
+
 func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, file file.IFile) docker.IDocker {
 	client, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
@@ -1030,9 +990,72 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 		lockers:     cmap.New[*IOLocker](),
 		client:      client,
 	}
-	err = os.MkdirAll("/var/run", os.ModePerm)
-	if err != nil {
-		panic(err)
-	}
+	future.Async(func() {
+		listener, err := net.Listen("tcp", ":8084")
+		if err != nil {
+			log.Fatalf("Failed to start TCP server: %v", err)
+		}
+		defer listener.Close()
+		log.Println("Docker tcp server listening on :8084")
+		for {
+			c, err := listener.Accept()
+			if err != nil {
+				log.Println("Error accepting connection:", err)
+				continue
+			}
+			remoteAddr := c.RemoteAddr().String()
+			clientIP := strings.Split(remoteAddr, ":")[0]
+			log.Printf("Connection from IP: %s", clientIP)
+			containerName := getContainerNameByIP(clientIP, client)
+			log.Println(containerName)
+			cnParts := strings.Split(containerName, "_")
+			machineId := cnParts[0] + "@" + cnParts[1]
+			future.Async(func() {
+				defer func() {
+					c.Close()
+					log.Printf("docker container disconnected")
+				}()
+
+				log.Printf("docker container connected")
+				r := bufio.NewReader(c)
+				for {
+					var ln uint32
+					if err := binary.Read(r, binary.LittleEndian, &ln); err != nil {
+						if err != io.EOF {
+							log.Printf("read len err: %v", err)
+						}
+						return
+					}
+					var cbId uint64
+					if err := binary.Read(r, binary.LittleEndian, &cbId); err != nil {
+						if err != io.EOF {
+							log.Printf("read len err: %v", err)
+						}
+						return
+					}
+					buf := make([]byte, ln)
+					if _, err := io.ReadFull(r, buf); err != nil {
+						log.Printf("read body err: %v", err)
+						return
+					}
+					data := []byte(wm.dockerCallback(machineId, string(buf)))
+					locker, found := wm.lockers.Get(machineId)
+					if found {
+						func() {
+							locker.Lock.Lock()
+							defer locker.Lock.Unlock()
+							lenBytes := make([]byte, 4)
+							binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
+							locker.conn.Write(lenBytes)
+							callbackId := make([]byte, 8)
+							binary.LittleEndian.PutUint64(callbackId, cbId)
+							locker.conn.Write(callbackId)
+							locker.conn.Write(data)
+						}()
+					}
+				}
+			}, false)
+		}
+	}, false)
 	return wm
 }
