@@ -655,7 +655,7 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 func (wm *Docker) Assign(machineId string) {
 	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
 
-	socketFolder := "/tmp/sockets/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
+	socketFolder := "/var/run/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
 	err := os.MkdirAll(socketFolder, os.ModePerm)
 	if err != nil {
 		log.Println(err)
@@ -692,7 +692,7 @@ func (wm *Docker) Assign(machineId string) {
 			log.Fatalf("listen unix: %v", err)
 		}
 		defer ln.Close()
-		log.Printf("listening on %s", socketPath)
+		log.Println("listening on ", socketPath)
 		acceptConn := func(c net.Conn) {
 			defer func() {
 				c.Close()
@@ -759,7 +759,7 @@ func (wm *Docker) RunContainer(machineId string, pointId string, imageName strin
 
 	ctx := context.Background()
 
-	socketPath := "/tmp/sockets/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
+	socketPath := "/var/run/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
 
 	config := &container.Config{
 		Image: strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
@@ -1027,7 +1027,7 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 		lockers:     cmap.New[*IOLocker](),
 		client:      client,
 	}
-	err = os.MkdirAll("/tmp/sockets", os.ModePerm)
+	err = os.MkdirAll("/var/run", os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
