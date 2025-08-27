@@ -26,32 +26,30 @@ func main() {
 
 	log.Printf("connected to bus")
 
-	go func() {
-		r := bufio.NewReader(conn)
-		for {
-			var ln uint32
-			if err := binary.Read(r, binary.LittleEndian, &ln); err != nil {
-				if err != io.EOF {
-					log.Printf("read len err: %v", err)
-				}
-				os.Exit(0)
+	r := bufio.NewReader(conn)
+	for {
+		var ln uint32
+		if err := binary.Read(r, binary.LittleEndian, &ln); err != nil {
+			if err != io.EOF {
+				log.Printf("read len err: %v", err)
 			}
-			var callbackId uint64
-			if err := binary.Read(r, binary.LittleEndian, &callbackId); err != nil {
-				if err != io.EOF {
-					log.Printf("read len err: %v", err)
-				}
-				os.Exit(0)
-			}
-			buf := make([]byte, ln)
-			if _, err := io.ReadFull(r, buf); err != nil {
-				log.Printf("read body err: %v", err)
-				os.Exit(0)
-			}
-			log.Printf("recv: %s", string(buf))
-			processPacket(int64(callbackId), buf)
+			os.Exit(0)
 		}
-	}()
+		var callbackId uint64
+		if err := binary.Read(r, binary.LittleEndian, &callbackId); err != nil {
+			if err != io.EOF {
+				log.Printf("read len err: %v", err)
+			}
+			os.Exit(0)
+		}
+		buf := make([]byte, ln)
+		if _, err := io.ReadFull(r, buf); err != nil {
+			log.Printf("read body err: %v", err)
+			os.Exit(0)
+		}
+		log.Printf("recv: %s", string(buf))
+		processPacket(int64(callbackId), buf)
+	}
 }
 
 var cbCounter = int64(0)

@@ -687,12 +687,82 @@ func (wm *Docker) Assign(machineId string) {
 		if err := os.RemoveAll(socketPath); err != nil {
 			log.Fatalf("remove old socket: %v", err)
 		}
-		ln, err := net.Listen("unix", socketPath)
-		if err != nil {
-			log.Fatalf("listen unix: %v", err)
-		}
-		defer ln.Close()
-		log.Println("listening on ", socketPath)
+	}, false)
+}
+
+func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string, standalone bool) (*models.File, error) {
+
+	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
+
+	ctx := context.Background()
+
+	socketFolder := "/var/run/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
+
+	err := os.MkdirAll(socketFolder, os.ModePerm)
+	if err != nil {
+		log.Println(err)
+	}
+
+	config := &container.Config{
+		Image: strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
+		Env:   []string{},
+	}
+
+	_, err = wm.client.ContainerCreate(
+		ctx,
+		config,
+		&container.HostConfig{
+			LogConfig: container.LogConfig{
+				Type:   "json-file",
+				Config: map[string]string{},
+			},
+			Runtime:     "runsc",
+			NetworkMode: "host",
+			Binds:       []string{socketFolder + ":" + "/app/sockets"},
+		},
+		nil,
+		nil,
+		cn,
+	)
+
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	defer wm.SaRContainer(machineId, imageName, containerName)
+	if !standalone {
+		future.Async(func() {
+			time.Sleep(60 * time.Minute)
+			wm.SaRContainer(machineId, imageName, containerName)
+		}, false)
+	}
+
+	tarId := WriteToTar(inputFile)
+	tarStream, err := os.Open(tarId)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	err = wm.client.CopyToContainer(ctx, cn, "/app/input", tarStream, container.CopyToContainerOptions{
+		AllowOverwriteDirWithFile: true,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	err = wm.client.ContainerStart(ctx, cn, container.StartOptions{})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	log.Println("Container ", cn, " is created")
+	
+	socketPath := socketFolder + "/socket.sock"
+
+	future.Async(func() {
 		acceptConn := func(c net.Conn) {
 			defer func() {
 				c.Close()
@@ -739,7 +809,7 @@ func (wm *Docker) Assign(machineId string) {
 			}
 		}
 		for {
-			conn, err := ln.Accept()
+			conn, err := net.Dial("unix", socketPath)
 			if err != nil {
 				log.Printf("accept err: %v", err)
 				continue
@@ -749,74 +819,9 @@ func (wm *Docker) Assign(machineId string) {
 				locker.conn = conn
 			}
 			acceptConn(conn)
+			time.Sleep(time.Duration(2) * time.Second)
 		}
 	}, false)
-}
-
-func (wm *Docker) RunContainer(machineId string, pointId string, imageName string, containerName string, inputFile map[string]string, standalone bool) (*models.File, error) {
-
-	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
-
-	ctx := context.Background()
-
-	socketPath := "/var/run/" + strings.Join(strings.Split(machineId, "@"), "_") + "_" + "main" + "_" + "main"
-
-	config := &container.Config{
-		Image: strings.Join(strings.Split(machineId, "@"), "_") + "/" + imageName,
-		Env:   []string{},
-	}
-
-	_, err := wm.client.ContainerCreate(
-		ctx,
-		config,
-		&container.HostConfig{
-			LogConfig: container.LogConfig{
-				Type:   "json-file",
-				Config: map[string]string{},
-			},
-			Runtime:     "runsc",
-			NetworkMode: "host",
-			Binds:       []string{socketPath + ":" + "/app/sockets"},
-		},
-		nil,
-		nil,
-		cn,
-	)
-
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	defer wm.SaRContainer(machineId, imageName, containerName)
-	if !standalone {
-		future.Async(func() {
-			time.Sleep(60 * time.Minute)
-			wm.SaRContainer(machineId, imageName, containerName)
-		}, false)
-	}
-
-	tarId := WriteToTar(inputFile)
-	tarStream, err := os.Open(tarId)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	err = wm.client.CopyToContainer(ctx, cn, "/app/input", tarStream, container.CopyToContainerOptions{
-		AllowOverwriteDirWithFile: true,
-	})
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	err = wm.client.ContainerStart(ctx, cn, container.StartOptions{})
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	log.Println("Container ", cn, " is created")
 
 	waiter, err := wm.client.ContainerAttach(ctx, cn, container.AttachOptions{
 		Stderr: true,
