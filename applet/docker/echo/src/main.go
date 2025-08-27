@@ -81,20 +81,18 @@ func processPacket(callbackId int64, data []byte) {
 			log.Println(err)
 			return
 		}
-		if packet["type"].(string) == "points/signal" {
-			data := packet["data"].(string)
-			input := map[string]any{}
-			err := json.Unmarshal([]byte(data), &input)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			if input["type"] == "textMessage" {
-				signalPoint("broadcast", packet["point"].(map[string]any)["id"].(string), packet["user"].(map[string]any)["id"].(string), map[string]any{
-					"type": "textMessage",
-					"text": "echo " + input["text"].(string),
-				})
-			}
+		data := packet["data"].(string)
+		input := map[string]any{}
+		err = json.Unmarshal([]byte(data), &input)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		if input["type"] == "textMessage" {
+			signalPoint("broadcast", packet["point"].(map[string]any)["id"].(string), packet["user"].(map[string]any)["id"].(string), map[string]any{
+				"type": "textMessage",
+				"text": "echo " + input["text"].(string),
+			})
 		}
 	}
 }

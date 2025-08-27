@@ -239,6 +239,7 @@ func (a *Actions) RunMachine(state state.IState, input inputs_machiner.RunMachin
 		return nil, errors.New("you are not owner of this machine")
 	}
 	future.Async(func() {
+		a.App.Tools().Docker().SaRContainer(input.MachineId, "main", "main")
 		a.App.Tools().Docker().RunContainer(input.MachineId, "", "main", "main", map[string]string{}, true)
 	}, false)
 	return map[string]any{}, nil
