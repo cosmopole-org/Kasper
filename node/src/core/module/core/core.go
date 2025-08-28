@@ -145,7 +145,12 @@ func NewCore(ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
 	}
 	defer conn.Close()
 	localAddr := conn.LocalAddr().(*net.UDPAddr).IP.String()
-	id := localAddr
+	a, err := net.LookupAddr(localAddr)
+	if err != nil {
+		log.Println(err)
+		panic("ip not friendly")
+	}
+	id := a[0]
 	execs := map[string]bool{}
 	execs[id] = true
 	return &Core{

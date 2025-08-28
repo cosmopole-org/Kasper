@@ -355,7 +355,14 @@ func (t *Blockchain) listenForPackets(socket *Socket) {
 }
 
 func (t *Blockchain) handleConnection(conn net.Conn) {
-	origin := strings.Split(conn.RemoteAddr().String(), ":")[0]
+	ip := strings.Split(conn.RemoteAddr().String(), ":")[0]
+	a, err := net.LookupAddr(ip)
+	if err != nil {
+		log.Println(err)
+		log.Println("ip not friendly")
+		return
+	}
+	origin := a[0]
 	newNode := Node{ID: origin, Power: rand.Intn(100)}
 	for _, c := range t.chains.Items() {
 		c.sharder.HandleNewNode(newNode)
