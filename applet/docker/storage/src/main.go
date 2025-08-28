@@ -80,6 +80,12 @@ var users = map[string]*User{}
 var points = map[string]*Point{}
 var docs = map[string]*Doc{}
 
+type UploadReq struct {
+	FileName string `json:"fileName"`
+	Content  []byte `json:"content"`
+	MimeType string `json:"mimeType"`
+}
+
 func processPacket(callbackId int64, data []byte) {
 	defer func() {
 		r := recover()
@@ -184,32 +190,33 @@ func processPacket(callbackId int64, data []byte) {
 			}
 			signalPoint("single", pointId, userId, map[string]any{"type": "pointFilesRes", "response": map[string]any{"success": true, "docs": docs}})
 		} else if input["type"] == "upload" {
-			file := input["fileName"].(string)
-			mimeType := input["mimeType"].(string)
-			payloadB64 := input["content"].(string)
-			payload, _ := base64.StdEncoding.DecodeString(string(payloadB64))
+			ur := UploadReq{}
+			json.Unmarshal([]byte(packet["data"].(string)), &ur)
 			srv := services[userId]
+			log.Println(len(ur.Content))
 			res, err := srv.Files.Create(&drive.File{
-				Name: file,
-			}).Media(bytes.NewBuffer(payload), googleapi.ChunkSize(len(payload))).Do()
+				Name:     ur.FileName,
+				MimeType: ur.MimeType,
+			}).Media(bytes.NewReader(ur.Content), googleapi.ChunkSize(1024*1024 * 16)).Do()
 			if err != nil {
 				signalPoint("single", pointId, userId, map[string]any{"type": "uploadRes", "response": map[string]any{"success": false, "errMsg": err.Error()}})
 			}
 			fileType := ""
-			if strings.HasPrefix(mimeType, "image/") {
+			if strings.HasPrefix(ur.MimeType, "image/") {
 				fileType = "image"
-			} else if strings.HasPrefix(mimeType, "audio/") {
+			} else if strings.HasPrefix(ur.MimeType, "audio/") {
 				fileType = "audio"
-			} else if strings.HasPrefix(mimeType, "video/") {
+			} else if strings.HasPrefix(ur.MimeType, "video/") {
 				fileType = "video"
 			} else {
 				fileType = "document"
 			}
-			doc := Doc{Id: uuid.NewString(), Title: file, FileId: res.Id, MimeType: mimeType, PointId: pointId, CreatorId: userId, Category: fileType}
+			doc := Doc{Id: uuid.NewString(), Title: ur.FileName, FileId: res.Id, MimeType: ur.MimeType, PointId: pointId, CreatorId: userId, Category: fileType}
 			docs[doc.Id] = &doc
 			point, ok := points[pointId]
 			if !ok {
-				points[pointId] = &Point{Id: pointId, IsPublic: packet["point"].(map[string]any)["isPublic"].(bool), LastUpdate: 0, Docs: []*Doc{}}
+				point = &Point{Id: pointId, IsPublic: packet["point"].(map[string]any)["isPublic"].(bool), LastUpdate: 0, Docs: []*Doc{}}
+				points[pointId] = point
 			}
 			point.Docs = append(point.Docs, &doc)
 			point.LastUpdate = time.Now().UnixMilli()
@@ -227,7 +234,7 @@ func processPacket(callbackId int64, data []byte) {
 			}
 			if pId != "" {
 				srv := services[doc.CreatorId]
-				res, err := srv.Files.Get(fileId).Download()
+				res, err := srv.Files.Get(doc.FileId).Download()
 				if err != nil {
 					log.Fatalf("Could not download file: %v", err)
 				}
@@ -236,7 +243,7 @@ func processPacket(callbackId int64, data []byte) {
 				if err != nil {
 					log.Fatalf("Failed to read downloaded data: %v", err)
 				}
-				signalPoint("single", pointId, userId, map[string]any{"type": "downloadRes", "response": map[string]any{"success": true, "data": base64.StdEncoding.EncodeToString(data)}})
+				signalPoint("single", pointId, userId, map[string]any{"type": "downloadRes", "response": map[string]any{"success": true, "doc": doc, "data": base64.StdEncoding.EncodeToString(data)}})
 			}
 		}
 	}
@@ -311,7 +318,7 @@ func signalPoint(typ string, pointId string, userId string, data any) {
 		return
 	}
 	packet, _ := json.Marshal(map[string]any{"key": "signalPoint", "input": map[string]any{
-		"type":    typ,
+		"type":    typ + "|true",
 		"pointId": pointId,
 		"userId":  userId,
 		"data":    string(dataBytes),
