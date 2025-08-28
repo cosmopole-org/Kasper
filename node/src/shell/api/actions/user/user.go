@@ -288,10 +288,10 @@ func (a *Actions) Delete(state state.IState, input inputsusers.DeleteInput) (any
 		trx.DelIndex("User", "name", "id", user.Id+"->"+meta["name"].(string))
 	}
 	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile", map[string]any{"name": "", "avatar": "empty"}, true)
-	email := trx.GetLink("UserIdToEmail::"+user.Id)
-	trx.DelKey("link::UserPrivateKey::"+user.Id)
-	trx.DelKey("link::UserEmailToId::"+email)
-	trx.DelKey("link::UserIdToEmail::"+user.Id)
+	email := trx.GetLink("UserIdToEmail::" + user.Id)
+	trx.DelKey("link::UserPrivateKey::" + user.Id)
+	trx.DelKey("link::UserEmailToId::" + email)
+	trx.DelKey("link::UserIdToEmail::" + user.Id)
 	trx.DelIndex("User", "username", "id", user.Username)
 	user.Username = "deleted_user@deleted"
 	user.PublicKey = ""
@@ -348,20 +348,22 @@ func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, erro
 	if !trx.HasObj("User", input.UserId) {
 		return nil, errors.New("user not found")
 	}
-	user := models.User{Id: input.UserId}.Pull(trx)
+	user := models.User{Id: input.UserId}.Pull(trx, true)
 	result := map[string]any{
 		"id":        user.Id,
 		"publicKey": user.PublicKey,
 		"type":      user.Typ,
 		"username":  user.Username,
+		"name":      user.Name,
 	}
-	meta, err := trx.GetJson("UserMeta::"+input.UserId, "metadata.public.profile")
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	if user.Typ == "human" {
+		meta, err := trx.GetJson("UserMeta::"+input.UserId, "metadata.public.profile")
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		result["avatar"] = meta["avatar"]
 	}
-	result["name"] = meta["name"]
-	result["avatar"] = meta["avatar"]
 	if input.UserId == state.Info().UserId() {
 		result["balance"] = user.Balance
 	}

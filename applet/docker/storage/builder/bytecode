@@ -12,4 +12,4 @@ RUN echo "building... 2"
 RUN go mod tidy
 RUN go build -o storage
 
-ENTRYPOINT [ "/app/storage", "--command=adminInit" ]
+ENTRYPOINT [ "/app/storage" ]

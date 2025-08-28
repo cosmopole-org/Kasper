@@ -24,7 +24,7 @@ func main() {
 		log.Fatalf("dial error: %v", err)
 	}
 	defer conn.Close()
-	log.Println("Container client connected on", "172.17.0.1:8084")
+	log.Println("Container client connected")
 
 	r := bufio.NewReader(conn)
 	for {
