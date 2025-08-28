@@ -51,7 +51,7 @@ func (d User) Pull(trx trx.ITrx, flags ...bool) User {
 		d.Balance = int64(binary.LittleEndian.Uint64(m["balance"]))
 		if len(flags) > 0 {
 			if flags[0] {
-				if metadata, err := trx.GetJson("PointMeta::"+d.Id, "metadata.public.profile"); err == nil {
+				if metadata, err := trx.GetJson("UserMeta::"+d.Id, "metadata.public.profile"); err == nil {
 					d.Name = metadata["name"].(string)
 				}
 			}

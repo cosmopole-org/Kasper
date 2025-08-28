@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -183,6 +185,20 @@ func processPacket(callbackId int64, data []byte) {
 				docs = point.Docs
 			}
 			signalPoint("single", pointId, userId, map[string]any{"type": "pointFilesRes", "response": map[string]any{"success": true, "docs": docs}})
+		} else if input["type"] == "listTopMedia" {
+			pointsList := []*Point{}
+			for _, point := range points {
+				pointsList = append(pointsList, point)
+			}
+			slices.SortFunc(pointsList, func(a* Point, b *Point) int {
+				return int(b.LastUpdate - a.LastUpdate)
+			})
+			docs := []*Doc{}
+			pointsList = pointsList[:int(math.Min(float64(len(pointsList)), 5))]
+			for _, p := range pointsList {
+				docs = append(docs, p.Docs...)
+			}
+			signalPoint("single", pointId, userId, map[string]any{"type": "listTopMediaRes", "response": map[string]any{"success": true, "docs": docs}})
 		} else if input["type"] == "upload" {
 			fileName := input["fileName"].(string)
 			mimeType := input["mimeType"].(string)
@@ -192,7 +208,7 @@ func processPacket(callbackId int64, data []byte) {
 			res, err := srv.Files.Create(&drive.File{
 				Name:     fileName,
 				MimeType: mimeType,
-			}).Media(bytes.NewReader(content), googleapi.ChunkSize(1024*1024 * 16)).Do()
+			}).Media(bytes.NewReader(content), googleapi.ChunkSize(1024*1024*16)).Do()
 			if err != nil {
 				signalPoint("single", pointId, userId, map[string]any{"type": "uploadRes", "response": map[string]any{"success": false, "errMsg": err.Error()}})
 			}
