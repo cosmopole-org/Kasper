@@ -161,7 +161,7 @@ func NewCore(ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
 		chain:            nil,
 		chainCallbacks:   map[string]*chain.ChainCallback{},
 		messageCallbacks: map[string]*chain.MessageCallback{},
-		Ip:               localAddr,
+		Ip:               id,
 		elections:        nil,
 		elecReg:          false,
 		executors:        execs,
