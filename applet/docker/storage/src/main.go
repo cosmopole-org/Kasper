@@ -29,6 +29,8 @@ import (
 	"google.golang.org/api/option"
 )
 
+var callbacks = map[int64]func([]byte){}
+
 func getClient(config *oauth2.Config) any {
 	return getTokenFromWeb(config)
 }
@@ -61,11 +63,77 @@ type User struct {
 	AuthCode string
 }
 
+func (d User) Push() {
+	obj := map[string][]byte{
+		"id":       []byte(d.Id),
+		"name":     []byte(d.Name),
+		"authCode": []byte(d.AuthCode),
+	}
+	dbPutObj("User", d.Id, obj)
+}
+
+func (d User) Pull() bool {
+	c := make(chan map[string][]byte, 1)
+	dbGetObj("User", d.Id, func(m map[string][]byte) {
+		c <- m
+	})
+	m := <-c
+	if len(m) > 0 {
+		d.Name = string(m["name"])
+		d.AuthCode = string(m["authCode"])
+		return true
+	} else {
+		return false
+	}
+}
+
 type Point struct {
 	Id         string
 	IsPublic   bool
 	LastUpdate int64
 	Docs       []*Doc
+}
+
+func (d Point) Push() {
+	isPubByte := byte(0x02)
+	if d.IsPublic == true {
+		isPubByte = 0x01
+	}
+	luBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(luBytes, uint64(d.LastUpdate))
+	obj := map[string][]byte{
+		"id":         []byte(d.Id),
+		"isPublic":   []byte{isPubByte},
+		"lastUpdate": luBytes,
+	}
+	dbPutObj("Point", d.Id, obj)
+}
+
+func (d Point) Pull() bool {
+	c := make(chan map[string][]byte, 1)
+	dbGetObj("Point", d.Id, func(m map[string][]byte) {
+		c <- m
+	})
+	m := <-c
+	if len(m) > 0 {
+		if m["isPublic"][0] == byte(0x01) {
+			d.IsPublic = true
+		} else {
+			d.IsPublic = false
+		}
+		d.LastUpdate = int64(binary.LittleEndian.Uint64(m["lastUpdate"]))
+		return true
+	}
+	return false
+}
+
+func (d Point) Parse(m map[string][]byte) {
+	if m["isPublic"][0] == byte(0x01) {
+		d.IsPublic = true
+	} else {
+		d.IsPublic = false
+	}
+	d.LastUpdate = int64(binary.LittleEndian.Uint64(m["lastUpdate"]))
 }
 
 type Doc struct {
@@ -78,9 +146,46 @@ type Doc struct {
 	PointId   string
 }
 
-var users = map[string]*User{}
-var points = map[string]*Point{}
-var docs = map[string]*Doc{}
+func (d Doc) Push() {
+	obj := map[string][]byte{
+		"id":        []byte(d.Id),
+		"title":     []byte(d.Title),
+		"fileId":    []byte(d.FileId),
+		"mimeType":  []byte(d.MimeType),
+		"category":  []byte(d.Category),
+		"creatorId": []byte(d.CreatorId),
+		"pointId":   []byte(d.PointId),
+	}
+	dbPutObj("Doc", d.Id, obj)
+}
+
+func (d Doc) Pull() bool {
+	c := make(chan map[string][]byte, 1)
+	dbGetObj("Point", d.Id, func(m map[string][]byte) {
+		c <- m
+	})
+	m := <-c
+	if len(m) > 0 {
+		d.Category = string(m["category"])
+		d.CreatorId = string(m["creatorId"])
+		d.FileId = string(m["fileId"])
+		d.MimeType = string(m["mimeType"])
+		d.PointId = string(m["pointId"])
+		d.Title = string(m["title"])
+		return true
+	} else {
+		return false
+	}
+}
+
+func (d Doc) Parse(m map[string][]byte) {
+	d.Category = string(m["category"])
+	d.CreatorId = string(m["creatorId"])
+	d.FileId = string(m["fileId"])
+	d.MimeType = string(m["mimeType"])
+	d.PointId = string(m["pointId"])
+	d.Title = string(m["title"])
+}
 
 func processPacket(callbackId int64, data []byte) {
 	defer func() {
@@ -154,7 +259,7 @@ func processPacket(callbackId int64, data []byte) {
 				services[userId] = srv
 			}
 			user := User{Id: userId, Name: "", AuthCode: authCode}
-			users[user.Id] = &user
+			user.Push()
 			signalPoint("single", pointId, userId, map[string]any{"type": "authStorageRes", "response": map[string]any{"success": true}})
 		} else if input["type"] == "listFiles" {
 			srv := services[userId]
@@ -180,25 +285,38 @@ func processPacket(callbackId int64, data []byte) {
 			signalPoint("single", pointId, userId, map[string]any{"type": "listFilesRes", "response": map[string]any{"success": true, "list": list}})
 		} else if input["type"] == "pointFiles" {
 			docs := []*Doc{}
-			point, ok := points[pointId]
-			if ok {
-				docs = point.Docs
+			point := Point{Id: pointId}
+			if point.Pull() {
+				c := make(chan int, 1)
+				dbGetObjsByPrefix("pointDocs::"+pointId+"::", 0, 100, func(m map[string]map[string][]byte) {
+					for k, v := range m {
+						doc := Doc{Id: k}
+						doc.Parse(v)
+						docs = append(docs, &doc)
+					}
+					c <- 1
+				})
+				<-c
 			}
 			signalPoint("single", pointId, userId, map[string]any{"type": "pointFilesRes", "response": map[string]any{"success": true, "docs": docs}})
 		} else if input["type"] == "listTopMedia" {
-			pointsList := []*Point{}
-			for _, point := range points {
-				pointsList = append(pointsList, point)
-			}
-			slices.SortFunc(pointsList, func(a* Point, b *Point) int {
-				return int(b.LastUpdate - a.LastUpdate)
+			dbGetObjs("Point", 0, 100, func(m map[string]map[string][]byte) {
+				pointsList := make([]*Point, len(m))
+				for pointId, pointRaw := range m {
+					point := Point{Id: pointId}
+					point.Parse(pointRaw)
+					pointsList = append(pointsList, &point)
+				}
+				slices.SortFunc(pointsList, func(a *Point, b *Point) int {
+					return int(b.LastUpdate - a.LastUpdate)
+				})
+				docs := []*Doc{}
+				pointsList = pointsList[:int(math.Min(float64(len(pointsList)), 5))]
+				for _, p := range pointsList {
+					docs = append(docs, p.Docs...)
+				}
+				signalPoint("single", pointId, userId, map[string]any{"type": "listTopMediaRes", "response": map[string]any{"success": true, "docs": docs}})
 			})
-			docs := []*Doc{}
-			pointsList = pointsList[:int(math.Min(float64(len(pointsList)), 5))]
-			for _, p := range pointsList {
-				docs = append(docs, p.Docs...)
-			}
-			signalPoint("single", pointId, userId, map[string]any{"type": "listTopMediaRes", "response": map[string]any{"success": true, "docs": docs}})
 		} else if input["type"] == "upload" {
 			fileName := input["fileName"].(string)
 			mimeType := input["mimeType"].(string)
@@ -223,20 +341,23 @@ func processPacket(callbackId int64, data []byte) {
 				fileType = "document"
 			}
 			doc := Doc{Id: uuid.NewString(), Title: fileName, FileId: res.Id, MimeType: mimeType, PointId: pointId, CreatorId: userId, Category: fileType}
-			docs[doc.Id] = &doc
-			point, ok := points[pointId]
-			if !ok {
-				point = &Point{Id: pointId, IsPublic: packet["point"].(map[string]any)["isPublic"].(bool), LastUpdate: 0, Docs: []*Doc{}}
-				points[pointId] = point
+			doc.Push()
+			point := Point{Id: pointId}
+			if !point.Pull() {
+				point = Point{Id: pointId, IsPublic: packet["point"].(map[string]any)["isPublic"].(bool), LastUpdate: 0, Docs: []*Doc{}}
+				point.Push()
 			}
-			point.Docs = append(point.Docs, &doc)
+			dbPutLink("pointDocs::"+pointId+"::"+doc.Id, "true")
 			point.LastUpdate = time.Now().UnixMilli()
+			point.Push()
 			signalPoint("single", pointId, userId, map[string]any{"type": "uploadRes", "response": map[string]any{"success": true, "fileId": res.Id}})
 		} else if input["type"] == "download" {
 			fileId := input["fileId"].(string)
 			pointIdInner := input["pointId"].(string)
-			doc := docs[fileId]
-			point := points[pointIdInner]
+			doc := Doc{Id: fileId}
+			doc.Pull()
+			point := Point{Id: pointIdInner}
+			point.Pull()
 			pId := ""
 			if point.IsPublic {
 				pId = pointIdInner
@@ -257,6 +378,10 @@ func processPacket(callbackId int64, data []byte) {
 				signalPoint("single", pointId, userId, map[string]any{"type": "downloadRes", "response": map[string]any{"success": true, "doc": doc, "data": base64.StdEncoding.EncodeToString(data)}})
 			}
 		}
+	} else {
+		cb := callbacks[callbackId]
+		cb(data)
+		delete(callbacks, callbackId)
 	}
 }
 
@@ -303,20 +428,22 @@ func main() {
 
 var cbCounter = int64(0)
 
-func writePacket(data []byte, noCallback bool) {
+func writePacket(data []byte, callback func([]byte)) {
 	lock.Lock()
 	defer lock.Unlock()
 	lenBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBytes, uint32(len(data)))
 	conn.Write(lenBytes)
-	if noCallback {
+	if callback == nil {
 		cbId := make([]byte, 8)
 		binary.LittleEndian.PutUint64(cbId, uint64(0))
 		conn.Write(cbId)
 	} else {
 		cbCounter++
+		callbackId := cbCounter
 		cbId := make([]byte, 8)
 		binary.LittleEndian.PutUint64(cbId, uint64(cbCounter))
+		callbacks[callbackId] = callback
 		conn.Write(cbId)
 	}
 	conn.Write(data)
@@ -334,5 +461,65 @@ func signalPoint(typ string, pointId string, userId string, data any) {
 		"userId":  userId,
 		"data":    string(dataBytes),
 	}})
-	writePacket(packet, false)
+	writePacket(packet, nil)
+}
+
+func dbPutObj(typ string, objId string, obj map[string][]byte) {
+	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
+		"op":      "putObj",
+		"objType": typ,
+		"objId":   objId,
+		"obj":     obj,
+	}})
+	writePacket(packet, nil)
+}
+
+func dbGetObj(typ string, objId string, cb func(map[string][]byte)) {
+	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
+		"op":      "getObj",
+		"objType": typ,
+		"objId":   objId,
+	}})
+	writePacket(packet, func(b []byte) {
+		result := map[string][]byte{}
+		json.Unmarshal(b, &result)
+		cb(result)
+	})
+}
+
+func dbPutLink(linkKey string, linkVal string) {
+	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
+		"op":  "putLink",
+		"key": linkKey,
+		"val": linkVal,
+	}})
+	writePacket(packet, nil)
+}
+
+func dbGetObjsByPrefix(prefix string, offset int, count int, cb func(map[string]map[string][]byte)) {
+	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
+		"op":     "getObjsByPrefix",
+		"prefix": prefix,
+		"offset": offset,
+		"count":  count,
+	}})
+	writePacket(packet, func(b []byte) {
+		result := map[string]map[string][]byte{}
+		json.Unmarshal(b, &result)
+		cb(result)
+	})
+}
+
+func dbGetObjs(typ string, offset int, count int, cb func(map[string]map[string][]byte)) {
+	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
+		"op":      "getObjs",
+		"objType": typ,
+		"offset":  offset,
+		"count":   count,
+	}})
+	writePacket(packet, func(b []byte) {
+		result := map[string]map[string][]byte{}
+		json.Unmarshal(b, &result)
+		cb(result)
+	})
 }

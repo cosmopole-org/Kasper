@@ -218,7 +218,135 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 		log.Println(err)
 		return err.Error()
 	}
-	if key == "runDocker" {
+	if key == "dbOp" {
+		op, err := checkField(input, "op", "")
+		if err != nil {
+			log.Println(err)
+			return err.Error()
+		}
+		if op == "putObj" {
+			typ, err := checkField(input, "objType", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			id, err := checkField(input, "objId", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			objRaw, err := checkField(input, "objId", map[string]any{})
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			obj := map[string][]byte{}
+			for k, v := range objRaw {
+				obj[k] = v.([]byte)
+			}
+			wm.app.ModifyState(false, func(trx trx.ITrx) error {
+				trx.PutObj(machineId+"->"+typ, id, obj)
+				return nil
+			})
+			return "{}"
+		} else if op == "getObj" {
+			typ, err := checkField(input, "objType", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			id, err := checkField(input, "objId", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			obj := map[string][]byte{}
+			wm.app.ModifyState(true, func(trx trx.ITrx) error {
+				obj = trx.GetObj(machineId+"->"+typ, id)
+				return nil
+			})
+			otuput, err := json.Marshal(obj)
+			if err != nil {
+				log.Println(err)
+				return "{}"
+			}
+			return string(otuput)
+		} else if op == "getObjsByPrefix" {
+			typ, err := checkField(input, "objType", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			prefix, err := checkField(input, "prefix", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			offset, err := checkField(input, "offset", float64(0))
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			count, err := checkField(input, "count", float64(0))
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			result := map[string]map[string][]byte{}
+			wm.app.ModifyState(true, func(trx trx.ITrx) error {
+				links, err := trx.GetLinksList(machineId+"->"+prefix, int(offset), int(count))
+				if err != nil {
+					log.Println(err)
+					return nil
+				}
+				res, err := trx.GetObjList(machineId+"->"+typ, links, map[string]string{})
+				result = res
+				return err
+			})
+			str, _ := json.Marshal(result)
+			return string(str)
+		} else if op == "getObjs" {
+			typ, err := checkField(input, "objType", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			offset, err := checkField(input, "offset", float64(0))
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			count, err := checkField(input, "count", float64(0))
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			result := map[string]map[string][]byte{}
+			wm.app.ModifyState(true, func(trx trx.ITrx) error {
+				res, err := trx.GetObjList(machineId+"->"+typ, []string{"*"}, map[string]string{}, int64(offset), int64(count))
+				result = res
+				return err
+			})
+			str, _ := json.Marshal(result)
+			return string(str)
+		} else if op == "putLink" {
+			k, err := checkField(input, "key", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			v, err := checkField(input, "val", "")
+			if err != nil {
+				log.Println(err)
+				return err.Error()
+			}
+			wm.app.ModifyState(false, func(trx trx.ITrx) error {
+				trx.PutLink(machineId+"->"+k, v)
+				return nil
+			})
+			return "{}"
+		}
+	} else if key == "runDocker" {
 		pointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			log.Println(err)
