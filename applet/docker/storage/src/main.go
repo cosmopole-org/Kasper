@@ -80,12 +80,6 @@ var users = map[string]*User{}
 var points = map[string]*Point{}
 var docs = map[string]*Doc{}
 
-type UploadReq struct {
-	FileName string `json:"fileName"`
-	Content  []byte `json:"content"`
-	MimeType string `json:"mimeType"`
-}
-
 func processPacket(callbackId int64, data []byte) {
 	defer func() {
 		r := recover()
@@ -190,28 +184,29 @@ func processPacket(callbackId int64, data []byte) {
 			}
 			signalPoint("single", pointId, userId, map[string]any{"type": "pointFilesRes", "response": map[string]any{"success": true, "docs": docs}})
 		} else if input["type"] == "upload" {
-			ur := UploadReq{}
-			json.Unmarshal([]byte(packet["data"].(string)), &ur)
+			fileName := input["fileName"].(string)
+			mimeType := input["mimeType"].(string)
+			content, _ := base64.StdEncoding.DecodeString(input["content"].(string))
 			srv := services[userId]
-			log.Println(len(ur.Content))
+			log.Println(len(content))
 			res, err := srv.Files.Create(&drive.File{
-				Name:     ur.FileName,
-				MimeType: ur.MimeType,
-			}).Media(bytes.NewReader(ur.Content), googleapi.ChunkSize(1024*1024 * 16)).Do()
+				Name:     fileName,
+				MimeType: mimeType,
+			}).Media(bytes.NewReader(content), googleapi.ChunkSize(1024*1024 * 16)).Do()
 			if err != nil {
 				signalPoint("single", pointId, userId, map[string]any{"type": "uploadRes", "response": map[string]any{"success": false, "errMsg": err.Error()}})
 			}
 			fileType := ""
-			if strings.HasPrefix(ur.MimeType, "image/") {
+			if strings.HasPrefix(mimeType, "image/") {
 				fileType = "image"
-			} else if strings.HasPrefix(ur.MimeType, "audio/") {
+			} else if strings.HasPrefix(mimeType, "audio/") {
 				fileType = "audio"
-			} else if strings.HasPrefix(ur.MimeType, "video/") {
+			} else if strings.HasPrefix(mimeType, "video/") {
 				fileType = "video"
 			} else {
 				fileType = "document"
 			}
-			doc := Doc{Id: uuid.NewString(), Title: ur.FileName, FileId: res.Id, MimeType: ur.MimeType, PointId: pointId, CreatorId: userId, Category: fileType}
+			doc := Doc{Id: uuid.NewString(), Title: fileName, FileId: res.Id, MimeType: mimeType, PointId: pointId, CreatorId: userId, Category: fileType}
 			docs[doc.Id] = &doc
 			point, ok := points[pointId]
 			if !ok {
