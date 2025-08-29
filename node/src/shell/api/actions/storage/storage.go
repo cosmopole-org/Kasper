@@ -357,7 +357,7 @@ func Install(a *Actions) error {
 				http.Error(w, "can't access point", http.StatusForbidden)
 				return
 			}
-			url := fmt.Sprintf("%s://%s%s", "127.0.0.1", "localhost:80", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/")
+			url := fmt.Sprintf("%s://%s%s", "http", "127.0.0.1", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/")
 			proxyReq, err := http.NewRequest("GET", url, bytes.NewReader([]byte("{}")))
 			if err != nil {
 				log.Println(err)
