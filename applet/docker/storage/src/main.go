@@ -64,10 +64,10 @@ type User struct {
 }
 
 func (d User) Push() {
-	obj := map[string][]byte{
-		"id":       []byte(d.Id),
-		"name":     []byte(d.Name),
-		"authCode": []byte(d.AuthCode),
+	obj := map[string]string{
+		"id":       base64.StdEncoding.EncodeToString([]byte(d.Id)),
+		"name":     base64.StdEncoding.EncodeToString([]byte(d.Name)),
+		"authCode": base64.StdEncoding.EncodeToString([]byte(d.AuthCode)),
 	}
 	dbPutObj("User", d.Id, obj)
 }
@@ -101,10 +101,10 @@ func (d Point) Push() {
 	}
 	luBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(luBytes, uint64(d.LastUpdate))
-	obj := map[string][]byte{
-		"id":         []byte(d.Id),
-		"isPublic":   []byte{isPubByte},
-		"lastUpdate": luBytes,
+	obj := map[string]string{
+		"id":         base64.StdEncoding.EncodeToString([]byte(d.Id)),
+		"isPublic":   base64.StdEncoding.EncodeToString([]byte{isPubByte}),
+		"lastUpdate": base64.StdEncoding.EncodeToString(luBytes),
 	}
 	dbPutObj("Point", d.Id, obj)
 }
@@ -147,14 +147,14 @@ type Doc struct {
 }
 
 func (d Doc) Push() {
-	obj := map[string][]byte{
-		"id":        []byte(d.Id),
-		"title":     []byte(d.Title),
-		"fileId":    []byte(d.FileId),
-		"mimeType":  []byte(d.MimeType),
-		"category":  []byte(d.Category),
-		"creatorId": []byte(d.CreatorId),
-		"pointId":   []byte(d.PointId),
+	obj := map[string]string{
+		"id":        base64.StdEncoding.EncodeToString([]byte(d.Id)),
+		"title":     base64.StdEncoding.EncodeToString([]byte(d.Title)),
+		"fileId":    base64.StdEncoding.EncodeToString([]byte(d.FileId)),
+		"mimeType":  base64.StdEncoding.EncodeToString([]byte(d.MimeType)),
+		"category":  base64.StdEncoding.EncodeToString([]byte(d.Category)),
+		"creatorId": base64.StdEncoding.EncodeToString([]byte(d.CreatorId)),
+		"pointId":   base64.StdEncoding.EncodeToString([]byte(d.PointId)),
 	}
 	dbPutObj("Doc", d.Id, obj)
 }
@@ -258,7 +258,7 @@ func processPacket(callbackId int64, data []byte) {
 				}
 				services[userId] = srv
 			}
-			user := User{Id: userId, Name: "", AuthCode: authCode}
+			user := User{Id: userId, Name: "-", AuthCode: authCode}
 			user.Push()
 			signalPoint("single", pointId, userId, map[string]any{"type": "authStorageRes", "response": map[string]any{"success": true}})
 		} else if input["type"] == "listFiles" {
@@ -466,7 +466,7 @@ func signalPoint(typ string, pointId string, userId string, data any) {
 	writePacket(packet, nil)
 }
 
-func dbPutObj(typ string, objId string, obj map[string][]byte) {
+func dbPutObj(typ string, objId string, obj map[string]string) {
 	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
 		"op":      "putObj",
 		"objType": typ,

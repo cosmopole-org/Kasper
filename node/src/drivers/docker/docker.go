@@ -201,6 +201,11 @@ func checkField[T any](input map[string]any, fieldName string, defVal T) (T, err
 }
 
 func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println(err)
+		}
+	}()
 	log.Println(dataRaw)
 	data := map[string]any{}
 	err := json.Unmarshal([]byte(dataRaw), &data)
@@ -242,7 +247,11 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 			}
 			obj := map[string][]byte{}
 			for k, v := range objRaw {
-				obj[k] = v.([]byte)
+				obj[k], err = base64.StdEncoding.DecodeString(v.(string))
+				if err != nil {
+					log.Println(err)
+					return err.Error()
+				}
 			}
 			wm.app.ModifyState(false, func(trx trx.ITrx) error {
 				trx.PutObj(machineId+"->"+typ, id, obj)
