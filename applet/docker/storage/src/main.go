@@ -172,7 +172,7 @@ func (d *Doc) Push() {
 
 func (d *Doc) Pull() bool {
 	c := make(chan map[string][]byte, 1)
-	dbGetObj("Point", d.Id, func(m map[string][]byte) {
+	dbGetObj("Doc", d.Id, func(m map[string][]byte) {
 		c <- m
 	})
 	m := <-c
@@ -215,6 +215,9 @@ func processPacket(callbackId int64, data []byte) {
 		}
 	}()
 	if callbackId == 0 {
+		if string(data) == "{}" {
+			return
+		}
 		packet := map[string]any{}
 		err := json.Unmarshal(data, &packet)
 		if err != nil {
