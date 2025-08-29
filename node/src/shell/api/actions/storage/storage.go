@@ -331,6 +331,7 @@ func Install(a *Actions) error {
 		inputBody := []byte(r.URL.Query().Get("input"))
 		signature := r.URL.Query().Get("signature")
 		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			log.Println("Error accessing point:", err.Error())
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
 		}
@@ -347,7 +348,7 @@ func Install(a *Actions) error {
 			var input inputs_storage.StreamGetInput
 			err = json.Unmarshal(inputBody, &input)
 			if err != nil {
-				log.Printf("Error parsing body: %v", err)
+				log.Println("Error parsing body:", err.Error())
 				http.Error(w, "can't parse body", http.StatusBadRequest)
 				return
 			}
