@@ -327,9 +327,9 @@ func Install(a *Actions) error {
 		}
 	})
 	registerRoute(mux, "/stream/get", func(w http.ResponseWriter, r *http.Request) {
-		userId := r.Header.Get("User-Id")
-		inputBody := []byte(r.Header.Get("Input"))
-		signature := r.Header.Get("Signature")
+		userId := r.URL.Query().Get("userId")
+		inputBody := []byte(r.URL.Query().Get("input"))
+		signature := r.URL.Query().Get("signature")
 		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
