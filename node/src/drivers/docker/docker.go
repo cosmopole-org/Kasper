@@ -235,7 +235,7 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 				log.Println(err)
 				return err.Error()
 			}
-			objRaw, err := checkField(input, "objId", map[string]any{})
+			objRaw, err := checkField(input, "obj", map[string]any{})
 			if err != nil {
 				log.Println(err)
 				return err.Error()

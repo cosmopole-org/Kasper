@@ -422,7 +422,9 @@ func main() {
 			os.Exit(0)
 		}
 		log.Printf("recv: %s", string(buf))
-		processPacket(int64(callbackId), buf)
+		go func() {
+			processPacket(int64(callbackId), buf)
+		}()
 	}
 }
 
