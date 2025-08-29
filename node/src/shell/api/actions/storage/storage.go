@@ -18,7 +18,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"maps"
 )
 
 type Actions struct {
@@ -366,7 +365,6 @@ func Install(a *Actions) error {
 				return
 			}
 			proxyReq.Header = make(http.Header)
-			maps.Copy(proxyReq.Header, r.Header)
 			proxyReq.Header.Set("User-Id", userId)
 			proxyReq.Header.Set("Point-Id", input.PointId)
 			proxyReq.Header.Set("Metadata", input.Metadata)
