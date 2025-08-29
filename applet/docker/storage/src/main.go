@@ -316,11 +316,13 @@ func processPacket(callbackId int64, data []byte) {
 			signalPoint("single", pointId, userId, map[string]any{"type": "pointFilesRes", "response": map[string]any{"success": true, "docs": docs}})
 		} else if input["type"] == "listTopMedia" {
 			dbGetObjs("Point", 0, 100, func(m map[string]map[string][]byte) {
-				pointsList := make([]*Point, len(m))
+				pointsList := []*Point{}
 				for pointId, pointRaw := range m {
 					point := Point{Id: pointId}
 					point.Parse(pointRaw)
-					pointsList = append(pointsList, &point)
+					if point.IsPublic {
+						pointsList = append(pointsList, &point)
+					}
 				}
 				slices.SortFunc(pointsList, func(a *Point, b *Point) int {
 					return int(b.LastUpdate - a.LastUpdate)
