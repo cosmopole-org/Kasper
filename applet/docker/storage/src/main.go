@@ -459,6 +459,7 @@ func main() {
 			}
 			fileId := meta["fileId"].(string)
 			if fileId == "" {
+				log.Println("fileId is empty")
 				http.Error(w, "fileId query parameter is required", http.StatusBadRequest)
 				return
 			}
@@ -480,6 +481,7 @@ func main() {
 				ctx := r.Context()
 				file, err := driveService.Files.Get(fileId).Context(ctx).Fields("size").Do()
 				if err != nil {
+					log.Println(err.Error())
 					http.Error(w, fmt.Sprintf("Error getting file metadata: %v", err), http.StatusInternalServerError)
 					return
 				}
@@ -493,6 +495,7 @@ func main() {
 					parts := strings.Split(strings.Replace(rangeHeader, "bytes=", "", 1), "-")
 					start, err := strconv.ParseInt(parts[0], 10, 64)
 					if err != nil {
+						log.Println("parsing range number error")
 						http.Error(w, "Invalid Range header", http.StatusBadRequest)
 						return
 					}
@@ -500,12 +503,14 @@ func main() {
 					if parts[1] != "" {
 						end, err = strconv.ParseInt(parts[1], 10, 64)
 						if err != nil {
+							log.Println("parsing range number error 2")
 							http.Error(w, "Invalid Range header", http.StatusBadRequest)
 							return
 						}
 					}
 
 					if start >= fileSize || start > end {
+						log.Println("range error")
 						http.Error(w, "Range Not Satisfiable", http.StatusRequestedRangeNotSatisfiable)
 						return
 					}
@@ -514,6 +519,7 @@ func main() {
 					res.Header().Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
 					resp, err := res.Download()
 					if err != nil {
+						log.Println("Error downloading file range", err.Error())
 						http.Error(w, fmt.Sprintf("Error downloading file range: %v", err), http.StatusInternalServerError)
 						return
 					}
@@ -524,25 +530,26 @@ func main() {
 
 					_, err = io.Copy(w, resp.Body)
 					if err != nil {
-						log.Printf("Error streaming file: %v", err)
+						log.Println("Error streaming file:", err.Error())
 					}
 				} else {
 					resp, err := driveService.Files.Get(fileId).Context(ctx).Download()
 					if err != nil {
+						log.Println("Error downloading file:", err.Error())
 						http.Error(w, fmt.Sprintf("Error downloading file: %v", err), http.StatusInternalServerError)
 						return
 					}
 					defer resp.Body.Close()
 					_, err = io.Copy(w, resp.Body)
 					if err != nil {
-						log.Printf("Error streaming file: %v", err)
+						log.Println("Error streaming file:", err.Error())
 					}
 				}
 			}
 		})
 
 		fmt.Println("Server listening on http://localhost:80")
-		log.Fatal(http.ListenAndServe(":8000", nil))
+		log.Fatal(http.ListenAndServe(":80", nil))
 	}()
 
 	r := bufio.NewReader(conn)
