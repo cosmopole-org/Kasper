@@ -1120,10 +1120,10 @@ func genProxyConfig() string {
 	for machId, _ := range activeMachines {
 		proxyConfig += `
 			location /` + strings.Join(strings.Split(machId, "@"), "_") + `/hello/ {
-            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/hello/;
+            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/hello;
 			}
         	location /` + strings.Join(strings.Split(machId, "@"), "_") + `/stream/ {
-            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/stream/;
+            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/stream;
 			}`
 	}
 	proxyConfig += `
