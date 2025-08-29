@@ -308,6 +308,9 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 					log.Println(err)
 					return nil
 				}
+				for i := range len(links) {
+					links[i] = links[i][len(machineId+"->"+prefix):]
+				}
 				res, err := trx.GetObjList(machineId+"->"+typ, links, map[string]string{})
 				result = res
 				return err

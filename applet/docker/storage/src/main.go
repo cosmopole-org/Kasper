@@ -63,16 +63,20 @@ type User struct {
 	AuthCode string
 }
 
-func (d User) Push() {
+func (d *User) Push() {
 	obj := map[string]string{
 		"id":       base64.StdEncoding.EncodeToString([]byte(d.Id)),
 		"name":     base64.StdEncoding.EncodeToString([]byte(d.Name)),
 		"authCode": base64.StdEncoding.EncodeToString([]byte(d.AuthCode)),
 	}
-	dbPutObj("User", d.Id, obj)
+	c := make(chan int, 1)
+	dbPutObj("User", d.Id, obj, func() {
+		c <- 1
+	})
+	<-c
 }
 
-func (d User) Pull() bool {
+func (d *User) Pull() bool {
 	c := make(chan map[string][]byte, 1)
 	dbGetObj("User", d.Id, func(m map[string][]byte) {
 		c <- m
@@ -91,10 +95,9 @@ type Point struct {
 	Id         string
 	IsPublic   bool
 	LastUpdate int64
-	Docs       []*Doc
 }
 
-func (d Point) Push() {
+func (d *Point) Push() {
 	isPubByte := byte(0x02)
 	if d.IsPublic == true {
 		isPubByte = 0x01
@@ -106,10 +109,14 @@ func (d Point) Push() {
 		"isPublic":   base64.StdEncoding.EncodeToString([]byte{isPubByte}),
 		"lastUpdate": base64.StdEncoding.EncodeToString(luBytes),
 	}
-	dbPutObj("Point", d.Id, obj)
+	c := make(chan int, 1)
+	dbPutObj("Point", d.Id, obj, func() {
+		c <- 1
+	})
+	<-c
 }
 
-func (d Point) Pull() bool {
+func (d *Point) Pull() bool {
 	c := make(chan map[string][]byte, 1)
 	dbGetObj("Point", d.Id, func(m map[string][]byte) {
 		c <- m
@@ -127,7 +134,7 @@ func (d Point) Pull() bool {
 	return false
 }
 
-func (d Point) Parse(m map[string][]byte) {
+func (d *Point) Parse(m map[string][]byte) {
 	if m["isPublic"][0] == byte(0x01) {
 		d.IsPublic = true
 	} else {
@@ -146,7 +153,7 @@ type Doc struct {
 	PointId   string
 }
 
-func (d Doc) Push() {
+func (d *Doc) Push() {
 	obj := map[string]string{
 		"id":        base64.StdEncoding.EncodeToString([]byte(d.Id)),
 		"title":     base64.StdEncoding.EncodeToString([]byte(d.Title)),
@@ -156,10 +163,14 @@ func (d Doc) Push() {
 		"creatorId": base64.StdEncoding.EncodeToString([]byte(d.CreatorId)),
 		"pointId":   base64.StdEncoding.EncodeToString([]byte(d.PointId)),
 	}
-	dbPutObj("Doc", d.Id, obj)
+	c := make(chan int, 1)
+	dbPutObj("Doc", d.Id, obj, func() {
+		c <- 1
+	})
+	<-c
 }
 
-func (d Doc) Pull() bool {
+func (d *Doc) Pull() bool {
 	c := make(chan map[string][]byte, 1)
 	dbGetObj("Point", d.Id, func(m map[string][]byte) {
 		c <- m
@@ -178,7 +189,7 @@ func (d Doc) Pull() bool {
 	}
 }
 
-func (d Doc) Parse(m map[string][]byte) {
+func (d *Doc) Parse(m map[string][]byte) {
 	d.Category = string(m["category"])
 	d.CreatorId = string(m["creatorId"])
 	d.FileId = string(m["fileId"])
@@ -288,7 +299,7 @@ func processPacket(callbackId int64, data []byte) {
 			point := Point{Id: pointId}
 			if point.Pull() {
 				c := make(chan int, 1)
-				dbGetObjsByPrefix("pointDocs::"+pointId+"::", 0, 100, func(m map[string]map[string][]byte) {
+				dbGetObjsByPrefix("Doc", "pointDocs::"+pointId+"::", 0, 100, func(m map[string]map[string][]byte) {
 					for k, v := range m {
 						doc := Doc{Id: k}
 						doc.Parse(v)
@@ -313,7 +324,16 @@ func processPacket(callbackId int64, data []byte) {
 				docs := []*Doc{}
 				pointsList = pointsList[:int(math.Min(float64(len(pointsList)), 5))]
 				for _, p := range pointsList {
-					docs = append(docs, p.Docs...)
+					c := make(chan int, 1)
+					dbGetObjsByPrefix("Doc", "pointDocs::"+p.Id+"::", 0, 100, func(m map[string]map[string][]byte) {
+						for k, v := range m {
+							doc := Doc{Id: k}
+							doc.Parse(v)
+							docs = append(docs, &doc)
+						}
+						c <- 1
+					})
+					<-c
 				}
 				signalPoint("single", pointId, userId, map[string]any{"type": "listTopMediaRes", "response": map[string]any{"success": true, "docs": docs}})
 			})
@@ -344,7 +364,7 @@ func processPacket(callbackId int64, data []byte) {
 			doc.Push()
 			point := Point{Id: pointId}
 			if !point.Pull() {
-				point = Point{Id: pointId, IsPublic: packet["point"].(map[string]any)["isPublic"].(bool), LastUpdate: 0, Docs: []*Doc{}}
+				point = Point{Id: pointId, IsPublic: packet["point"].(map[string]any)["isPublic"].(bool), LastUpdate: 0}
 				point.Push()
 			}
 			dbPutLink("pointDocs::"+pointId+"::"+doc.Id, "true")
@@ -466,14 +486,16 @@ func signalPoint(typ string, pointId string, userId string, data any) {
 	writePacket(packet, nil)
 }
 
-func dbPutObj(typ string, objId string, obj map[string]string) {
+func dbPutObj(typ string, objId string, obj map[string]string, cb func()) {
 	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
 		"op":      "putObj",
 		"objType": typ,
 		"objId":   objId,
 		"obj":     obj,
 	}})
-	writePacket(packet, nil)
+	writePacket(packet, func([]byte) {
+		cb()
+	})
 }
 
 func dbGetObj(typ string, objId string, cb func(map[string][]byte)) {
@@ -498,9 +520,10 @@ func dbPutLink(linkKey string, linkVal string) {
 	writePacket(packet, nil)
 }
 
-func dbGetObjsByPrefix(prefix string, offset int, count int, cb func(map[string]map[string][]byte)) {
+func dbGetObjsByPrefix(objType string, prefix string, offset int, count int, cb func(map[string]map[string][]byte)) {
 	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
 		"op":     "getObjsByPrefix",
+		"objType": objType,
 		"prefix": prefix,
 		"offset": offset,
 		"count":  count,
