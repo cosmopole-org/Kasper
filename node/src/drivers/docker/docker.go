@@ -1110,6 +1110,30 @@ func getContainerNameByIP(ip string, cli *client.Client) string {
 	return ""
 }
 
+func genProxyConfig() string {
+	var proxyConfig = `
+	events {}
+	http {
+		server {
+    		listen 80;
+`
+	for machId, _ := range activeMachines {
+		proxyConfig += `
+			location /` + strings.Join(strings.Split(machId, "@"), "_") + `/hello/ {
+            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/hello/;
+			}
+        	location /` + strings.Join(strings.Split(machId, "@"), "_") + `/stream/ {
+            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/stream/;
+			}`
+	}
+	proxyConfig += `
+		}
+	}`
+	return proxyConfig
+}
+
+var activeMachines = map[string]bool{}
+
 func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, file file.IFile) docker.IDocker {
 	client, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
@@ -1148,6 +1172,32 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 			if found {
 				locker.conn = c
 			}
+
+			activeMachines[machineId] = true
+
+			config := genProxyConfig()
+			file.SaveDataToGlobalStorage(storageRoot+"/docker_proxy", []byte(config), "nginx.conf", true)
+
+			func() {
+				ctx := context.Background()
+				config := container.ExecOptions{
+					AttachStderr: true,
+					AttachStdout: true,
+					Cmd:          strings.Split("nginx -s reload", " "),
+				}
+				res, err := wm.client.ContainerExecCreate(ctx, "kasper-proxy", config)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				execId := res.ID
+				resp, err := wm.client.ContainerExecAttach(ctx, execId, container.ExecAttachOptions{})
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				defer resp.Close()
+			}()
 
 			future.Async(func() {
 				defer func() {

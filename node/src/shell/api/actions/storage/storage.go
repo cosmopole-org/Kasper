@@ -326,6 +326,93 @@ func Install(a *Actions) error {
 			resp.Write(w)
 		}
 	})
+	registerRoute(mux, "/stream/get", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("User-Id")
+		inputLengthStr := r.Header.Get("Input-Length")
+		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputLength := int(ilI64)
+		var input inputs_storage.StreamGetInput
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputBody := body[0:inputLength]
+		signature := body[inputLength:]
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		origin := ""
+		a.App.ModifyState(true, func(trx trx.ITrx) error {
+			uParts := strings.Split(string(trx.GetColumn("User", userId, "username")), "@")
+			if len(uParts) < 2 {
+				return nil
+			}
+			origin = uParts[1]
+			return nil
+		})
+		if origin == a.App.Id() {
+			err = json.Unmarshal(inputBody, &input)
+			if err != nil {
+				log.Printf("Error parsing body: %v", err)
+				http.Error(w, "can't parse body", http.StatusBadRequest)
+				return
+			}
+			if !a.App.Tools().Security().HasAccessToPoint(userId, input.PointId) {
+				log.Printf("Error accessing point: %v", err)
+				http.Error(w, "can't access point", http.StatusForbidden)
+				return
+			}
+			url := fmt.Sprintf("%s://%s%s", "http", "127.0.0.1", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"_main_main/stream/")
+			proxyReq, err := http.NewRequest("POST", url, bytes.NewReader([]byte("{}")))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			for h, val := range r.Header {
+				proxyReq.Header[h] = val
+			}
+			proxyReq.Header.Set("User-Id", userId)
+			proxyReq.Header.Set("Point-Id", input.PointId)
+			proxyReq.Header.Set("Metadata", input.Metadata)
+			httpClient := http.Client{}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			resp.Write(w)
+		} else {
+			r.Body = ioutil.NopCloser(bytes.NewReader(body))
+			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader(body))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			for h, val := range r.Header {
+				proxyReq.Header[h] = val
+			}
+			httpClient := http.Client{}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			resp.Write(w)
+		}
+	})
 	future.Async(func() {
 		server.ListenAndServeTLS("", "")
 	}, false)

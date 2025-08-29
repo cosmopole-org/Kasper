@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -423,6 +424,125 @@ func main() {
 	defer conn.Close()
 	log.Println("Container client connected")
 
+	go func() {
+		http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("hello back !"))
+		})
+		http.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				r := recover()
+				if r != nil {
+					var err error
+					switch t := r.(type) {
+					case string:
+						err = errors.New(t)
+					case error:
+						err = t
+					default:
+						err = errors.New("unknown error")
+					}
+					log.Println(err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			}()
+			userId := r.Header.Get("User-Id")
+			pointId := r.Header.Get("Point-Id")
+			metadata := r.Header.Get("Metadata")
+			meta := map[string]any{}
+			err := json.Unmarshal([]byte(metadata), &meta)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "metadata parse error", http.StatusBadRequest)
+				return
+			}
+			fileId := meta["fileId"].(string)
+			if fileId == "" {
+				http.Error(w, "fileId query parameter is required", http.StatusBadRequest)
+				return
+			}
+			pointIdInner := meta["pointId"].(string)
+			doc := Doc{Id: fileId}
+			doc.Pull()
+			point := Point{Id: pointIdInner}
+			point.Pull()
+			pId := ""
+			if point.IsPublic {
+				pId = pointIdInner
+			} else if pointId == pointIdInner {
+				pId = pointIdInner
+			}
+			if pId != "" {
+
+				driveService := services[userId]
+
+				ctx := r.Context()
+				file, err := driveService.Files.Get(fileId).Context(ctx).Fields("size").Do()
+				if err != nil {
+					http.Error(w, fmt.Sprintf("Error getting file metadata: %v", err), http.StatusInternalServerError)
+					return
+				}
+				fileSize := file.Size
+
+				w.Header().Set("Accept-Ranges", "bytes")
+				w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
+
+				rangeHeader := r.Header.Get("Range")
+				if rangeHeader != "" {
+					parts := strings.Split(strings.Replace(rangeHeader, "bytes=", "", 1), "-")
+					start, err := strconv.ParseInt(parts[0], 10, 64)
+					if err != nil {
+						http.Error(w, "Invalid Range header", http.StatusBadRequest)
+						return
+					}
+					end := fileSize - 1
+					if parts[1] != "" {
+						end, err = strconv.ParseInt(parts[1], 10, 64)
+						if err != nil {
+							http.Error(w, "Invalid Range header", http.StatusBadRequest)
+							return
+						}
+					}
+
+					if start >= fileSize || start > end {
+						http.Error(w, "Range Not Satisfiable", http.StatusRequestedRangeNotSatisfiable)
+						return
+					}
+
+					res := driveService.Files.Get(fileId).Context(ctx)
+					res.Header().Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+					resp, err := res.Download()
+					if err != nil {
+						http.Error(w, fmt.Sprintf("Error downloading file range: %v", err), http.StatusInternalServerError)
+						return
+					}
+					defer resp.Body.Close()
+
+					w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
+					w.WriteHeader(http.StatusPartialContent)
+
+					_, err = io.Copy(w, resp.Body)
+					if err != nil {
+						log.Printf("Error streaming file: %v", err)
+					}
+				} else {
+					resp, err := driveService.Files.Get(fileId).Context(ctx).Download()
+					if err != nil {
+						http.Error(w, fmt.Sprintf("Error downloading file: %v", err), http.StatusInternalServerError)
+						return
+					}
+					defer resp.Body.Close()
+					_, err = io.Copy(w, resp.Body)
+					if err != nil {
+						log.Printf("Error streaming file: %v", err)
+					}
+				}
+			}
+		})
+
+		fmt.Println("Server listening on http://localhost:80")
+		log.Fatal(http.ListenAndServe(":8000", nil))
+	}()
+
 	r := bufio.NewReader(conn)
 	for {
 		var ln uint32
@@ -525,11 +645,11 @@ func dbPutLink(linkKey string, linkVal string) {
 
 func dbGetObjsByPrefix(objType string, prefix string, offset int, count int, cb func(map[string]map[string][]byte)) {
 	packet, _ := json.Marshal(map[string]any{"key": "dbOp", "input": map[string]any{
-		"op":     "getObjsByPrefix",
+		"op":      "getObjsByPrefix",
 		"objType": objType,
-		"prefix": prefix,
-		"offset": offset,
-		"count":  count,
+		"prefix":  prefix,
+		"offset":  offset,
+		"count":   count,
 	}})
 	writePacket(packet, func(b []byte) {
 		result := map[string]map[string][]byte{}
