@@ -328,23 +328,8 @@ func Install(a *Actions) error {
 	})
 	registerRoute(mux, "/stream/get", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("User-Id")
-		inputLengthStr := r.Header.Get("Input-Length")
-		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
-		if err != nil {
-			log.Printf("Error reading body: %v", err)
-			http.Error(w, "can't read body", http.StatusBadRequest)
-			return
-		}
-		inputLength := int(ilI64)
-		var input inputs_storage.StreamGetInput
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			log.Printf("Error reading body: %v", err)
-			http.Error(w, "can't read body", http.StatusBadRequest)
-			return
-		}
-		inputBody := body[0:inputLength]
-		signature := body[inputLength:]
+		inputBody := []byte(r.Header.Get("Input"))
+		signature := r.Header.Get("Signature")
 		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
 			http.Error(w, "signature verification failed", http.StatusForbidden)
 			return
@@ -359,6 +344,7 @@ func Install(a *Actions) error {
 			return nil
 		})
 		if origin == a.App.Id() {
+			var input inputs_storage.StreamGetInput
 			err = json.Unmarshal(inputBody, &input)
 			if err != nil {
 				log.Printf("Error parsing body: %v", err)
@@ -392,9 +378,8 @@ func Install(a *Actions) error {
 			defer resp.Body.Close()
 			resp.Write(w)
 		} else {
-			r.Body = ioutil.NopCloser(bytes.NewReader(body))
 			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
-			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader(body))
+			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader([]byte("{}")))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

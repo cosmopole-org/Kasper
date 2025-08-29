@@ -1,7 +1,7 @@
 package inputs_storage
 
 type StreamGetInput struct {
-	MachineId string `json:"entityId" validate:"required"`
+	MachineId string `json:"machineId" validate:"required"`
 	PointId   string `json:"pointId" validate:"required"`
 	Metadata  string `json:"metadata" validate:"required"`
 }
