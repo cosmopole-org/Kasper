@@ -8,6 +8,6 @@ import (
 
 type Kasper core.ICore
 
-func NewApp(ownerId string, ownerPrivateKey *rsa.PrivateKey) Kasper {
-	return modulecore.NewCore(ownerId, ownerPrivateKey)
+func NewApp(origin string, ownerId string, ownerPrivateKey *rsa.PrivateKey) Kasper {
+	return modulecore.NewCore(origin, ownerId, ownerPrivateKey)
 }

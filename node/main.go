@@ -43,7 +43,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	app := kasper.NewApp(ownerId, privateKey.(*rsa.PrivateKey))
+	app := kasper.NewApp(os.Getenv("ORIGIN"), ownerId, privateKey.(*rsa.PrivateKey))
 
 	KasperApp = app
 

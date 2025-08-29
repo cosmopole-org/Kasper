@@ -53,7 +53,6 @@ import (
 	driver_network_fed "kasper/src/drivers/network/federation"
 
 	"log"
-	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -138,19 +137,8 @@ type Core struct {
 
 var MAX_VALIDATOR_COUNT = 5
 
-func NewCore(ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		panic(err)
-	}
-	defer conn.Close()
-	localAddr := conn.LocalAddr().(*net.UDPAddr).IP.String()
-	a, err := net.LookupAddr(localAddr)
-	if err != nil {
-		log.Println(err)
-		panic("ip not friendly")
-	}
-	id := a[0]
+func NewCore(origin string, ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
+	id := origin
 	execs := map[string]bool{}
 	execs[id] = true
 	return &Core{
