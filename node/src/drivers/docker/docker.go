@@ -1114,8 +1114,24 @@ func genProxyConfig() string {
 	var proxyConfig = `
 	events {}
 	http {
+		# This server block listens for HTTP traffic on port 80
 		server {
-    		listen 80;
+		    listen 80;
+		    listen [::]:80;
+		    server_name localhost;
+ 		    return 301 https://$host$request_uri;
+		}
+
+		# This server block handles HTTPS traffic on port 443
+		server {
+		    listen 443 ssl http2;
+    		listen [::]:443 ssl http2;
+    		server_name localhost;
+
+		    # Add your SSL certificate paths and other configurations here
+    		ssl_certificate /etc/nginx/ssl/nginx-selfsigned.crt;
+    		ssl_certificate_key /etc/nginx/ssl/nginx-selfsigned.key;
+			
 `
 	for machId, _ := range activeMachines {
 		proxyConfig += `
