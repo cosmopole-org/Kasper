@@ -16,6 +16,7 @@ import (
 	models "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/future"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"strconv"
@@ -367,6 +368,8 @@ func Install(a *Actions) error {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			proxyReq.Header = make(http.Header)
+			maps.Copy(proxyReq.Header, r.Header)
 			proxyReq.Header.Set("User-Id", userId)
 			proxyReq.Header.Set("Point-Id", input.PointId)
 			proxyReq.Header.Set("Metadata", input.Metadata)
