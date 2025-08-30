@@ -2,6 +2,7 @@ package actions_user
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -368,7 +369,10 @@ func Install(a *Actions) error {
 			proxyReq.Header.Set("User-Id", userId)
 			proxyReq.Header.Set("Point-Id", input.PointId)
 			proxyReq.Header.Set("Metadata", input.Metadata)
-			httpClient := http.Client{}
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			httpClient := &http.Client{Transport: tr}
 			resp, err := httpClient.Do(proxyReq)
 			if err != nil {
 				log.Println(err)
