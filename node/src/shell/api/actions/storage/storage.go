@@ -360,7 +360,7 @@ func Install(a *Actions) error {
 				http.Error(w, "can't access point", http.StatusForbidden)
 				return
 			}
-			url := fmt.Sprintf("%s://%s%s", "http", "10.10.0.5", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/get/")
+			url := fmt.Sprintf("%s://%s%s", "https", "10.10.0.5", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/get/")
 			log.Println(url)
 			proxyReq, err := http.NewRequest("POST", url, bytes.NewReader([]byte("{}")))
 			if err != nil {
@@ -437,7 +437,7 @@ func Install(a *Actions) error {
 				http.Error(w, "can't access point", http.StatusForbidden)
 				return
 			}
-			url := fmt.Sprintf("%s://%s%s", "http", "10.10.0.5", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/send/")
+			url := fmt.Sprintf("%s://%s%s", "https", "10.10.0.5", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/send/")
 			log.Println(url)
 
 			body, err := ioutil.ReadAll(r.Body)
