@@ -378,6 +378,12 @@ func processPacket(callbackId int64, data []byte) {
 			point.LastUpdate = time.Now().UnixMilli()
 			point.Push()
 			signalPoint("single", pointId, userId, map[string]any{"type": "uploadRes", "response": map[string]any{"success": true, "fileId": res.Id}})
+		} else if input["type"] == "ensurePointRegistered" {
+			point := Point{Id: pointId}
+			if !point.Pull() {
+				point = Point{Id: pointId, IsPublic: packet["point"].(map[string]any)["isPublic"].(bool), LastUpdate: 0}
+				point.Push()
+			}
 		} else if input["type"] == "download" {
 			fileId := input["fileId"].(string)
 			pointIdInner := input["pointId"].(string)
@@ -487,11 +493,23 @@ func main() {
 					http.Error(w, fmt.Sprintf("Error getting file metadata: %v", err), http.StatusInternalServerError)
 					return
 				}
-				thumbnail := file.ContentHints.Thumbnail.Image
-				data, _ := base64.StdEncoding.DecodeString(thumbnail)
-				w.Header().Set("Content-Length", strconv.FormatInt(int64(len(data)), 10))
-				w.Header().Set("Content-Type", file.ContentHints.Thumbnail.MimeType)
-				w.Write(data)
+				resp, err := http.Get(file.ThumbnailLink)
+				if err != nil {
+					fmt.Printf("Unable to download thumbnail: %v\n", err)
+					return
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					fmt.Printf("Bad status code while downloading thumbnail: %d\n", resp.StatusCode)
+					return
+				}
+				imageBytes, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					fmt.Printf("Unable to read image bytes: %v\n", err)
+					return
+				}
+				w.Header().Set("Content-Length", strconv.FormatInt(int64(len(imageBytes)), 10))
+				w.Write(imageBytes)
 				return
 			}
 
