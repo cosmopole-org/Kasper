@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math"
 	"net"
@@ -607,14 +608,15 @@ func main() {
 
 			srv := services[userId]
 
-			data, _ := io.ReadAll(r.Body)
+			body, err := ioutil.ReadAll(r.Body)
+			log.Println("len of body", len(body))
 
 			fileName := meta["fileName"].(string)
 			mimeType := meta["mimeType"].(string)
 			res, err := srv.Files.Create(&drive.File{
 				Name:     fileName,
 				MimeType: mimeType,
-			}).Media(bytes.NewReader(data), googleapi.ChunkSize(1024*1024*16)).Do()
+			}).Media(bytes.NewReader(body), googleapi.ChunkSize(1024*1024*16)).Do()
 			if err != nil {
 				log.Println(err.Error())
 				http.Error(w, err.Error(), http.StatusBadRequest)

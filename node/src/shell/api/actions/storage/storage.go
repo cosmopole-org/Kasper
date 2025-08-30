@@ -446,6 +446,7 @@ func Install(a *Actions) error {
 				http.Error(w, "can't read body", http.StatusBadRequest)
 				return
 			}
+			log.Println("len of body in proxy", len(body))
 			proxyReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
 			if err != nil {
 				log.Println(err)
@@ -454,6 +455,7 @@ func Install(a *Actions) error {
 			}
 			proxyReq.Header = make(http.Header)
 			maps.Copy(proxyReq.Header, r.Header)
+			proxyReq.Header.Set("Content-Type", "application/octet-stream")
 			proxyReq.Header.Set("User-Id", userId)
 			proxyReq.Header.Set("Point-Id", input.PointId)
 			proxyReq.Header.Set("Metadata", input.Metadata)
