@@ -439,8 +439,14 @@ func Install(a *Actions) error {
 			}
 			url := fmt.Sprintf("%s://%s%s", "http", "10.10.0.5", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/send/")
 			log.Println(url)
-			
-			proxyReq, err := http.NewRequest("POST", url, r.Body)
+
+			body, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				log.Printf("Error reading body: %v", err)
+				http.Error(w, "can't read body", http.StatusBadRequest)
+				return
+			}
+			proxyReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
 			if err != nil {
 				log.Println(err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -465,7 +471,7 @@ func Install(a *Actions) error {
 			io.Copy(w, resp.Body)
 		} else {
 			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
-			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader([]byte("{}")))
+			proxyReq, err := http.NewRequest(r.Method, url, r.Body)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

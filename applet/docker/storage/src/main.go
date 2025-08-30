@@ -598,56 +598,43 @@ func main() {
 				http.Error(w, "metadata parse error", http.StatusBadRequest)
 				return
 			}
-			fileId := meta["fileId"].(string)
-			if fileId == "" {
-				log.Println("fileId is empty")
-				http.Error(w, "fileId query parameter is required", http.StatusBadRequest)
-				return
-			}
-			pointIdInner := meta["pointId"].(string)
-			doc := Doc{Id: fileId}
-			doc.Pull()
-			point := Point{Id: pointIdInner}
+			point := Point{Id: pointId}
 			if !point.Pull() {
 				log.Println("point not registered in drive")
 				http.Error(w, "point not registered in drive", http.StatusBadRequest)
 				return
 			}
-			pId := ""
-			if point.IsPublic {
-				pId = pointIdInner
-			} else if pointId == pointIdInner {
-				pId = pointIdInner
-			}
-			if pId != "" {
 
-				srv := services[userId]
+			srv := services[userId]
 
-				fileName := meta["fileName"].(string)
-				mimeType := meta["mimeType"].(string)
-				res, err := srv.Files.Create(&drive.File{
-					Name:     fileName,
-					MimeType: mimeType,
-				}).Media(r.Body, googleapi.ChunkSize(1024*1024*16)).Do()
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-				}
-				fileType := ""
-				if strings.HasPrefix(mimeType, "image/") {
-					fileType = "image"
-				} else if strings.HasPrefix(mimeType, "audio/") {
-					fileType = "audio"
-				} else if strings.HasPrefix(mimeType, "video/") {
-					fileType = "video"
-				} else {
-					fileType = "document"
-				}
-				doc := Doc{Id: uuid.NewString(), Title: fileName, FileId: res.Id, MimeType: mimeType, PointId: pointId, CreatorId: userId, Category: fileType}
-				doc.Push()
-				dbPutLink("pointDocs::"+pointId+"::"+doc.Id, "true")
-				point.LastUpdate = time.Now().UnixMilli()
-				point.Push()
+			data, _ := io.ReadAll(r.Body)
+
+			fileName := meta["fileName"].(string)
+			mimeType := meta["mimeType"].(string)
+			res, err := srv.Files.Create(&drive.File{
+				Name:     fileName,
+				MimeType: mimeType,
+			}).Media(bytes.NewReader(data), googleapi.ChunkSize(1024*1024*16)).Do()
+			if err != nil {
+				log.Println(err.Error())
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
 			}
+			fileType := ""
+			if strings.HasPrefix(mimeType, "image/") {
+				fileType = "image"
+			} else if strings.HasPrefix(mimeType, "audio/") {
+				fileType = "audio"
+			} else if strings.HasPrefix(mimeType, "video/") {
+				fileType = "video"
+			} else {
+				fileType = "document"
+			}
+			doc := Doc{Id: uuid.NewString(), Title: fileName, FileId: res.Id, MimeType: mimeType, PointId: pointId, CreatorId: userId, Category: fileType}
+			doc.Push()
+			dbPutLink("pointDocs::"+pointId+"::"+doc.Id, "true")
+			point.LastUpdate = time.Now().UnixMilli()
+			point.Push()
 		})
 
 		fmt.Println("Server listening on http://localhost:80")
