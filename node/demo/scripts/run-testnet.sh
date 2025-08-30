@@ -1,7 +1,7 @@
 #!/bin/bash
 
 docker run -d --name kasper-proxy \
-    --network kasper --ip 10.10.0.5 -p 8080:8080 -p 8443:8443 \
+    --network kasper --ip 10.10.0.5 -p 8082:8082 -p 8443:8443 \
     -v /home/keyhan/data/docker_proxy/nginx.conf:/etc/nginx/nginx.conf:ro \
     -v /home/keyhan/data/docker_proxy/ssl:/etc/nginx/ssl:ro \
     nginx:alpine

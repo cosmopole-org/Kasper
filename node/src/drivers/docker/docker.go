@@ -1116,8 +1116,8 @@ func genProxyConfig() string {
 	http {
 		# This server block listens for HTTP traffic on port 80
 		server {
-		    listen 8080;
-		    listen [::]:8080;
+		    listen 8082;
+		    listen [::]:8082;
 		    server_name localhost;
  		    return 301 https://$host$request_uri;
 		}
