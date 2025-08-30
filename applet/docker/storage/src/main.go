@@ -430,7 +430,7 @@ func main() {
 		http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("hello back !"))
 		})
-		http.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		http.HandleFunc("/stream/get", func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				r := recover()
 				if r != nil {
@@ -569,6 +569,84 @@ func main() {
 						log.Println("Error streaming file:", err.Error())
 					}
 				}
+			}
+		})
+		http.HandleFunc("/stream/send", func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				r := recover()
+				if r != nil {
+					var err error
+					switch t := r.(type) {
+					case string:
+						err = errors.New(t)
+					case error:
+						err = t
+					default:
+						err = errors.New("unknown error")
+					}
+					log.Println(err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			}()
+			userId := r.Header.Get("User-Id")
+			pointId := r.Header.Get("Point-Id")
+			metadata := r.Header.Get("Metadata")
+			meta := map[string]any{}
+			err := json.Unmarshal([]byte(metadata), &meta)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "metadata parse error", http.StatusBadRequest)
+				return
+			}
+			fileId := meta["fileId"].(string)
+			if fileId == "" {
+				log.Println("fileId is empty")
+				http.Error(w, "fileId query parameter is required", http.StatusBadRequest)
+				return
+			}
+			pointIdInner := meta["pointId"].(string)
+			doc := Doc{Id: fileId}
+			doc.Pull()
+			point := Point{Id: pointIdInner}
+			if !point.Pull() {
+				log.Println("point not registered in drive")
+				http.Error(w, "point not registered in drive", http.StatusBadRequest)
+				return
+			}
+			pId := ""
+			if point.IsPublic {
+				pId = pointIdInner
+			} else if pointId == pointIdInner {
+				pId = pointIdInner
+			}
+			if pId != "" {
+
+				srv := services[userId]
+
+				fileName := meta["fileName"].(string)
+				mimeType := meta["mimeType"].(string)
+				res, err := srv.Files.Create(&drive.File{
+					Name:     fileName,
+					MimeType: mimeType,
+				}).Media(r.Body, googleapi.ChunkSize(1024*1024*16)).Do()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				fileType := ""
+				if strings.HasPrefix(mimeType, "image/") {
+					fileType = "image"
+				} else if strings.HasPrefix(mimeType, "audio/") {
+					fileType = "audio"
+				} else if strings.HasPrefix(mimeType, "video/") {
+					fileType = "video"
+				} else {
+					fileType = "document"
+				}
+				doc := Doc{Id: uuid.NewString(), Title: fileName, FileId: res.Id, MimeType: mimeType, PointId: pointId, CreatorId: userId, Category: fileType}
+				doc.Push()
+				dbPutLink("pointDocs::"+pointId+"::"+doc.Id, "true")
+				point.LastUpdate = time.Now().UnixMilli()
+				point.Push()
 			}
 		})
 
