@@ -360,9 +360,87 @@ func Install(a *Actions) error {
 				http.Error(w, "can't access point", http.StatusForbidden)
 				return
 			}
-			url := fmt.Sprintf("%s://%s%s", "http", "10.10.0.5", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/")
+			url := fmt.Sprintf("%s://%s%s", "http", "10.10.0.5", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/get")
 			log.Println(url)
 			proxyReq, err := http.NewRequest("POST", url, bytes.NewReader([]byte("{}")))
+			if err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			maps.Copy(proxyReq.Header, r.Header)
+			proxyReq.Header.Set("User-Id", userId)
+			proxyReq.Header.Set("Point-Id", input.PointId)
+			proxyReq.Header.Set("Metadata", input.Metadata)
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			httpClient := &http.Client{Transport: tr}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			io.Copy(w, resp.Body)
+		} else {
+			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader([]byte("{}")))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			for h, val := range r.Header {
+				proxyReq.Header[h] = val
+			}
+			httpClient := http.Client{}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			resp.Write(w)
+		}
+	})
+	registerRoute(mux, "/stream/send", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.URL.Query().Get("userId")
+		inputBody := []byte(r.URL.Query().Get("input"))
+		signature := r.URL.Query().Get("signature")
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			log.Println("Error accessing point:", err.Error())
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		origin := ""
+		a.App.ModifyState(true, func(trx trx.ITrx) error {
+			uParts := strings.Split(string(trx.GetColumn("User", userId, "username")), "@")
+			if len(uParts) < 2 {
+				return nil
+			}
+			origin = uParts[1]
+			return nil
+		})
+		if origin == a.App.Id() {
+			var input inputs_storage.StreamGetInput
+			err = json.Unmarshal(inputBody, &input)
+			if err != nil {
+				log.Println("Error parsing body:", err.Error())
+				http.Error(w, "can't parse body", http.StatusBadRequest)
+				return
+			}
+			if !a.App.Tools().Security().HasAccessToPoint(userId, input.PointId) {
+				log.Printf("Error accessing point: %v", err)
+				http.Error(w, "can't access point", http.StatusForbidden)
+				return
+			}
+			url := fmt.Sprintf("%s://%s%s", "http", "10.10.0.5", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/send")
+			log.Println(url)
+			
+			proxyReq, err := http.NewRequest("POST", url, r.Body)
 			if err != nil {
 				log.Println(err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)

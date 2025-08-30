@@ -1138,8 +1138,11 @@ func genProxyConfig() string {
 			location /` + strings.Join(strings.Split(machId, "@"), "_") + `/hello/ {
             	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/hello;
 			}
-        	location /` + strings.Join(strings.Split(machId, "@"), "_") + `/stream/ {
-            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/stream;
+        	location /` + strings.Join(strings.Split(machId, "@"), "_") + `/stream/get/ {
+            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/stream/get;
+			}
+			location /` + strings.Join(strings.Split(machId, "@"), "_") + `/stream/send/ {
+            	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/stream/send;
 			}`
 	}
 	proxyConfig += `
