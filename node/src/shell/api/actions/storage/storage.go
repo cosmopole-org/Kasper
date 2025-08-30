@@ -358,6 +358,7 @@ func Install(a *Actions) error {
 				return
 			}
 			url := fmt.Sprintf("%s://%s%s", "http", "127.0.0.1", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/")
+			log.Println(url)
 			proxyReq, err := http.NewRequest("POST", url, bytes.NewReader([]byte("{}")))
 			if err != nil {
 				log.Println(err)
