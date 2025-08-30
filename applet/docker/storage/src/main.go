@@ -458,6 +458,7 @@ func main() {
 				http.Error(w, "metadata parse error", http.StatusBadRequest)
 				return
 			}
+			isThumbnail := meta["isThumbnail"].(bool)
 			fileId := meta["fileId"].(string)
 			if fileId == "" {
 				log.Println("fileId is empty")
@@ -475,9 +476,26 @@ func main() {
 			} else if pointId == pointIdInner {
 				pId = pointIdInner
 			}
-			if pId != "" {
 
-				driveService := services[userId]
+			driveService := services[userId]
+
+			if isThumbnail {
+				ctx := r.Context()
+				file, err := driveService.Files.Get(doc.FileId).Context(ctx).Fields("thumbnailLink").Do()
+				if err != nil {
+					log.Println(err.Error())
+					http.Error(w, fmt.Sprintf("Error getting file metadata: %v", err), http.StatusInternalServerError)
+					return
+				}
+				thumbnail := file.ContentHints.Thumbnail.Image
+				data, _ := base64.StdEncoding.DecodeString(thumbnail)
+				w.Header().Set("Content-Length", strconv.FormatInt(int64(len(data)), 10))
+				w.Header().Set("Content-Type", file.ContentHints.Thumbnail.MimeType)
+				w.Write(data)
+				return
+			}
+
+			if pId != "" {
 
 				ctx := r.Context()
 				file, err := driveService.Files.Get(doc.FileId).Context(ctx).Fields("size").Do()
