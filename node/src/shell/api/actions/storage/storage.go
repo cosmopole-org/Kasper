@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
@@ -380,7 +381,7 @@ func Install(a *Actions) error {
 				return
 			}
 			defer resp.Body.Close()
-			resp.Write(w)
+			io.Copy(w, resp.Body)
 		} else {
 			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
 			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader([]byte("{}")))

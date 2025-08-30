@@ -479,28 +479,36 @@ func main() {
 				driveService := services[userId]
 
 				ctx := r.Context()
-				file, err := driveService.Files.Get(fileId).Context(ctx).Fields("size").Do()
+				file, err := driveService.Files.Get(doc.FileId).Context(ctx).Fields("size").Do()
+				log.Println("step 22")
 				if err != nil {
 					log.Println(err.Error())
 					http.Error(w, fmt.Sprintf("Error getting file metadata: %v", err), http.StatusInternalServerError)
 					return
 				}
+				log.Println("step 21")
 				fileSize := file.Size
 
+				log.Println("step 20")
 				w.Header().Set("Accept-Ranges", "bytes")
 				w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
 
 				rangeHeader := r.Header.Get("Range")
+				log.Println("step 19")
 				if rangeHeader != "" {
+					log.Println("step 18")
 					parts := strings.Split(strings.Replace(rangeHeader, "bytes=", "", 1), "-")
 					start, err := strconv.ParseInt(parts[0], 10, 64)
+					log.Println("step 17")
 					if err != nil {
 						log.Println("parsing range number error")
 						http.Error(w, "Invalid Range header", http.StatusBadRequest)
 						return
 					}
+					log.Println("step 16")
 					end := fileSize - 1
 					if parts[1] != "" {
+						log.Println("step 15")
 						end, err = strconv.ParseInt(parts[1], 10, 64)
 						if err != nil {
 							log.Println("parsing range number error 2")
@@ -509,38 +517,54 @@ func main() {
 						}
 					}
 
+					log.Println("step 14")
 					if start >= fileSize || start > end {
 						log.Println("range error")
 						http.Error(w, "Range Not Satisfiable", http.StatusRequestedRangeNotSatisfiable)
 						return
 					}
+					log.Println("step 13")
 
-					res := driveService.Files.Get(fileId).Context(ctx)
+					res := driveService.Files.Get(doc.FileId).Context(ctx)
+					log.Println("step 12")
 					res.Header().Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+					log.Println("step 11")
 					resp, err := res.Download()
+					log.Println("step 10")
+
 					if err != nil {
 						log.Println("Error downloading file range", err.Error())
 						http.Error(w, fmt.Sprintf("Error downloading file range: %v", err), http.StatusInternalServerError)
 						return
 					}
+					log.Println("step 9")
+
 					defer resp.Body.Close()
+					log.Println("step 8")
 
 					w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
 					w.WriteHeader(http.StatusPartialContent)
+					log.Println("step 7")
 
 					_, err = io.Copy(w, resp.Body)
+					log.Println("step 6")
 					if err != nil {
 						log.Println("Error streaming file:", err.Error())
 					}
 				} else {
-					resp, err := driveService.Files.Get(fileId).Context(ctx).Download()
+					log.Println("step 5")
+					resp, err := driveService.Files.Get(doc.FileId).Context(ctx).Download()
+					log.Println("step 4")
 					if err != nil {
 						log.Println("Error downloading file:", err.Error())
 						http.Error(w, fmt.Sprintf("Error downloading file: %v", err), http.StatusInternalServerError)
 						return
 					}
+					log.Println("step 3")
 					defer resp.Body.Close()
+					log.Println("step 2")
 					_, err = io.Copy(w, resp.Body)
+					log.Println("step 1")
 					if err != nil {
 						log.Println("Error streaming file:", err.Error())
 					}
