@@ -430,7 +430,7 @@ func main() {
 		http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("hello back !"))
 		})
-		http.HandleFunc("/stream/get", func(w http.ResponseWriter, r *http.Request) {
+		http.HandleFunc("/stream_get", func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				r := recover()
 				if r != nil {
@@ -571,7 +571,7 @@ func main() {
 				}
 			}
 		})
-		http.HandleFunc("/stream/send", func(w http.ResponseWriter, r *http.Request) {
+		http.HandleFunc("/stream_send", func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				r := recover()
 				if r != nil {
