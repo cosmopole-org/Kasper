@@ -69,7 +69,7 @@ func imageThumbSize(entityId string, data []byte) string {
 }
 
 func imageQuality(byteLen int) string {
-	return fmt.Sprintf("%d", int(math.Min(math.Max(10, math.Floor(200000/float64(byteLen)*100)), 100))) + "%"
+	return fmt.Sprintf("%d", int(math.Min(math.Max(10, math.Floor(400000/float64(byteLen)*100)), 100))) + "%"
 }
 
 func registerRoute(mux *http.ServeMux, path string, handler func(w http.ResponseWriter, r *http.Request)) {
