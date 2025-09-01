@@ -18,17 +18,19 @@ import (
 	"kasper/src/shell/utils/future"
 	"log"
 	"maps"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 
-	_ "image/gif" 
+	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	_ "golang.org/x/image/bmp" 
-	_ "golang.org/x/image/tiff" 
+
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 )
 
@@ -64,6 +66,10 @@ func imageThumbSize(entityId string, data []byte) string {
 	targetWidth, _ := strconv.ParseInt(its[:len(its)-2], 10, 32)
 	targetHeight := int(targetWidth) * height / width
 	return fmt.Sprintf("%dx%d", targetWidth, targetHeight)
+}
+
+func imageQuality(byteLen int) string {
+	return fmt.Sprintf("%d", int(math.Min(math.Max(10, math.Floor(200000/float64(byteLen)*100)), 100))) + "%"
 }
 
 func registerRoute(mux *http.ServeMux, path string, handler func(w http.ResponseWriter, r *http.Request)) {
@@ -208,7 +214,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + userId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
+					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -235,7 +241,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
+					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -297,7 +303,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
+					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -634,7 +640,7 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		}
 		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + state.Info().UserId() + "/" + input.EntityId
-			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
+			cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 			output, err := cmd.Output()
 			if err != nil {
 				log.Fatalf("Command execution failed: %v", err)
@@ -658,7 +664,7 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		}
 		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
-			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
+			cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 			output, err := cmd.Output()
 			if err != nil {
 				log.Fatalf("Command execution failed: %v", err)
@@ -714,7 +720,7 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 	}
 	if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 		entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
-		cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
+		cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 		output, err := cmd.Output()
 		if err != nil {
 			log.Fatalf("Command execution failed: %v", err)
