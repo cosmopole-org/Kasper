@@ -140,7 +140,7 @@ var MAX_VALIDATOR_COUNT = 5
 func NewCore(origin string, ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
 	id := origin
 	execs := map[string]bool{}
-	execs[id] = true
+	// execs[id] = true
 	execs["api.decillionai.com"] = true
 	return &Core{
 		ownerId:          ownerId,
