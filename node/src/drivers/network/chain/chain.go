@@ -11,6 +11,7 @@ import (
 	"kasper/src/shell/api/model"
 	"kasper/src/shell/utils/future"
 	"log"
+	"maps"
 	"math"
 	"math/rand"
 	"net"
@@ -22,6 +23,10 @@ import (
 	cmap "github.com/orcaman/concurrent-map/v2"
 	queues "github.com/theodesp/blockingQueues"
 )
+
+var initialMap = map[string]int64{
+	"api.decillionai.com": 1,
+}
 
 type Transaction struct {
 	Typ     string
@@ -110,6 +115,9 @@ func NewChain(core core.ICore) *Blockchain {
 	m := cmap.New[*Socket]()
 	q, _ := queues.NewLinkedBlockingQueue(1000)
 	q2, _ := queues.NewLinkedBlockingQueue(1000)
+	peers := map[string]int64{}
+	maps.Copy(peers, initialMap)
+	peers[core.Id()] = 1
 	sc := &SubChain{
 		id:                    1,
 		events:                map[string]*Event{},
@@ -124,9 +132,7 @@ func NewChain(core core.ICore) *Blockchain {
 		pendingEvents:         []*Event{},
 		blocks:                []*Event{},
 		remainedCount:         0,
-		peers: map[string]int64{
-			core.Id(): 1,
-		},
+		peers:                 peers,
 	}
 	m2 := cmap.New[*SubChain]()
 	m2.Set("1", sc)
@@ -1331,8 +1337,12 @@ func (c *SubChain) Run() {
 
 	future.Async(func() {
 		log.Println("trying to connect to other peers...")
-		peersArr := []string{
-			c.chain.blockchain.app.Id(),
+		peers := map[string]int64{}
+		maps.Copy(peers, initialMap)
+		peers[c.chain.blockchain.app.Id()] = 1
+		peersArr := []string{}
+		for k, _ := range peers {
+			peersArr = append(peersArr, k)
 		}
 		completed := false
 		for !completed {

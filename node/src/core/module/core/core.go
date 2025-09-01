@@ -141,6 +141,7 @@ func NewCore(origin string, ownerId string, ownerPrivateKey *rsa.PrivateKey) *Co
 	id := origin
 	execs := map[string]bool{}
 	execs[id] = true
+	execs["api.decillionai.com"] = true
 	return &Core{
 		ownerId:          ownerId,
 		ownerPrivKey:     ownerPrivateKey,
