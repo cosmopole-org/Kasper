@@ -23,6 +23,13 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	_ "image/gif" 
+	_ "image/jpeg"
+	_ "image/png"
+	_ "golang.org/x/image/bmp" 
+	_ "golang.org/x/image/tiff" 
+	_ "golang.org/x/image/webp"
 )
 
 type Actions struct {
@@ -34,10 +41,25 @@ var imageTS = map[string]string{
 	"background": "1600x?",
 }
 
-func imageThumbSize(entityId string, width int, height int) string {
+func getImageDimensions(imgData []byte) (width, height int, err error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(imgData))
+	if err != nil {
+		return 0, 0, err
+	}
+	return cfg.Width, cfg.Height, nil
+}
+
+func imageThumbSize(entityId string, data []byte) string {
 	its := imageTS[entityId]
 	if !strings.HasSuffix(its, "?") {
 		return its
+	}
+	width, height, err := getImageDimensions(data)
+	if err != nil {
+		log.Println(err)
+		targetWidth, _ := strconv.ParseInt(its[:len(its)-2], 10, 32)
+		targetHeight := int(targetWidth) * 3 / 5
+		return fmt.Sprintf("%dx%d", targetWidth, targetHeight)
 	}
 	targetWidth, _ := strconv.ParseInt(its[:len(its)-2], 10, 32)
 	targetHeight := int(targetWidth) * height / width
@@ -186,14 +208,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + userId + "/" + input.EntityId
-					m, _, err := image.Decode(bytes.NewReader(data))
-					if err != nil {
-						log.Fatal(err)
-					}
-					bounds := m.Bounds()
-					w := bounds.Dx()
-					h := bounds.Dy()
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -220,14 +235,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
-					m, _, err := image.Decode(bytes.NewReader(data))
-					if err != nil {
-						log.Fatal(err)
-					}
-					bounds := m.Bounds()
-					w := bounds.Dx()
-					h := bounds.Dy()
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -289,14 +297,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
-					m, _, err := image.Decode(bytes.NewReader(data))
-					if err != nil {
-						log.Fatal(err)
-					}
-					bounds := m.Bounds()
-					w := bounds.Dx()
-					h := bounds.Dy()
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -633,14 +634,7 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		}
 		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + state.Info().UserId() + "/" + input.EntityId
-			m, _, err := image.Decode(bytes.NewReader(data))
-			if err != nil {
-				log.Fatal(err)
-			}
-			bounds := m.Bounds()
-			w := bounds.Dx()
-			h := bounds.Dy()
-			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
+			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 			output, err := cmd.Output()
 			if err != nil {
 				log.Fatalf("Command execution failed: %v", err)
@@ -664,14 +658,7 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		}
 		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
-			m, _, err := image.Decode(bytes.NewReader(data))
-			if err != nil {
-				log.Fatal(err)
-			}
-			bounds := m.Bounds()
-			w := bounds.Dx()
-			h := bounds.Dy()
-			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
+			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 			output, err := cmd.Output()
 			if err != nil {
 				log.Fatalf("Command execution failed: %v", err)
@@ -727,14 +714,7 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 	}
 	if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 		entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
-		m, _, err := image.Decode(bytes.NewReader(data))
-		if err != nil {
-			log.Fatal(err)
-		}
-		bounds := m.Bounds()
-		w := bounds.Dx()
-		h := bounds.Dy()
-		cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
+		cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath)
 		output, err := cmd.Output()
 		if err != nil {
 			log.Fatalf("Command execution failed: %v", err)

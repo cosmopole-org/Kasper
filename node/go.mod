@@ -108,7 +108,7 @@ require (
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	google.golang.org/appengine/v2 v2.0.6 // indirect
 	google.golang.org/genproto v0.0.0-20250505200425-f936aa4a68b2 // indirect
@@ -134,5 +134,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lxzan/gws v1.8.9
 	golang.org/x/crypto v0.40.0
+	golang.org/x/image v0.30.0
 	google.golang.org/api v0.231.0
 )
