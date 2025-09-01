@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vite + NextUI</title>
+  <meta key="title" content="Vite + NextUI" property="og:title" />
+  <meta content="Make beautiful websites regardless of your design experience." property="og:description" />
+  <meta content="Make beautiful websites regardless of your design experience." name="description" />
+  <meta key="viewport"
+    content="viewport-fit=cover, width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"
+    name="viewport" />
+  <link href="/favicon.ico" rel="icon" />
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js';
+    import {
+      getAuth,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      onAuthStateChanged,
+      signOut
+    } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js';
+    import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app-check.js';
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    let appcheckToken = '';
+    const firebaseConfig = {
+      apiKey: "AIzaSyAE2NzFvWhfzW-00lpsFH1ucCgvBlECiJQ",
+      authDomain: "decillionai-b8ecb.firebaseapp.com",
+      projectId: "decillionai-b8ecb",
+      storageBucket: "decillionai-b8ecb.firebasestorage.app",
+      messagingSenderId: "220203818235",
+      appId: "1:220203818235:web:31b8d23a748ef292d8a45e",
+      measurementId: "G-GQWQ6VQPHZ"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    let callback;
+    let idToken;
+    onAuthStateChanged(auth, async user => {
+      if (user) {
+        idToken = await user.getIdToken();
+        callback && callback();
+      }
+    });
+    window.login = function login(email, password, cb) {
+      callback = cb;
+      if (idToken) {
+        callback(idToken);
+        return;
+      }
+      signInWithEmailAndPassword(auth, email, password);
+    }
+    window.register = function register(email, password, cb) {
+      callback = cb;
+      if (idToken) {
+        callback(idToken);
+        return;
+      }
+      createUserWithEmailAndPassword(auth, email, password);
+    }
+  </script>
+</head>
+
+<body class="light text-foreground bg-background">
+  <div id="root"></div>
+  <script type="module" src="/src/index.tsx"></script>
+  <script>
+    window.loadSlots = () => {
+      let framesEl = document.getElementById("framesList")
+      if (framesEl) {
+        framesEl.attachShadow({ mode: "open" }).innerHTML = `
+	    	  <slot style="display: none;" name="frameStore"></slot>
+		    	<slot id="frameStageSlot" style="width: 100%; height: 100%;" name="frameStage"></slot>
+          <slot id="frameTabsSlot" style="padding-left: 3.75%; display: flex; overflow: hidden; width: 100%; height: 100%;" name="frameTabs"></slot>
+	      `;
+      }
+    }
+  </script>
+</body>
+
+</html>
