@@ -88,6 +88,8 @@ func (ds *DynamicShardingSystem) HandleNewNode(newNode Node) {
 	ds.CheckAndModifyMyShards(newNode.ID, newNode.ShardID)
 	bestShard.Nodes = append(bestShard.Nodes, newNode)
 	ds.Nodes = append(ds.Nodes, newNode)
+	c, _ := ds.chain.blockchain.allSubChains.Get(fmt.Sprintf("%d", bestShard.ID))
+	c.peers[newNode.ID] = 100
 	fmt.Printf("New Node %s assigned to Shard %d\n", newNode.ID, bestShard.ID)
 }
 
