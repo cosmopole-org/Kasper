@@ -628,7 +628,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 			log.Println(err)
 			return nil, err
 		}
-		if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
+		if state.Trx().GetLink("admin::"+input.ParentId+"::"+state.Info().UserId()) != "true" {
 			if meta, err := state.Trx().GetJson("PointAccess::"+input.ParentId+"::"+state.Info().UserId(), "metadata"); err != nil || !meta["createSubPoint"].(bool) {
 				return nil, errors.New("access not permitted")
 			}
