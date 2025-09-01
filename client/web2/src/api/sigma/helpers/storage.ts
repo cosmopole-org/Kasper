@@ -29,7 +29,7 @@ export default class Storage {
     public db: RxDatabase<DatabaseCollections> = {} as any
     public saveMyUserId(id: string) {
         this.myUserId = id;
-        localStorage.setItem("myUserId", id);
+        localStorage.setItem("userId", id);
     }
     public async run() {
         this.myUserId = localStorage.getItem("userId") ?? "";

@@ -36,29 +36,25 @@
     };
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    let callback;
-    let idToken;
-    onAuthStateChanged(auth, async user => {
-      if (user) {
-        idToken = await user.getIdToken();
-        callback && callback();
-      }
-    });
-    window.login = function login(email, password, cb) {
-      callback = cb;
-      if (idToken) {
-        callback(idToken);
-        return;
-      }
-      signInWithEmailAndPassword(auth, email, password);
+    window.login = function login(email, password, callback) {
+      signInWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+          const user = userCredential.user;
+          return user.getIdToken();
+        })
+        .then((idToken) => {
+          callback(idToken);
+        });
     }
-    window.register = function register(email, password, cb) {
-      callback = cb;
-      if (idToken) {
-        callback(idToken);
-        return;
-      }
-      createUserWithEmailAndPassword(auth, email, password);
+    window.register = function register(email, password, callback) {
+      createUserWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+          const user = userCredential.user;
+          return user.getIdToken();
+        })
+        .then((idToken) => {
+          callback(idToken);
+        });
     }
   </script>
 </head>
