@@ -1353,9 +1353,9 @@ func (c *SubChain) Run() {
 					c.chain.blockchain.sockets.Set(peerAddress, &Socket{app: c.chain.blockchain.app, blockchain: c.chain.blockchain, Conn: nil, Buffer: []Packet{}, Ack: true})
 					continue
 				}
-				if peerAddress < c.chain.blockchain.app.Id() {
-					continue
-				}
+				// if peerAddress < c.chain.blockchain.app.Id() {
+				// 	continue
+				// }
 				if c.chain.blockchain.sockets.Has(peerAddress) {
 					continue
 				}
