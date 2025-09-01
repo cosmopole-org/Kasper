@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"io/ioutil"
 	"kasper/src/abstract/models/core"
@@ -28,9 +29,19 @@ type Actions struct {
 	App core.ICore
 }
 
-var imageThumbSize = map[string]string{
-	"avatar": "200x200",
-	"background": "1600x900",
+var imageTS = map[string]string{
+	"avatar":     "200x200",
+	"background": "1600x?",
+}
+
+func imageThumbSize(entityId string, width int, height int) string {
+	its := imageTS[entityId]
+	if !strings.HasSuffix(its, "?") {
+		return its
+	}
+	targetWidth, _ := strconv.ParseInt(its[:len(its)-2], 10, 32)
+	targetHeight := int(targetWidth) * height / width
+	return fmt.Sprintf("%dx%d", targetWidth, targetHeight)
 }
 
 func registerRoute(mux *http.ServeMux, path string, handler func(w http.ResponseWriter, r *http.Request)) {
@@ -175,7 +186,14 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + userId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize[input.EntityId] + ">", entityPath)
+					m, _, err := image.Decode(bytes.NewReader(data))
+					if err != nil {
+						log.Fatal(err)
+					}
+					bounds := m.Bounds()
+					w := bounds.Dx()
+					h := bounds.Dy()
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -202,7 +220,14 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize[input.EntityId] + ">", entityPath)
+					m, _, err := image.Decode(bytes.NewReader(data))
+					if err != nil {
+						log.Fatal(err)
+					}
+					bounds := m.Bounds()
+					w := bounds.Dx()
+					h := bounds.Dy()
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -264,7 +289,14 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize[input.EntityId] + ">", entityPath)
+					m, _, err := image.Decode(bytes.NewReader(data))
+					if err != nil {
+						log.Fatal(err)
+					}
+					bounds := m.Bounds()
+					w := bounds.Dx()
+					h := bounds.Dy()
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -595,13 +627,20 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		return nil, err
 	}
 	if input.MachineId == "" {
-		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), data, input.EntityId + ".original", true); err != nil {
+		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), data, input.EntityId+".original", true); err != nil {
 			log.Println(err)
 			return nil, err
 		}
 		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + state.Info().UserId() + "/" + input.EntityId
-			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize[input.EntityId] + ">", entityPath)
+			m, _, err := image.Decode(bytes.NewReader(data))
+			if err != nil {
+				log.Fatal(err)
+			}
+			bounds := m.Bounds()
+			w := bounds.Dx()
+			h := bounds.Dy()
+			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
 			output, err := cmd.Output()
 			if err != nil {
 				log.Fatalf("Command execution failed: %v", err)
@@ -625,7 +664,14 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		}
 		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
-			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize[input.EntityId] + ">", entityPath)
+			m, _, err := image.Decode(bytes.NewReader(data))
+			if err != nil {
+				log.Fatal(err)
+			}
+			bounds := m.Bounds()
+			w := bounds.Dx()
+			h := bounds.Dy()
+			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
 			output, err := cmd.Output()
 			if err != nil {
 				log.Fatalf("Command execution failed: %v", err)
@@ -681,7 +727,14 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 	}
 	if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 		entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
-		cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize[input.EntityId] + ">", entityPath)
+		m, _, err := image.Decode(bytes.NewReader(data))
+		if err != nil {
+			log.Fatal(err)
+		}
+		bounds := m.Bounds()
+		w := bounds.Dx()
+		h := bounds.Dy()
+		cmd := exec.Command("convert", entityPath+".original", "-thumbnail", imageThumbSize(input.EntityId, w, h)+">", entityPath)
 		output, err := cmd.Output()
 		if err != nil {
 			log.Fatalf("Command execution failed: %v", err)
