@@ -44,6 +44,8 @@ RUN echo 'installing firecracker...'
 
 RUN curl -sSf https://raw.githubusercontent.com/cosmopole-org/kasper-public/main/install-fcvmm-1.sh | bash -s
 
+RUN apt install -y imagemagick
+
 RUN mkdir /app/storage
 
 COPY . .

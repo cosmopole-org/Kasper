@@ -19,6 +19,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -162,10 +163,25 @@ func Install(a *Actions) error {
 		var e error
 		a.App.ModifyState(false, func(trx trx.ITrx) error {
 			if input.MachineId == "" {
-				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+userId, data, input.EntityId, true); err != nil {
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+userId, data, input.EntityId+".original", true); err != nil {
 					log.Println(err)
 					e = err
 					return err
+				}
+				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
+					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + userId + "/" + input.EntityId
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", "200x200>", entityPath)
+					output, err := cmd.Output()
+					if err != nil {
+						log.Fatalf("Command execution failed: %v", err)
+					}
+					fmt.Printf("Command output:\n%s", output)
+				} else {
+					if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+userId, data, input.EntityId, true); err != nil {
+					log.Println(err)
+					e = err
+					return err
+				}
 				}
 			} else {
 				vm := models.Vm{MachineId: input.MachineId}.Pull(trx)
@@ -174,10 +190,25 @@ func Install(a *Actions) error {
 					e = errors.New("you are not owner of this machine")
 					return err
 				}
-				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, input.EntityId, true); err != nil {
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, input.EntityId+".original", true); err != nil {
 					log.Println(err)
 					e = err
 					return err
+				}
+				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
+					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", "200x200>", entityPath)
+					output, err := cmd.Output()
+					if err != nil {
+						log.Fatalf("Command execution failed: %v", err)
+					}
+					fmt.Printf("Command output:\n%s", output)
+				} else {
+					if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, input.EntityId, true); err != nil {
+						log.Println(err)
+						e = err
+						return err
+					}
 				}
 			}
 			return nil
@@ -221,10 +252,25 @@ func Install(a *Actions) error {
 					e = errors.New("you are not admin")
 					return err
 				}
-				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, data, input.EntityId, true); err != nil {
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, data, input.EntityId+".original", true); err != nil {
 					log.Println(err)
 					e = err
 					return err
+				}
+				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
+					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
+					cmd := exec.Command("convert", entityPath+".original", "-thumbnail", "200x200>", entityPath)
+					output, err := cmd.Output()
+					if err != nil {
+						log.Fatalf("Command execution failed: %v", err)
+					}
+					fmt.Printf("Command output:\n%s", output)
+				} else {
+					if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, data, input.EntityId, true); err != nil {
+						log.Println(err)
+						e = err
+						return err
+					}
 				}
 				future.Async(func() {
 					a.App.Tools().Signaler().SignalGroup("storage/updatePointEntity", input.PointId, map[string]any{"pointId": input.PointId, "entityId": input.EntityId}, true, []string{})
