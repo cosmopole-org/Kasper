@@ -178,10 +178,10 @@ func Install(a *Actions) error {
 					fmt.Printf("Command output:\n%s", output)
 				} else {
 					if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+userId, data, input.EntityId, true); err != nil {
-					log.Println(err)
-					e = err
-					return err
-				}
+						log.Println(err)
+						e = err
+						return err
+					}
 				}
 			} else {
 				vm := models.Vm{MachineId: input.MachineId}.Pull(trx)
@@ -590,9 +590,23 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		return nil, err
 	}
 	if input.MachineId == "" {
-		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), data, input.EntityId, true); err != nil {
+		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), data, input.EntityId + ".original", true); err != nil {
 			log.Println(err)
 			return nil, err
+		}
+		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
+			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + state.Info().UserId() + "/" + input.EntityId
+			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", "200x200>", entityPath)
+			output, err := cmd.Output()
+			if err != nil {
+				log.Fatalf("Command execution failed: %v", err)
+			}
+			fmt.Printf("Command output:\n%s", output)
+		} else {
+			if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+state.Info().UserId(), data, input.EntityId, true); err != nil {
+				log.Println(err)
+				return nil, err
+			}
 		}
 	} else {
 		vm := models.Vm{MachineId: input.MachineId}.Pull(trx)
@@ -600,9 +614,23 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		if app.OwnerId != state.Info().UserId() {
 			return nil, errors.New("you are not owner of this machine")
 		}
-		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, input.EntityId, true); err != nil {
+		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, input.EntityId+".original", true); err != nil {
 			log.Println(err)
 			return nil, err
+		}
+		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
+			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
+			cmd := exec.Command("convert", entityPath+".original", "-thumbnail", "200x200>", entityPath)
+			output, err := cmd.Output()
+			if err != nil {
+				log.Fatalf("Command execution failed: %v", err)
+			}
+			fmt.Printf("Command output:\n%s", output)
+		} else {
+			if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/users/"+vm.MachineId, data, input.EntityId, true); err != nil {
+				log.Println(err)
+				return nil, err
+			}
 		}
 	}
 	return map[string]any{}, nil
@@ -642,9 +670,23 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 		log.Println(err)
 		return nil, err
 	}
-	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+state.Info().PointId(), data, input.EntityId, true); err != nil {
+	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, data, input.EntityId+".original", true); err != nil {
 		log.Println(err)
 		return nil, err
+	}
+	if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
+		entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
+		cmd := exec.Command("convert", entityPath+".original", "-thumbnail", "200x200>", entityPath)
+		output, err := cmd.Output()
+		if err != nil {
+			log.Fatalf("Command execution failed: %v", err)
+		}
+		fmt.Printf("Command output:\n%s", output)
+	} else {
+		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/points/"+input.PointId, data, input.EntityId, true); err != nil {
+			log.Println(err)
+			return nil, err
+		}
 	}
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("storage/updatePointEntity", state.Info().PointId(), map[string]any{"pointId": state.Info().PointId(), "entityId": input.EntityId}, true, []string{})
