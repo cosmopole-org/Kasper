@@ -11,6 +11,7 @@ import (
 	"kasper/src/drivers/network/client/tcp"
 	"kasper/src/drivers/network/client/ws"
 	"net/http"
+	"os"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -54,7 +55,7 @@ func NewNetwork(
 	manager := &autocert.Manager{
 		Cache:      autocert.DirCache("certs"),
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist("api.decillionai.com"),
+		HostPolicy: autocert.HostWhitelist(os.Getenv("ORIGIN")),
 	}
 	config := &tls.Config{
 		GetCertificate: manager.GetCertificate,
