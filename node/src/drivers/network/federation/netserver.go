@@ -48,7 +48,7 @@ func (t *Tcp) Listen(port int, tlsConfig *tls.Config) {
 		}
 		defer ln.Close()
 		log.Println("Federation TLS server listening on port ", port)
-		
+
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
@@ -185,10 +185,14 @@ func (t *Tcp) handleConnection(conn net.Conn) *Socket {
 }
 
 func (t *Tcp) NewSocket(destAddress string) *Socket {
-	conn, err := net.Dial("tcp", destAddress)
+	addr := destAddress + ":8079"
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: false,
+		ServerName:         destAddress,
+	}
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
-		fmt.Println(err)
-		return nil
+		log.Fatalf("failed to connect: %v", err)
 	}
 	return t.handleConnection(conn)
 }
