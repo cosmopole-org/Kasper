@@ -998,10 +998,14 @@ func (c *SubChain) GetEventByProof(proof string) *Event {
 
 func openSocket(origin string, chain *Blockchain) bool {
 	log.Println("connecting to chain socket server: ", origin)
-	conn, err := net.Dial("tcp", origin+":8079")
+	addr := origin + ":8079"
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: false,
+		ServerName:         origin,
+	}
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
-		log.Println("Error connecting to server:", err)
-		return false
+		log.Fatalf("failed to connect: %v", err)
 	}
 	log.Println("connected to the server..")
 	conn.Write([]byte("I_WANNA_JOIN_NETWORK"))
