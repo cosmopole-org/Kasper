@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -360,6 +361,14 @@ func (t *Blockchain) listenForPackets(socket *Socket) {
 	}
 }
 
+type ShardsPack struct {
+	Shards        []Shard
+	Nodes         []Node
+	pendingMerges map[string]int64
+	contracts     map[string]*SmartContract
+	SubChains     map[string]*SubChain
+}
+
 func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 	origin := ""
 	if orig == "" {
@@ -376,12 +385,31 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 	} else {
 		origin = orig
 	}
-	newNode := Node{ID: origin, Power: rand.Intn(100)}
+	pack := map[string]ShardsPack{}
 	for _, c := range t.chains.Items() {
-		c.sharder.HandleNewNode(newNode)
+		pack[fmt.Sprintf("%d", c.id)] = ShardsPack{
+			Shards:        c.sharder.Shards,
+			pendingMerges: c.sharder.pendingMerges.Items(),
+			contracts:     c.sharder.contracts.Items(),
+			Nodes:         c.sharder.Nodes,
+			SubChains:     c.SubChains.Items(),
+		}
+	}
+	if orig == "" {
+		str, _ := json.Marshal(pack)
+		b := make([]byte, 4)
+		binary.LittleEndian.PutUint32(b, uint32(len(str)))
+		conn.Write(b)
+		conn.Write(str)
 	}
 	socket := &Socket{Id: strings.Split(conn.RemoteAddr().String(), ":")[0], Buffer: []Packet{}, Conn: conn, app: t.app, blockchain: t, Ack: true}
 	t.sockets.Set(origin, socket)
+	newNode := Node{ID: origin, Power: rand.Intn(100)}
+	if orig == "" {
+		for _, c := range t.chains.Items() {
+			c.sharder.HandleNewNode(newNode)
+		}
+	}
 	future.Async(func() {
 		t.listenForPackets(socket)
 	}, false)
@@ -1011,6 +1039,39 @@ func openSocket(origin string, chain *Blockchain) bool {
 	}
 	log.Println("connected to the server..")
 	conn.Write([]byte("I_WANNA_JOIN_NETWORK"))
+	var bLen uint32 = 0
+	binary.Read(conn, binary.LittleEndian, bLen)
+	str := make([]byte, bLen)
+	conn.Read(str)
+	if origin == "api.decillionai.com" {
+		shards := map[string]ShardsPack{}
+		err = json.Unmarshal(str, &shards)
+		if err != nil {
+			log.Println(err)
+			return false
+		}
+		for chainId, sharder := range shards {
+			cId, _ := strconv.ParseInt(chainId, 10, 64)
+			scs := cmap.New[*SubChain]()
+			scs.MSet(sharder.SubChains)
+			mss := cmap.New[bool]()
+			c := Chain{id: cId, blockchain: chain, sharder: nil, SubChains: &scs, MyShards: &mss}
+			s := NewSharder(&c)
+			cs := cmap.New[*SmartContract]()
+			cs.MSet(sharder.contracts)
+			s.contracts = &cs
+			pms := cmap.New[int64]()
+			pms.MSet(sharder.pendingMerges)
+			s.pendingMerges = &pms
+			s.Shards = sharder.Shards
+			s.Nodes = sharder.Nodes
+			c.sharder = s
+		}
+		newNode := Node{ID: chain.app.Id(), Power: rand.Intn(100)}
+		for _, c := range chain.chains.Items() {
+			c.sharder.HandleNewNode(newNode)
+		}
+	}
 	chain.handleConnection(conn, origin)
 	return true
 }
