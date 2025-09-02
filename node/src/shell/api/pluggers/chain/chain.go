@@ -22,6 +22,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.SubmitBaseTrx)
 		}
 		
+		func (c *Plugger) RegisterNode() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.RegisterNode)
+		}
+		
 	func (c *Plugger) Install(a *actions.Actions) *Plugger {
 		err := actions.Install(a)
 		if err != nil {
