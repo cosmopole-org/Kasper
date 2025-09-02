@@ -364,7 +364,9 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 	origin := ""
 	if orig == "" {
 		t.app.ModifyState(true, func(trx trx.ITrx) error {
-			origin = trx.GetLink("PendingNode::" + strings.Split(conn.RemoteAddr().String(), ":")[0])
+			addr := conn.RemoteAddr().String()
+			log.Println(addr)
+			origin = trx.GetLink("PendingNode::" + strings.Split(addr, ":")[0])
 			return nil
 		})
 		if origin == "" {
