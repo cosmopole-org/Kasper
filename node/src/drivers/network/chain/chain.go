@@ -1044,6 +1044,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 	str := make([]byte, bLen)
 	conn.Read(str)
 	if origin == "api.decillionai.com" {
+		log.Println(string(str))
 		shards := map[string]ShardsPack{}
 		err = json.Unmarshal(str, &shards)
 		if err != nil {
