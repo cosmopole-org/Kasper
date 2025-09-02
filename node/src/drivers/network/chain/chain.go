@@ -361,14 +361,15 @@ func (t *Blockchain) listenForPackets(socket *Socket) {
 }
 
 func (t *Blockchain) handleConnection(conn net.Conn) {
-	ip := strings.Split(conn.RemoteAddr().String(), ":")[0]
-	a, err := net.LookupAddr(ip)
-	if err != nil {
-		log.Println(err)
-		log.Println("ip not friendly")
+	origin := ""
+	t.app.ModifyState(true, func(trx trx.ITrx) error {
+		origin = trx.GetLink("PendingNode::" + strings.Split(conn.RemoteAddr().String(), ":")[0])
+		return nil
+	})
+	if origin == "" {
+		log.Println("pending node is not registered")
 		return
 	}
-	origin := a[0]
 	newNode := Node{ID: origin, Power: rand.Intn(100)}
 	for _, c := range t.chains.Items() {
 		c.sharder.HandleNewNode(newNode)
@@ -992,7 +993,6 @@ func (c *SubChain) GetEventByProof(proof string) *Event {
 }
 
 func openSocket(origin string, chain *Blockchain) bool {
-
 	log.Println("connecting to chain socket server: ", origin)
 	conn, err := net.Dial("tcp", origin+":8079")
 	if err != nil {
@@ -1307,7 +1307,8 @@ func (c *SubChain) Run() {
 							}
 						}
 					} else if trx.Typ == "newNode" {
-						openSocket(string(trx.Payload), c.chain.blockchain)
+						origin := string(trx.Payload)
+						c.chain.blockchain.pendingNode(origin)
 					} else if trx.Typ == "joinWorkchain" {
 						chainId := int64(binary.LittleEndian.Uint64(trx.Payload[0:8]))
 						chain, ok := c.chain.blockchain.chains.Get(fmt.Sprintf("%d", chainId))
@@ -1367,6 +1368,20 @@ func (c *SubChain) Run() {
 			time.Sleep(time.Duration(1) * time.Second)
 		}
 	}, false)
+}
+
+func (b *Blockchain) pendingNode(origin string) {
+	ips, _ := net.LookupIP(origin)
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			address := ipv4.String()
+			b.app.ModifyState(false, func(trx trx.ITrx) error {
+				trx.PutLink("PendingNodes::"+address, origin)
+				return nil
+			})
+			break
+		}
+	}
 }
 
 func (c *SubChain) SubmitTrx(typ string, payload []byte) {

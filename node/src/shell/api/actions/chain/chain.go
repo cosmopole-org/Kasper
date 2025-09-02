@@ -56,3 +56,9 @@ func (a *Actions) SubmitBaseTrx(state state.IState, input inputs_chain.SubBaseTr
 	}
 	return res, nil
 }
+
+// RegisterNode /chains/registerNode check [ true false false ] access [ true false false false POST ]
+func (a *Actions) RegisterNode(state state.IState, input inputs_chain.RegisterNodeInput) (any, error) {
+	a.App.Tools().Network().Chain().SubmitTrx("1", "", "newNode", []byte(input.Orig))
+	return map[string]any{}, nil
+}
