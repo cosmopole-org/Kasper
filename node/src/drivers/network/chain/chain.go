@@ -228,7 +228,7 @@ func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 				log.Println("notice: connected chain peer is not verified, skipping...")
 				continue
 			}
-			b.handleConnection(conn)
+			b.handleConnection(conn, "")
 		}
 	}, true)
 }
@@ -360,15 +360,19 @@ func (t *Blockchain) listenForPackets(socket *Socket) {
 	}
 }
 
-func (t *Blockchain) handleConnection(conn net.Conn) {
+func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 	origin := ""
-	t.app.ModifyState(true, func(trx trx.ITrx) error {
-		origin = trx.GetLink("PendingNode::" + strings.Split(conn.RemoteAddr().String(), ":")[0])
-		return nil
-	})
-	if origin == "" {
-		log.Println("pending node is not registered")
-		return
+	if orig == "" {
+		t.app.ModifyState(true, func(trx trx.ITrx) error {
+			origin = trx.GetLink("PendingNode::" + strings.Split(conn.RemoteAddr().String(), ":")[0])
+			return nil
+		})
+		if origin == "" {
+			log.Println("pending node is not registered")
+			return
+		}
+	} else {
+		origin = orig
 	}
 	newNode := Node{ID: origin, Power: rand.Intn(100)}
 	for _, c := range t.chains.Items() {
@@ -1001,7 +1005,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 	}
 	log.Println("connected to the server..")
 	conn.Write([]byte("I_WANNA_JOIN_NETWORK"))
-	chain.handleConnection(conn)
+	chain.handleConnection(conn, origin)
 	return true
 }
 
@@ -1376,7 +1380,7 @@ func (b *Blockchain) pendingNode(origin string) {
 		if ipv4 := ip.To4(); ipv4 != nil {
 			address := ipv4.String()
 			b.app.ModifyState(false, func(trx trx.ITrx) error {
-				trx.PutLink("PendingNodes::"+address, origin)
+				trx.PutLink("PendingNode::"+address, origin)
 				return nil
 			})
 			break
