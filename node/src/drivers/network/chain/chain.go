@@ -1385,6 +1385,7 @@ func (b *Blockchain) pendingNode(origin string) {
 	for _, ip := range ips {
 		if ipv4 := ip.To4(); ipv4 != nil {
 			address := ipv4.String()
+			log.Println(address, origin)
 			b.app.ModifyState(false, func(trx trx.ITrx) error {
 				trx.PutLink("PendingNode::"+address, origin)
 				return nil
