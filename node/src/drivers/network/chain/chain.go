@@ -1040,7 +1040,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 	log.Println("connected to the server..")
 	conn.Write([]byte("I_WANNA_JOIN_NETWORK"))
 	var bLen uint32 = 0
-	binary.Read(conn, binary.LittleEndian, bLen)
+	binary.Read(conn, binary.LittleEndian, &bLen)
 	str := make([]byte, bLen)
 	conn.Read(str)
 	if origin == "api.decillionai.com" {
