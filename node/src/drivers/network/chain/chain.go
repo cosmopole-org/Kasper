@@ -142,6 +142,7 @@ func NewChain(core core.ICore) *Blockchain {
 		allSubChains: &m5,
 	}
 	chain.blockchain = blockchain
+	blockchain.nodeIpToOrigin("api.decillionai.com")
 	return blockchain
 }
 
@@ -255,7 +256,12 @@ func (t *Blockchain) listenForPackets(socket *Socket) {
 		t.sockets.Remove(socket.Id)
 		socket.Conn.Close()
 	}()
-	origin := strings.Split(socket.Conn.RemoteAddr().String(), ":")[0]
+	origin := ""
+	addr := socket.Conn.RemoteAddr().String()
+	t.app.ModifyState(true, func(trx trx.ITrx) error {
+		origin = trx.GetLink("NodeIpToOrigin::" + strings.Split(addr, ":")[0])
+		return nil
+	})
 	lenBuf := make([]byte, 4)
 	chainIdBuf := make([]byte, 8)
 	buf := make([]byte, 1024)
@@ -391,7 +397,7 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 		t.app.ModifyState(true, func(trx trx.ITrx) error {
 			addr := conn.RemoteAddr().String()
 			log.Println(addr)
-			origin = trx.GetLink("PendingNode::" + strings.Split(addr, ":")[0])
+			origin = trx.GetLink("NodeIpToOrigin::" + strings.Split(addr, ":")[0])
 			return nil
 		})
 		if origin == "" {
@@ -1421,7 +1427,7 @@ func (c *SubChain) Run() {
 						}
 					} else if trx.Typ == "newNode" {
 						origin := string(trx.Payload)
-						c.chain.blockchain.pendingNode(origin)
+						c.chain.blockchain.nodeIpToOrigin(origin)
 					} else if trx.Typ == "joinWorkchain" {
 						chainId := int64(binary.LittleEndian.Uint64(trx.Payload[0:8]))
 						chain, ok := c.chain.blockchain.chains.Get(fmt.Sprintf("%d", chainId))
@@ -1450,14 +1456,14 @@ func (c *SubChain) Run() {
 	}, false)
 }
 
-func (b *Blockchain) pendingNode(origin string) {
+func (b *Blockchain) nodeIpToOrigin(origin string) {
 	ips, _ := net.LookupIP(origin)
 	for _, ip := range ips {
 		if ipv4 := ip.To4(); ipv4 != nil {
 			address := ipv4.String()
 			log.Println(address, origin)
 			b.app.ModifyState(false, func(trx trx.ITrx) error {
-				trx.PutLink("PendingNode::"+address, origin)
+				trx.PutLink("NodeIpToOrigin::"+address, origin)
 				return nil
 			})
 			break
