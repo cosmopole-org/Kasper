@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/shell/api/model"
@@ -1098,7 +1099,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 	var bLen uint32 = 0
 	binary.Read(conn, binary.LittleEndian, &bLen)
 	str := make([]byte, bLen)
-	conn.Read(str)
+	io.ReadFull(conn, str)
 	if origin == "api.decillionai.com" {
 		log.Println(string(str))
 		shards := map[string]ShardsPack{}
