@@ -729,6 +729,18 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 		e.phase = 2
 		proofs, _ := json.Marshal(e.backedResponses)
 
+		func() {
+			chainSocket.Lock.Lock()
+			defer chainSocket.Lock.Unlock()
+			rndNums := map[string]int{}
+			for k, v := range e.backedResponses {
+				rndNums[k] = v.RndNum
+			}
+			e.randomNums = rndNums
+			e.phase = 3
+			e.electionReadys[chainSocket.app.Id()] = true
+		}()
+
 		proofBytes := []byte(proofs)
 		proofLenBytes := make([]byte, 4)
 		binary.LittleEndian.PutUint32(proofLenBytes, uint32(len(proofBytes)))
