@@ -847,6 +847,8 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 			}
 		}()
 
+		log.Println("peers count in phase 3 ", len(subchain.peers))
+
 		if readyToStart {
 			subchain.nextEventQueue.Put(e)
 		}
@@ -954,6 +956,9 @@ func (c *SubChain) VoteForNextEvent(origin string, eventProof string) {
 	func() {
 		c.Lock.Lock()
 		defer c.Lock.Unlock()
+
+		log.Println("peers count in phase 3 ", len(c.peers))
+
 		if _, ok := c.peers[origin]; ok {
 			c.nextEventVotes[origin] = eventProof
 		}
@@ -1111,6 +1116,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 					peers:                 v,
 				}
 				scs.Set(k, sc)
+				chain.allSubChains.Set(k, sc)
 			}
 			mss := cmap.New[bool]()
 			c := Chain{id: cId, blockchain: chain, sharder: nil, SubChains: &scs, MyShards: &mss}
@@ -1124,6 +1130,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 			s.Shards = sharder.Shards
 			s.Nodes = sharder.Nodes
 			c.sharder = s
+			chain.chains.Set(chainId, &c)
 		}
 		newNode := Node{ID: chain.app.Id(), Power: rand.Intn(100)}
 		for _, c := range chain.chains.Items() {
