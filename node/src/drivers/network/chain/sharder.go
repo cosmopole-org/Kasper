@@ -120,11 +120,12 @@ func (ds *DynamicShardingSystem) CheckAndSplitShards() {
 }
 
 func (ds *DynamicShardingSystem) CheckAndModifyMyShards(nodeId string, shardId int64) {
-	ds.chain.MyShards.Clear()
-	if !ds.chain.MyShards.Has(fmt.Sprintf("%d", shardId)) {
-		ds.chain.MyShards.Set(fmt.Sprintf("%d", shardId), true)
-		shardChain, _ := ds.chain.blockchain.allSubChains.Get(fmt.Sprintf("%d", shardId))
-		shardChain.Run()
+	if nodeId == ds.chain.blockchain.app.Id() {
+		if !ds.chain.MyShards.Has(fmt.Sprintf("%d", shardId)) {
+			ds.chain.MyShards.Set(fmt.Sprintf("%d", shardId), true)
+			shardChain, _ := ds.chain.blockchain.allSubChains.Get(fmt.Sprintf("%d", shardId))
+			shardChain.Run()
+		}
 	}
 }
 
