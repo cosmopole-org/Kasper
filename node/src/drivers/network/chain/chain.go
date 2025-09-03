@@ -1114,7 +1114,6 @@ func openSocket(origin string, chain *Blockchain) bool {
 				scs.Set(k, sc)
 			}
 			mss := cmap.New[bool]()
-			mss.Set("1", true)
 			c := Chain{id: cId, blockchain: chain, sharder: nil, SubChains: &scs, MyShards: &mss}
 			s := NewSharder(&c)
 			cs := cmap.New[*SmartContract]()
