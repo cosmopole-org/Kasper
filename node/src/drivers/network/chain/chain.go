@@ -389,6 +389,7 @@ type ShardsPack struct {
 	PendingMerges map[string]int64
 	Contracts     map[string]*SmartContract
 	SubChains     map[string]map[string]int64
+	Executors     map[string]bool
 }
 
 func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
@@ -419,6 +420,7 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 			Contracts:     c.sharder.contracts.Items(),
 			Nodes:         c.sharder.Nodes,
 			SubChains:     subchainPeers,
+			Executors:     c.blockchain.app.Executors(),
 		}
 	}
 	if orig == "" {
@@ -1146,6 +1148,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 			s.Nodes = sharder.Nodes
 			c.sharder = s
 			chain.chains.Set(chainId, &c)
+			chain.app.SetExecutors(sharder.Executors)
 		}
 		newNode := Node{ID: chain.app.Id(), Power: rand.Intn(100)}
 		for _, c := range chain.chains.Items() {

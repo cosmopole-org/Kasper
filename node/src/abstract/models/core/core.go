@@ -22,6 +22,8 @@ type ICore interface {
 	Id() string
 	Gods() []string
 	Tools() tools.ITools
+	Executors() map[string]bool
+	SetExecutors(map[string]bool)
 	Actor() action.IActor
 	Load([]string, map[string]interface{})
 	Close()

@@ -140,7 +140,6 @@ var MAX_VALIDATOR_COUNT = 5
 func NewCore(origin string, ownerId string, ownerPrivateKey *rsa.PrivateKey) *Core {
 	id := origin
 	execs := map[string]bool{}
-	// execs[id] = true
 	execs["api.decillionai.com"] = true
 	return &Core{
 		ownerId:          ownerId,
@@ -156,6 +155,14 @@ func NewCore(origin string, ownerId string, ownerPrivateKey *rsa.PrivateKey) *Co
 		executors:        execs,
 		actionStore:      actor.NewActor(),
 	}
+}
+
+func (c *Core) Executors() map[string]bool {
+	return c.executors
+}
+
+func (c *Core) SetExecutors(execs map[string]bool) {
+	c.executors = execs
 }
 
 func (c *Core) Actor() iaction.IActor {
@@ -932,6 +939,19 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 			}
 		}
 	}, true)
+
+	future.Async(func() {
+		for {
+			time.Sleep(time.Duration(1) * time.Second)
+			minutes := time.Now().Minute()
+			seconds := time.Now().Second()
+			if (minutes == 0) && ((seconds >= 0) && (seconds <= 2)) {
+				c.DoElection()
+				time.Sleep(2 * time.Minute)
+			}
+		}
+	}, true)
+
 }
 
 func (c *Core) DoElection() {
