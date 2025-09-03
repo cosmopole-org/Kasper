@@ -1526,15 +1526,20 @@ func (b *Blockchain) SubmitTrx(chainId string, machineId string, typ string, pay
 }
 
 func (c *SubChain) MemorizeResponseBacked(proof string, signature string, rndNum int, origin string) bool {
+	log.Println("hello 1")
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
+	log.Println("hello 2")
 	if e, ok := c.events[proof]; ok {
+		log.Println("hello 3")
 		e.backedResponses[origin] = Guarantee{Proof: proof, Sign: signature, RndNum: rndNum}
 		if c.chain.MyShards.Has(c.chain.blockchain.app.Id()) {
+			log.Println("hello 4 ", len(c.peers), len(e.backedResponses))
 			if len(e.backedResponses) == (len(c.peers) - 1) {
 				return true
 			}
 		} else {
+			log.Println("hello 5 ", len(c.peers), len(e.backedResponses))
 			if len(e.backedResponses) == len(c.peers) {
 				return true
 			}
@@ -1542,6 +1547,7 @@ func (c *SubChain) MemorizeResponseBacked(proof string, signature string, rndNum
 	} else {
 		panic("event proof not found")
 	}
+	log.Println("hello 6")
 	return false
 }
 
