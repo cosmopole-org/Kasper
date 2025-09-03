@@ -380,8 +380,8 @@ func (t *Blockchain) listenForPackets(socket *Socket) {
 type ShardsPack struct {
 	Shards        []Shard
 	Nodes         []Node
-	pendingMerges map[string]int64
-	contracts     map[string]*SmartContract
+	PendingMerges map[string]int64
+	Contracts     map[string]*SmartContract
 	SubChains     map[string]map[string]int64
 }
 
@@ -409,8 +409,8 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 		}
 		pack[fmt.Sprintf("%d", c.id)] = ShardsPack{
 			Shards:        c.sharder.Shards,
-			pendingMerges: c.sharder.pendingMerges.Items(),
-			contracts:     c.sharder.contracts.Items(),
+			PendingMerges: c.sharder.pendingMerges.Items(),
+			Contracts:     c.sharder.contracts.Items(),
 			Nodes:         c.sharder.Nodes,
 			SubChains:     subchainPeers,
 		}
@@ -1099,10 +1099,10 @@ func openSocket(origin string, chain *Blockchain) bool {
 			c := Chain{id: cId, blockchain: chain, sharder: nil, SubChains: &scs, MyShards: &mss}
 			s := NewSharder(&c)
 			cs := cmap.New[*SmartContract]()
-			cs.MSet(sharder.contracts)
+			cs.MSet(sharder.Contracts)
 			s.contracts = &cs
 			pms := cmap.New[int64]()
-			pms.MSet(sharder.pendingMerges)
+			pms.MSet(sharder.PendingMerges)
 			s.pendingMerges = &pms
 			s.Shards = sharder.Shards
 			s.Nodes = sharder.Nodes
@@ -1209,6 +1209,7 @@ func (c *Chain) CreateShardChain(subchainId int64) {
 		remainedCount:         0,
 		peers:                 map[string]int64{},
 	}
+	c.SubChains.Set(fmt.Sprintf("%d", sc.id), sc)
 	c.blockchain.allSubChains.Set(fmt.Sprintf("%d", sc.id), sc)
 }
 
