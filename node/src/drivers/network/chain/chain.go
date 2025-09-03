@@ -1096,11 +1096,13 @@ func openSocket(origin string, chain *Blockchain) bool {
 		for chainId, sharder := range shards {
 			cId, _ := strconv.ParseInt(chainId, 10, 64)
 			scs := cmap.New[*SubChain]()
+			c := Chain{id: cId, blockchain: chain, sharder: nil, SubChains: nil, MyShards: nil}
 			for k, v := range sharder.SubChains {
 				q, _ := queues.NewLinkedBlockingQueue(1000)
 				q2, _ := queues.NewLinkedBlockingQueue(1000)
 				sc := &SubChain{
 					id:                    cId,
+					chain:                 &c,
 					events:                map[string]*Event{},
 					pendingBlockElections: 0,
 					readyForNewElection:   true,
@@ -1119,7 +1121,8 @@ func openSocket(origin string, chain *Blockchain) bool {
 				chain.allSubChains.Set(k, sc)
 			}
 			mss := cmap.New[bool]()
-			c := Chain{id: cId, blockchain: chain, sharder: nil, SubChains: &scs, MyShards: &mss}
+			c.MyShards = &mss
+			c.SubChains = &scs
 			s := NewSharder(&c)
 			cs := cmap.New[*SmartContract]()
 			cs.MSet(sharder.Contracts)
