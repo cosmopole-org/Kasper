@@ -252,7 +252,7 @@ func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 	}, false)
 }
 
-func (t *Blockchain) listenForPackets(socket *Socket) {
+func (t *Blockchain) listenForPackets(socket *Socket, needReconnect bool) {
 	defer func() {
 		t.sockets.Remove(socket.Id)
 		socket.Conn.Close()
@@ -283,6 +283,9 @@ func (t *Blockchain) listenForPackets(socket *Socket) {
 			if err != nil {
 				log.Println(origin, err)
 				log.Println(origin, "socket had error and closed")
+				if needReconnect {
+					openSocket(origin, t)
+				}
 				return
 			}
 			func() {
@@ -440,7 +443,7 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 		}
 	}
 	future.Async(func() {
-		t.listenForPackets(socket)
+		t.listenForPackets(socket, orig != "")
 	}, false)
 }
 
