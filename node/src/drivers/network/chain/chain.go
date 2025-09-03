@@ -366,7 +366,7 @@ type ShardsPack struct {
 	Nodes         []Node
 	pendingMerges map[string]int64
 	contracts     map[string]*SmartContract
-	SubChains     map[string]*SubChain
+	SubChains     map[string]map[string]int64
 }
 
 func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
@@ -387,12 +387,16 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 	}
 	pack := map[string]ShardsPack{}
 	for _, c := range t.chains.Items() {
+		subchainPeers := map[string]map[string]int64{}
+		for item := range c.SubChains.IterBuffered() {
+			subchainPeers[item.Key] = item.Val.peers
+		}
 		pack[fmt.Sprintf("%d", c.id)] = ShardsPack{
 			Shards:        c.sharder.Shards,
 			pendingMerges: c.sharder.pendingMerges.Items(),
 			contracts:     c.sharder.contracts.Items(),
 			Nodes:         c.sharder.Nodes,
-			SubChains:     c.SubChains.Items(),
+			SubChains:     subchainPeers,
 		}
 	}
 	if orig == "" {
@@ -1054,7 +1058,27 @@ func openSocket(origin string, chain *Blockchain) bool {
 		for chainId, sharder := range shards {
 			cId, _ := strconv.ParseInt(chainId, 10, 64)
 			scs := cmap.New[*SubChain]()
-			scs.MSet(sharder.SubChains)
+			for k, v := range sharder.SubChains {
+				q, _ := queues.NewLinkedBlockingQueue(1000)
+				q2, _ := queues.NewLinkedBlockingQueue(1000)
+				sc := &SubChain{
+					id:                    1,
+					events:                map[string]*Event{},
+					pendingBlockElections: 0,
+					readyForNewElection:   true,
+					cond_var_:             make(chan int, 10000),
+					readyElectors:         map[string]bool{},
+					nextEventVotes:        map[string]string{},
+					nextBlockQueue:        q,
+					nextEventQueue:        q2,
+					pendingTrxs:           []Transaction{},
+					pendingEvents:         []*Event{},
+					blocks:                []*Event{},
+					remainedCount:         0,
+					peers:                 v,
+				}
+				scs.Set(k, sc)
+			}
 			mss := cmap.New[bool]()
 			c := Chain{id: cId, blockchain: chain, sharder: nil, SubChains: &scs, MyShards: &mss}
 			s := NewSharder(&c)
