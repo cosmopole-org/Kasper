@@ -142,7 +142,6 @@ func NewChain(core core.ICore) *Blockchain {
 		allSubChains: &m5,
 	}
 	chain.blockchain = blockchain
-	blockchain.nodeIpToOrigin("api.decillionai.com")
 	return blockchain
 }
 
@@ -219,7 +218,7 @@ func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 		maps.Copy(peers, initialMap)
 		peers[b.app.Id()] = 1
 		peersArr := []string{}
-		for k, _ := range peers {
+		for k := range peers {
 			peersArr = append(peersArr, k)
 		}
 		completed := false
@@ -228,6 +227,8 @@ func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 			for _, peerAddress := range peersArr {
 				log.Println("socket: ", peerAddress)
 				if peerAddress == b.app.Id() {
+					b.nodeIpToOrigin("api.decillionai.com")
+					b.nodeIpToOrigin(b.app.Id())
 					b.sockets.Set(peerAddress, &Socket{app: b.app, blockchain: b, Conn: nil, Buffer: []Packet{}, Ack: true})
 					newNode := Node{ID: b.app.Id(), Power: rand.Intn(100)}
 					for _, c := range b.chains.Items() {
