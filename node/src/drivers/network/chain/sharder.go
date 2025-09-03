@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"slices"
 	"sort"
 	"time"
 
@@ -73,12 +72,6 @@ func (ds *DynamicShardingSystem) CreateNewShard() *Shard {
 }
 
 func (ds *DynamicShardingSystem) HandleNewNode(newNode Node) {
-
-	if slices.ContainsFunc(ds.Nodes, func(node Node) bool {
-		return node.ID == newNode.ID
-	}) {
-		return
-	}
 
 	if len(ds.Shards) == 0 {
 		fmt.Println("No shards exist. Creating first shard...")

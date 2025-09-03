@@ -114,41 +114,21 @@ type Ok struct {
 
 func NewChain(core core.ICore) *Blockchain {
 	m := cmap.New[*Socket]()
-	q, _ := queues.NewLinkedBlockingQueue(1000)
-	q2, _ := queues.NewLinkedBlockingQueue(1000)
 	peers := map[string]int64{}
 	maps.Copy(peers, initialMap)
 	peers[core.Id()] = 1
-	sc := &SubChain{
-		id:                    1,
-		events:                map[string]*Event{},
-		pendingBlockElections: 0,
-		readyForNewElection:   true,
-		cond_var_:             make(chan int, 10000),
-		readyElectors:         map[string]bool{},
-		nextEventVotes:        map[string]string{},
-		nextBlockQueue:        q,
-		nextEventQueue:        q2,
-		pendingTrxs:           []Transaction{},
-		pendingEvents:         []*Event{},
-		blocks:                []*Event{},
-		remainedCount:         0,
-		peers:                 peers,
-	}
 	m2 := cmap.New[*SubChain]()
-	m2.Set("1", sc)
 	m3 := cmap.New[bool]()
 	m3.Set("1", true)
 	chain := &Chain{
+		id:        1,
 		SubChains: &m2,
 		MyShards:  &m3,
 	}
 	chain.sharder = NewSharder(chain)
-	sc.chain = chain
 	m4 := cmap.New[*Chain]()
 	m4.Set("1", chain)
 	m5 := cmap.New[*SubChain]()
-	m5.Set("1", sc)
 	m6 := cmap.New[*cmap.ConcurrentMap[string, bool]]()
 	m7 := cmap.New[string]()
 	blockchain := &Blockchain{
