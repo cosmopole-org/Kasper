@@ -232,6 +232,42 @@ func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 			b.handleConnection(conn, "")
 		}
 	}, true)
+	future.Async(func() {
+		log.Println("trying to connect to other peers...")
+		peers := map[string]int64{}
+		maps.Copy(peers, initialMap)
+		peers[b.app.Id()] = 1
+		peersArr := []string{}
+		for k, _ := range peers {
+			peersArr = append(peersArr, k)
+		}
+		completed := false
+		for !completed {
+			completed = true
+			for _, peerAddress := range peersArr {
+				log.Println("socket: ", peerAddress)
+				if peerAddress == b.app.Id() {
+					b.sockets.Set(peerAddress, &Socket{app: b.app, blockchain: b, Conn: nil, Buffer: []Packet{}, Ack: true})
+					newNode := Node{ID: b.app.Id(), Power: rand.Intn(100)}
+					for _, c := range b.chains.Items() {
+						c.sharder.HandleNewNode(newNode)
+					}
+					continue
+				}
+				// if peerAddress < c.chain.blockchain.app.Id() {
+				// 	continue
+				// }
+				if b.sockets.Has(peerAddress) {
+					continue
+				}
+				if !openSocket(peerAddress, b) {
+					completed = false
+					continue
+				}
+			}
+			time.Sleep(time.Duration(1) * time.Second)
+		}
+	}, false)
 }
 
 func (t *Blockchain) listenForPackets(socket *Socket) {
@@ -408,8 +444,8 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 	}
 	socket := &Socket{Id: strings.Split(conn.RemoteAddr().String(), ":")[0], Buffer: []Packet{}, Conn: conn, app: t.app, blockchain: t, Ack: true}
 	t.sockets.Set(origin, socket)
-	newNode := Node{ID: origin, Power: rand.Intn(100)}
 	if orig == "" {
+		newNode := Node{ID: origin, Power: rand.Intn(100)}
 		for _, c := range t.chains.Items() {
 			c.sharder.HandleNewNode(newNode)
 		}
@@ -1429,39 +1465,6 @@ func (c *SubChain) Run() {
 				defer c.Lock.Unlock()
 				c.remainedCount--
 			}()
-		}
-	}, false)
-
-	future.Async(func() {
-		log.Println("trying to connect to other peers...")
-		peers := map[string]int64{}
-		maps.Copy(peers, initialMap)
-		peers[c.chain.blockchain.app.Id()] = 1
-		peersArr := []string{}
-		for k, _ := range peers {
-			peersArr = append(peersArr, k)
-		}
-		completed := false
-		for !completed {
-			completed = true
-			for _, peerAddress := range peersArr {
-				log.Println("socket: ", peerAddress)
-				if peerAddress == c.chain.blockchain.app.Id() {
-					c.chain.blockchain.sockets.Set(peerAddress, &Socket{app: c.chain.blockchain.app, blockchain: c.chain.blockchain, Conn: nil, Buffer: []Packet{}, Ack: true})
-					continue
-				}
-				// if peerAddress < c.chain.blockchain.app.Id() {
-				// 	continue
-				// }
-				if c.chain.blockchain.sockets.Has(peerAddress) {
-					continue
-				}
-				if !openSocket(peerAddress, c.chain.blockchain) {
-					completed = false
-					continue
-				}
-			}
-			time.Sleep(time.Duration(1) * time.Second)
 		}
 	}, false)
 }

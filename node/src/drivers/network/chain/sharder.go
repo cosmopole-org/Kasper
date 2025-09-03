@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"time"
 
@@ -72,6 +73,13 @@ func (ds *DynamicShardingSystem) CreateNewShard() *Shard {
 }
 
 func (ds *DynamicShardingSystem) HandleNewNode(newNode Node) {
+
+	if slices.ContainsFunc(ds.Nodes, func(node Node) bool {
+		return node.ID == newNode.ID
+	}) {
+		return
+	}
+
 	if len(ds.Shards) == 0 {
 		fmt.Println("No shards exist. Creating first shard...")
 		ds.CreateNewShard()
@@ -120,9 +128,11 @@ func (ds *DynamicShardingSystem) CheckAndSplitShards() {
 
 func (ds *DynamicShardingSystem) CheckAndModifyMyShards(nodeId string, shardId int64) {
 	ds.chain.MyShards.Clear()
-	ds.chain.MyShards.Set(fmt.Sprintf("%d", shardId), true)
-	shardChain, _ := ds.chain.blockchain.allSubChains.Get(fmt.Sprintf("%d", shardId))
-	shardChain.Run()
+	if !ds.chain.MyShards.Has(fmt.Sprintf("%d", shardId)) {
+		ds.chain.MyShards.Set(fmt.Sprintf("%d", shardId), true)
+		shardChain, _ := ds.chain.blockchain.allSubChains.Get(fmt.Sprintf("%d", shardId))
+		shardChain.Run()
+	}
 }
 
 func (ds *DynamicShardingSystem) SplitShardSmartly(shard *Shard) {
