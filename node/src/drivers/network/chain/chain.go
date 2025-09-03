@@ -1531,7 +1531,7 @@ func (c *SubChain) MemorizeResponseBacked(proof string, signature string, rndNum
 	if e, ok := c.events[proof]; ok {
 		log.Println("hello 3")
 		e.backedResponses[origin] = Guarantee{Proof: proof, Sign: signature, RndNum: rndNum}
-		if c.chain.MyShards.Has(c.chain.blockchain.app.Id()) {
+		if c.chain.MyShards.Has(fmt.Sprintf("%d", c.id)) {
 			log.Println("hello 4 ", len(c.peers), len(e.backedResponses))
 			if len(e.backedResponses) == (len(c.peers) - 1) {
 				return true
