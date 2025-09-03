@@ -119,7 +119,6 @@ func NewChain(core core.ICore) *Blockchain {
 	peers[core.Id()] = 1
 	m2 := cmap.New[*SubChain]()
 	m3 := cmap.New[bool]()
-	m3.Set("1", true)
 	chain := &Chain{
 		id:        1,
 		SubChains: &m2,
