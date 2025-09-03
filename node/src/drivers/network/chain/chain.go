@@ -513,10 +513,21 @@ func (chainSocket *Socket) processPacket(chainId string, origin string, packet [
 		if err != nil {
 			log.Println(err)
 		}
+		chainIdInt, err := strconv.ParseInt(chainId, 10, 64)
+		if err != nil {
+			log.Println(err)
+		}
+		chainIdBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(chainIdBytes, uint64(chainIdInt))
+		_, err = chainSocket.Conn.Write(chainIdBytes)
+		if err != nil {
+			log.Println(err)
+		}
 		_, err = chainSocket.Conn.Write([]byte{0x01})
 		if err != nil {
 			log.Println(err)
 		}
+		log.Println("chainId", chainId)
 		ok := false
 		subchain, ok = chainSocket.blockchain.allSubChains.Get(chainId)
 		if !ok {
@@ -1085,7 +1096,7 @@ func openSocket(origin string, chain *Blockchain) bool {
 				q, _ := queues.NewLinkedBlockingQueue(1000)
 				q2, _ := queues.NewLinkedBlockingQueue(1000)
 				sc := &SubChain{
-					id:                    1,
+					id:                    cId,
 					events:                map[string]*Event{},
 					pendingBlockElections: 0,
 					readyForNewElection:   true,
