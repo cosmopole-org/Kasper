@@ -50,6 +50,7 @@ func NewChain(core core.ICore) *Blockchain {
 		_config.Babble.Logger().Error("Cannot initialize engine:", err)
 		panic(err)
 	}
+	blockchain.babbleInst = engine
 	return blockchain
 }
 
