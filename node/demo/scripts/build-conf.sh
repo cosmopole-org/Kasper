@@ -8,9 +8,10 @@ DEST=${3:-"$PWD/conf"}
 IPBASE=${4:-172.77.5.}
 PORT=${5:-1337}
 
-echo "165.232.32.106:$PORT" > $dest/addr
 
 dest=$DEST/node1
+
+echo "165.232.32.106:$PORT" > $dest/addr
 mkdir -p $dest
 
 echo "Generating key pair for node$i"
@@ -29,7 +30,7 @@ if "$WEBRTC"; then
 else
     printf "\t\t\"NetAddr\":\"$(cat $DEST/node1/addr)\",\n" >> $PFILE
 fi
-printf "\t\t\"PubKeyHex\":\"$(cat $DEST/node1/key.pub)\",\n" >> $PFILE
+printf "\t\t\"PubKeyHex\":\"$(cat /root/.babble/key.pub)\",\n" >> $PFILE
 printf "\t\t\"Moniker\":\"node1\"\n" >> $PFILE
 printf "\t}%s\n"  $com >> $PFILE
 
