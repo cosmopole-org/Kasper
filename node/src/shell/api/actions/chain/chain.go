@@ -7,6 +7,7 @@ import (
 	"kasper/src/abstract/state"
 	inputs_chain "kasper/src/shell/api/inputs/chain"
 	"kasper/src/shell/api/model"
+	"net"
 )
 
 type Actions struct {
@@ -59,6 +60,14 @@ func (a *Actions) SubmitBaseTrx(state state.IState, input inputs_chain.SubBaseTr
 
 // RegisterNode /chains/registerNode check [ true false false ] access [ true false false false POST ]
 func (a *Actions) RegisterNode(state state.IState, input inputs_chain.RegisterNodeInput) (any, error) {
-	a.App.Tools().Network().Chain().SubmitTrx("1", "", "newNode", []byte(input.Orig))
+	ipAddr := ""
+	ips, _ := net.LookupIP(input.Orig)
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			ipAddr = ipv4.String()
+			break
+		}
+	}
+	state.Trx().PutLink("NodeIpToHost::"+ipAddr, input.Orig)
 	return map[string]any{}, nil
 }

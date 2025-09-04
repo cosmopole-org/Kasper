@@ -185,14 +185,13 @@ func (t *Tcp) handleConnection(conn net.Conn) *Socket {
 }
 
 func (t *Tcp) NewSocket(destAddress string) *Socket {
-	addr := destAddress + ":8079"
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: false,
-		ServerName:         destAddress,
+		ServerName:         strings.Split(destAddress, ":")[0],
 	}
-	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	conn, err := tls.Dial("tcp", destAddress, tlsConfig)
 	if err != nil {
-		log.Fatalf("failed to connect: %v", err)
+		log.Println("failed to connect:", err.Error())
 	}
 	return t.handleConnection(conn)
 }

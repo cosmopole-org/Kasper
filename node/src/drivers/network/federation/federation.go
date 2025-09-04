@@ -71,13 +71,10 @@ func (fed *FedNet) SecondStageForFill(storage storage.IStorage, file file.IFile,
 		hostName := ""
 		for _, peer := range fed.app.Tools().Network().Chain().Peers() {
 			if peer == ip {
-				a, err := net.LookupAddr(ip)
-				if err != nil {
-					log.Println(err)
-					log.Println("ip not friendly")
-					return
-				}
-				hostName = a[0]
+				fed.app.ModifyState(true, func(trx trx.ITrx) error {
+					hostName = trx.GetLink("NodeIpToHost::" + ip)
+					return nil
+				})
 				break
 			}
 		}

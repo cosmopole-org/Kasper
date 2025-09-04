@@ -428,20 +428,38 @@ func (tw *TrxWrapper) GetObjList(typ string, objIds []string, queryMap map[strin
 	}
 }
 
-func (tw *TrxWrapper) GetLinksList(p string, offset int, count int) ([]string, error) {
-	prefix := []byte("link::" + p)
-	opts := badger.DefaultIteratorOptions
-	opts.PrefetchValues = true
-	opts.Prefix = prefix
-	it := tw.dbTrx.NewIterator(opts)
-	defer it.Close()
-	m := []string{}
-	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-		item := it.Item()
-		itemKey := item.Key()
-		m = append(m, string(itemKey)[len("link::"):])
+func (tw *TrxWrapper) GetLinksList(p string, offset int, count int, shouldBeGlobal ...bool) ([]string, error) {
+	if len(shouldBeGlobal) > 0 && shouldBeGlobal[0] {
+		prefix := []byte("link::" + p)
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		opts.Prefix = prefix
+		it := tw.dbTrx.NewIterator(opts)
+		defer it.Close()
+		m := []string{}
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			itemKey := item.Key()
+			if strings.HasSuffix(string(itemKey), "@global") {
+				m = append(m, string(itemKey)[len("link::"):])
+			}
+		}
+		return m, nil
+	} else {
+		prefix := []byte("link::" + p)
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		opts.Prefix = prefix
+		it := tw.dbTrx.NewIterator(opts)
+		defer it.Close()
+		m := []string{}
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			itemKey := item.Key()
+			m = append(m, string(itemKey)[len("link::"):])
+		}
+		return m, nil
 	}
-	return m, nil
 }
 
 func (tw *TrxWrapper) SearchLinkValsList(typ string, fromColumn string, toColumn string, word string, filter map[string]string, offset int64, count int64) ([]string, error) {

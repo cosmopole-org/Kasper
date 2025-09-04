@@ -83,7 +83,7 @@ func (d Point) Pull(trx trx.ITrx, flags ...bool) Point {
 	return d
 }
 
-func (d Point) List(trx trx.ITrx, prefix string, positional ...int) ([]Point, error) {
+func (d Point) List(trx trx.ITrx, prefix string, global bool, positional ...int) ([]Point, error) {
 	offset := -1
 	count := -1
 	if len(positional) == 1 {
@@ -92,7 +92,7 @@ func (d Point) List(trx trx.ITrx, prefix string, positional ...int) ([]Point, er
 	if len(positional) == 2 {
 		count = positional[1]
 	}
-	list, err := trx.GetLinksList(prefix, offset, count)
+	list, err := trx.GetLinksList(prefix, offset, count, global)
 	if err != nil {
 		log.Println(err)
 		return nil, err
