@@ -10,6 +10,9 @@ PORT=${5:-1337}
 
 echo "165.232.32.106:$PORT" > $dest/addr
 
+dest=$DEST/node1
+mkdir -p $dest
+
 echo "Generating key pair for node$i"
 go run /home/keyhan/Kasper/node/keygen/keygen.go
 
