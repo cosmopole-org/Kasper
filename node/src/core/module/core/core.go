@@ -448,12 +448,13 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 					return ""
 				}
 				if c.elections == nil {
-					c.elections = []chain.Election{}
+					return ""
 				}
 				if phase == "start-reg" {
 					c.elecReg = true
 					c.elecStarter = voter
 					c.elecStartTime = time.Now().UnixMilli()
+					c.elections = []chain.Election{}
 					for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
 						c.elections = append(c.elections, chain.Election{Participants: map[string]bool{}, Commits: map[string][]byte{}, Reveals: map[string]string{}})
 					}
@@ -943,15 +944,21 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 	future.Async(func() {
 		for {
 			time.Sleep(time.Duration(1) * time.Second)
-			minutes := time.Now().Minute()
-			seconds := time.Now().Second()
-			if (minutes == 0) && ((seconds >= 0) && (seconds <= 2)) {
-				c.DoElection()
-				time.Sleep(2 * time.Minute)
-			}
+			func() {
+				defer func() {
+					if err := recover(); err != nil {
+						log.Println(err)
+					}
+				}()
+				minutes := time.Now().Minute()
+				seconds := time.Now().Second()
+				if (minutes == 0) && ((seconds >= 0) && (seconds <= 2)) {
+					c.DoElection()
+					time.Sleep(2 * time.Minute)
+				}
+			}()
 		}
-	}, true)
-
+	}, false)
 }
 
 func (c *Core) DoElection() {
