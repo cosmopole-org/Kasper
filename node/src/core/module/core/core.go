@@ -447,9 +447,6 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 				if !ok2 {
 					return ""
 				}
-				if c.elections == nil {
-					return ""
-				}
 				if phase == "start-reg" {
 					c.elecReg = true
 					c.elecStarter = voter
@@ -478,6 +475,9 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 						}, false)
 					}
 				} else if phase == "end-reg" {
+					if c.elections == nil {
+						return ""
+					}
 					if c.elecStarter == voter && ((time.Now().UnixMilli() - c.elecStartTime) > 8000) {
 						c.elecReg = false
 						payload := [][]byte{}
@@ -501,12 +501,18 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 						}, false)
 					}
 				} else if phase == "register" {
+					if c.elections == nil {
+						return ""
+					}
 					if c.elecReg {
 						for i := 0; i < MAX_VALIDATOR_COUNT; i++ {
 							c.elections[i].Participants[voter] = true
 						}
 					}
 				} else if phase == "commit" {
+					if c.elections == nil {
+						return ""
+					}
 					votes := [][]byte{}
 					e := json.Unmarshal(packet.Payload, &votes)
 					if e != nil {
@@ -536,6 +542,9 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 						}
 					}
 				} else if phase == "reveal" {
+					if c.elections == nil {
+						return ""
+					}
 					votes := []string{}
 					e := json.Unmarshal(packet.Payload, &votes)
 					if e != nil {
