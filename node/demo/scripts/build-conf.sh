@@ -10,6 +10,9 @@ PORT=${5:-1337}
 
 echo "165.232.32.106:$PORT" > $dest/addr
 
+echo "Generating key pair for node$i"
+go run /home/keyhan/Kasper/node/keygen/keygen.go
+
 PFILE=$DEST/peers.json
 echo "[" > $PFILE
 com=","
@@ -32,4 +35,3 @@ echo "]" >> $PFILE
 dest=$DEST/node1
 cp $DEST/peers.json $dest/
 cp $DEST/peers.json $dest/peers.genesis.json
-cp $PWD/../src/net/signal/wamp/test_data/cert.pem $dest/cert.pem
