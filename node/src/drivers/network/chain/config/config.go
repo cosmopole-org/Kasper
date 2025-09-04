@@ -35,8 +35,8 @@ const (
 // Default configuration values.
 const (
 	DefaultLogLevel             = "debug"
-	DefaultBindAddr             = "127.0.0.1:1337"
-	DefaultServiceAddr          = "127.0.0.1:8000"
+	DefaultBindAddr             = "0.0.0.0:1337"
+	DefaultServiceAddr          = "0.0.0.0:8000"
 	DefaultHeartbeatTimeout     = 10 * time.Millisecond
 	DefaultSlowHeartbeatTimeout = 1000 * time.Millisecond
 	DefaultTCPTimeout           = 1000 * time.Millisecond
@@ -48,7 +48,7 @@ const (
 	DefaultMaintenanceMode      = false
 	DefaultSuspendLimit         = 100
 	DefaultWebRTC               = false
-	DefaultSignalAddr           = "127.0.0.1:2443"
+	DefaultSignalAddr           = "0.0.0.0:2443"
 	DefaultSignalRealm          = "main"
 	DefaultSignalSkipVerify     = false
 	DefaultICEAddress           = "stun:stun.l.google.com:19302"
