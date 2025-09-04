@@ -48,7 +48,7 @@ const (
 	DefaultMaintenanceMode      = false
 	DefaultSuspendLimit         = 100
 	DefaultWebRTC               = false
-	DefaultSignalAddr           = "165.232.32.106:2443"
+	DefaultSignalAddr           = "127.0.0.1:2443"
 	DefaultSignalRealm          = "main"
 	DefaultSignalSkipVerify     = false
 	DefaultICEAddress           = "stun:stun.l.google.com:19302"
