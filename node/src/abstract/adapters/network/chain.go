@@ -13,4 +13,5 @@ type IChain interface {
 	UserOwnsOrigin(userId string, origin string) bool
 	GetNodeOwnerId(origin string) string
 	GetValidatorsOfMachineShard(machineId string) []string
+	Close()
 }

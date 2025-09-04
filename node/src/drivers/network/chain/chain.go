@@ -61,6 +61,10 @@ func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 	}, false)
 }
 
+func (b *Blockchain) Close() {
+	b.babbleInst.Node.Leave()
+}
+
 func (c *Blockchain) RegisterPipeline(pipeline func([][]byte) []string) {
 	c.pipeline = pipeline
 }
