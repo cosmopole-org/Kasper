@@ -20,6 +20,6 @@ curl -s http://165.232.32.106:8079/genesispeers > $dest/peers.genesis.json
 echo "Fetching peers.json from node1"
 curl -s http://165.232.32.106:8079/peers > $dest/peers.json
 
-cp $dest /root/.babble
+cp -r $dest /root/.babble
 
 bash run-testnet.sh
