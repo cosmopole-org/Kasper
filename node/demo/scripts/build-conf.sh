@@ -15,7 +15,7 @@ mkdir -p $dest
 echo "165.232.32.106:$PORT" > $dest/addr
 
 echo "Generating key pair for node$i"
-go run /home/keyhan/Kasper/node/keygen/keygen.go
+go run ../..//keygen/keygen.go
 
 PFILE=$DEST/peers.json
 echo "[" > $PFILE
