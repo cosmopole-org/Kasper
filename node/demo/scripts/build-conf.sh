@@ -39,3 +39,6 @@ echo "]" >> $PFILE
 dest=$DEST/node1
 cp $DEST/peers.json $dest/
 cp $DEST/peers.json $dest/peers.genesis.json
+
+cp cp $DEST/peers.json /root/.babble/
+cp cp $DEST/peers.json /root/.babble/peers.genesis.json
