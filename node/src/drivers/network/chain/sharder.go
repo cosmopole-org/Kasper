@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"time"
 
@@ -73,22 +74,38 @@ func (ds *DynamicShardingSystem) CreateNewShard() *Shard {
 
 func (ds *DynamicShardingSystem) HandleNewNode(newNode Node) {
 
-	if len(ds.Shards) == 0 {
-		fmt.Println("No shards exist. Creating first shard...")
-		ds.CreateNewShard()
-	}
-
 	var bestShard *Shard
-	for i := range ds.Shards {
-		if bestShard == nil || ds.Shards[i].Load < bestShard.Load {
-			bestShard = &ds.Shards[i]
+	var exists = true
+	if !slices.ContainsFunc(ds.Nodes, func(node Node) bool {
+		if node.ID == newNode.ID {
+			for _, shard := range ds.Shards {
+				if shard.ID == node.ShardID {
+					bestShard = &shard
+					break
+				}
+			}
+			return true
+		}
+		return false
+	}) {
+		exists = false
+		if len(ds.Shards) == 0 {
+			fmt.Println("No shards exist. Creating first shard...")
+			ds.CreateNewShard()
+		}
+		for i := range ds.Shards {
+			if bestShard == nil || ds.Shards[i].Load < bestShard.Load {
+				bestShard = &ds.Shards[i]
+			}
 		}
 	}
 
 	newNode.ShardID = bestShard.ID
-	ds.CheckAndModifyMyShards(newNode.ID, newNode.ShardID)
-	bestShard.Nodes = append(bestShard.Nodes, newNode)
-	ds.Nodes = append(ds.Nodes, newNode)
+	if !exists {
+		ds.CheckAndModifyMyShards(newNode.ID, newNode.ShardID)
+		bestShard.Nodes = append(bestShard.Nodes, newNode)
+		ds.Nodes = append(ds.Nodes, newNode)
+	}
 	c, _ := ds.chain.blockchain.allSubChains.Get(fmt.Sprintf("%d", bestShard.ID))
 	c.peers[newNode.ID] = 100
 	fmt.Printf("New Node %s assigned to Shard %d\n", newNode.ID, bestShard.ID)

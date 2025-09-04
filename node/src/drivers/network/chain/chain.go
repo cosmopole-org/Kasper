@@ -283,6 +283,19 @@ func (t *Blockchain) listenForPackets(socket *Socket, needReconnect bool) {
 			if err != nil {
 				log.Println(origin, err)
 				log.Println(origin, "socket had error and closed")
+				func() {
+					socket.Lock.Lock()
+					defer socket.Lock.Unlock()
+					for c := range t.chains.IterBuffered() {
+						for s := range c.Val.SubChains.IterBuffered() {
+							func() {
+								s.Val.Lock.Lock()
+								defer s.Val.Lock.Unlock()
+								delete(s.Val.peers, origin)
+							}()
+						}
+					}
+				}()
 				if needReconnect {
 					openSocket(origin, t)
 				}
@@ -434,8 +447,19 @@ func (t *Blockchain) handleConnection(conn net.Conn, orig string) {
 		conn.Write(b)
 		conn.Write(str)
 	}
-	socket := &Socket{Id: strings.Split(conn.RemoteAddr().String(), ":")[0], Buffer: []Packet{}, Conn: conn, app: t.app, blockchain: t, Ack: true}
-	t.sockets.Set(origin, socket)
+	var socket *Socket
+	if s, found := t.sockets.Get(origin); found {
+		s.Conn = conn
+		socket = s
+		func() {
+			s.Lock.Lock()
+			defer s.Lock.Unlock()
+			s.pushBuffer()
+		}()
+	} else {
+		socket := &Socket{Id: origin, Buffer: []Packet{}, Conn: conn, app: t.app, blockchain: t, Ack: true}
+		t.sockets.Set(origin, socket)
+	}
 	if orig == "" {
 		newNode := Node{ID: origin, Power: rand.Intn(100)}
 		for _, c := range t.chains.Items() {
@@ -1118,25 +1142,29 @@ func openSocket(origin string, chain *Blockchain) bool {
 			for k, v := range sharder.SubChains {
 				q, _ := queues.NewLinkedBlockingQueue(1000)
 				q2, _ := queues.NewLinkedBlockingQueue(1000)
-				sc := &SubChain{
-					id:                    cId,
-					chain:                 &c,
-					events:                map[string]*Event{},
-					pendingBlockElections: 0,
-					readyForNewElection:   true,
-					cond_var_:             make(chan int, 10000),
-					readyElectors:         map[string]bool{},
-					nextEventVotes:        map[string]string{},
-					nextBlockQueue:        q,
-					nextEventQueue:        q2,
-					pendingTrxs:           []Transaction{},
-					pendingEvents:         []*Event{},
-					blocks:                []*Event{},
-					remainedCount:         0,
-					peers:                 v,
+				if oldSc, found := chain.allSubChains.Get(chainId); found {
+					oldSc.peers = v
+				} else {
+					sc := &SubChain{
+						id:                    cId,
+						chain:                 &c,
+						events:                map[string]*Event{},
+						pendingBlockElections: 0,
+						readyForNewElection:   true,
+						cond_var_:             make(chan int, 10000),
+						readyElectors:         map[string]bool{},
+						nextEventVotes:        map[string]string{},
+						nextBlockQueue:        q,
+						nextEventQueue:        q2,
+						pendingTrxs:           []Transaction{},
+						pendingEvents:         []*Event{},
+						blocks:                []*Event{},
+						remainedCount:         0,
+						peers:                 v,
+					}
+					scs.Set(k, sc)
+					chain.allSubChains.Set(k, sc)
 				}
-				scs.Set(k, sc)
-				chain.allSubChains.Set(k, sc)
 			}
 			mss := cmap.New[bool]()
 			c.MyShards = &mss
