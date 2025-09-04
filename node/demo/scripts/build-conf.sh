@@ -40,5 +40,5 @@ dest=$DEST/node1
 cp $DEST/peers.json $dest/
 cp $DEST/peers.json $dest/peers.genesis.json
 
-cp $DEST/peers.json /root/.babble/
+cp $DEST/peers.json /root/.babble/peers.json
 cp $DEST/peers.json /root/.babble/peers.genesis.json
