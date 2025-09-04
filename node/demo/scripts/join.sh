@@ -20,21 +20,6 @@ curl -s http://165.232.32.106:80/genesispeers > $dest/peers.genesis.json
 echo "Fetching peers.json from node1"
 curl -s http://172.77.5.1:80/peers > $dest/peers.json
 
-docker create --name=node$N --net=babblenet --ip=172.77.5.$N kasper:latest run \
-    --heartbeat=100ms \
-    --moniker="node$N" \
-    --cache-size=50000 \
-    --listen="172.77.5.$N:1337" \
-    --proxy-listen="172.77.5.$N:1338" \
-    --client-connect="172.77.10.$N:1339" \
-    --service-listen="172.77.5.$N:80" \
-    --fast-sync=$FASTSYNC \
-    --log="debug" \
-    --sync-limit=100 \
-    --webrtc=$WEBRTC \
-    --signal-addr="172.77.15.1:2443"
+cp $dest /root/.babble
 
- # --store \
-
-docker cp $dest node$N:/.babble
-docker start node$N
+bash run-testnet.sh

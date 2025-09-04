@@ -51,6 +51,7 @@ func NewChain(core core.ICore) *Blockchain {
 		panic(err)
 	}
 	blockchain.babbleInst = engine
+	blockchain.proxy = proxy
 	return blockchain
 }
 
