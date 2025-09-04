@@ -93,7 +93,7 @@ func Example() {
 	proxy := inmem.NewInmemProxy(handler, nil)
 
 	// Start from default configuration.
-	babbleConfig := config.NewDefaultConfig()
+	babbleConfig := config.NewDefaultConfig("")
 
 	// Set the AppProxy in the Babble configuration.
 	babbleConfig.Proxy = proxy

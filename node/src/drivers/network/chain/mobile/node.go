@@ -35,7 +35,7 @@ func New(
 	configDir string,
 ) *Node {
 
-	babbleConfig := config.NewDefaultConfig()
+	babbleConfig := config.NewDefaultConfig("")
 	v := viper.New()
 
 	v.SetConfigName("babble")  // name of config file (without extension)

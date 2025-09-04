@@ -35,8 +35,8 @@ const (
 // Default configuration values.
 const (
 	DefaultLogLevel             = "debug"
-	DefaultBindAddr             = "165.232.32.106:1337"
-	DefaultServiceAddr          = "165.232.32.106:8000"
+	DefaultBindAddr             = "0.0.0.0:1337"
+	DefaultServiceAddr          = "0.0.0.0:8000"
 	DefaultHeartbeatTimeout     = 10 * time.Millisecond
 	DefaultSlowHeartbeatTimeout = 1000 * time.Millisecond
 	DefaultTCPTimeout           = 1000 * time.Millisecond
@@ -201,8 +201,9 @@ type Config struct {
 // configuration values are set, even if they cancel eachother out. For example,
 // When WebRTC = false, all the Signal options are ignored. Likewise, when
 // WebRTC = true, BindAddr and ServiceAddr are not used.
-func NewDefaultConfig() *Config {
+func NewDefaultConfig(advAddr string) *Config {
 	config := &Config{
+		AdvertiseAddr:        advAddr,
 		DataDir:              DefaultDataDir(),
 		LogLevel:             DefaultLogLevel,
 		BindAddr:             DefaultBindAddr,
@@ -233,7 +234,7 @@ func NewDefaultConfig() *Config {
 // NewTestConfig returns a config object with default values and a special
 // logger for debugging tests.
 func NewTestConfig(t testing.TB, level logrus.Level) *Config {
-	config := NewDefaultConfig()
+	config := NewDefaultConfig("")
 	config.logger = common.NewTestLogger(t, level)
 	return config
 }

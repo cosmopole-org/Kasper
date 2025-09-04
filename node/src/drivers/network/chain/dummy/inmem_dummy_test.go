@@ -123,7 +123,7 @@ func TestInmemDummyServerSide(t *testing.T) {
 
 func ExampleInmemDummyClient() {
 	// Start from default Babble configuration.
-	babbleConfig := config.NewDefaultConfig()
+	babbleConfig := config.NewDefaultConfig("")
 
 	// Create dummy InmemProxy
 	dummy := NewInmemDummyClient(babbleConfig.Logger())

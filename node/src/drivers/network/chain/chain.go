@@ -10,6 +10,7 @@ import (
 	"kasper/src/drivers/network/chain/proxy"
 	"kasper/src/drivers/network/chain/proxy/inmem"
 	"kasper/src/shell/utils/future"
+	"os"
 	"strings"
 )
 
@@ -36,7 +37,7 @@ func NewChain(core core.ICore) *Blockchain {
 		app: core,
 	}
 	_config := &CLIConfig{
-		Babble:     *config.NewDefaultConfig(),
+		Babble:     *config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT")),
 		ProxyAddr:  "127.0.0.1:1338",
 		ClientAddr: "127.0.0.1:1339",
 	}
