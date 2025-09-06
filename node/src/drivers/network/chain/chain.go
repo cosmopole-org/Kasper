@@ -19,6 +19,7 @@ type Blockchain struct {
 	babbleInst *babble.Babble
 	proxy      *inmem.InmemProxy
 	pipeline   func([][]byte) []string
+	sharder    *ShardManager
 }
 
 type Ok struct {
@@ -53,6 +54,9 @@ func NewChain(core core.ICore) *Blockchain {
 	}
 	blockchain.babbleInst = engine
 	blockchain.proxy = proxy
+
+	blockchain.sharder = NewShardManager(1, 1, 10, 5, 100000, 1)
+
 	return blockchain
 }
 
@@ -83,7 +87,7 @@ func (c *Blockchain) SubmitTrx(chainId string, machineId string, typ string, pay
 }
 
 func (c *Blockchain) NotifyNewMachineCreated(chainId int64, machineId string) {
-
+	c.sharder.DeployDapp(machineId)
 }
 
 func (c *Blockchain) CreateTempChain(peers map[string]int64) int64 {
@@ -116,7 +120,11 @@ type HgHandler struct {
 }
 
 func (p *HgHandler) CommitHandler(block hashgraph.Block) (proxy.CommitResponse, error) {
-	p.Chain.pipeline(block.Transactions())
+	machineIds := p.Chain.pipeline(block.Transactions())
+
+	for _, macId := range machineIds {
+		p.Chain.sharder.ProcessDAppTransaction(macId)
+	}
 
 	receipts := []hashgraph.InternalTransactionReceipt{}
 	for _, it := range block.InternalTransactions() {

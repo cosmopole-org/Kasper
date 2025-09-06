@@ -120,6 +120,7 @@ type Core struct {
 	ownerPrivKey     *rsa.PrivateKey
 	id               string
 	tools            tools.ITools
+	started          bool
 	gods             []string
 	chain            chan any
 	chainCallbacks   map[string]*chain.ChainCallback
@@ -154,6 +155,7 @@ func NewCore(origin string, ownerId string, ownerPrivateKey *rsa.PrivateKey) *Co
 		elecReg:          false,
 		executors:        execs,
 		actionStore:      actor.NewActor(),
+		started:          false,
 	}
 }
 
@@ -848,6 +850,10 @@ func (c *Core) Close() {
 	c.tools.Wasm().CloseKVDB()
 }
 
+func (c *Core) MarkAsStarted() {
+	c.started = true
+}
+
 func (c *Core) Load(gods []string, args map[string]interface{}) {
 	c.gods = gods
 
@@ -896,7 +902,8 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 		for _, trx := range b {
 			firstIndex := strings.Index(string(trx), "::")
 			log.Println(string(trx))
-			r := c.OnChainPacket(string(trx[:firstIndex]), trx[firstIndex+2:])
+			typ := string(trx[:firstIndex])
+			r := c.OnChainPacket(typ, trx[firstIndex+2:])
 			if r != "" {
 				machineIds = append(machineIds, r)
 			}
