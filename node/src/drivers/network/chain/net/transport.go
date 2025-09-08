@@ -9,7 +9,7 @@ type Transport interface {
 
 	// Consumer returns a channel that can be used to consume and respond to RPC
 	// requests.
-	Consumer() <-chan RPC
+	Consumer(string, string) <-chan RPC
 
 	// LocalAddr is used to return our local address
 	LocalAddr() string

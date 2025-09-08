@@ -15,9 +15,11 @@ import (
 
 func (n *Node) requestSync(target string, known map[uint32]int, syncLimit int) (net.SyncResponse, error) {
 	args := net.SyncRequest{
-		FromID:    n.core.validator.ID(),
-		SyncLimit: syncLimit,
-		Known:     known,
+		FromID:       n.core.validator.ID(),
+		SyncLimit:    syncLimit,
+		Known:        known,
+		WorkChainId:  n.WorkchainId,
+		ShardChainId: n.ShardchainId,
 	}
 
 	var out net.SyncResponse
@@ -29,8 +31,10 @@ func (n *Node) requestSync(target string, known map[uint32]int, syncLimit int) (
 
 func (n *Node) requestEagerSync(target string, events []hg.WireEvent) (net.EagerSyncResponse, error) {
 	args := net.EagerSyncRequest{
-		FromID: n.core.validator.ID(),
-		Events: events,
+		FromID:       n.core.validator.ID(),
+		Events:       events,
+		WorkChainId:  n.WorkchainId,
+		ShardChainId: n.ShardchainId,
 	}
 
 	var out net.EagerSyncResponse
@@ -46,7 +50,9 @@ func (n *Node) requestFastForward(target string) (net.FastForwardResponse, error
 	}).Debug("RequestFastForward()")
 
 	args := net.FastForwardRequest{
-		FromID: n.core.validator.ID(),
+		FromID:       n.core.validator.ID(),
+		WorkChainId:  n.WorkchainId,
+		ShardChainId: n.ShardchainId,
 	}
 
 	var out net.FastForwardResponse
@@ -65,7 +71,11 @@ func (n *Node) requestJoin(target string) (net.JoinResponse, error) {
 
 	joinTx.Sign(n.core.validator.Key)
 
-	args := net.JoinRequest{InternalTransaction: joinTx}
+	args := net.JoinRequest{
+		InternalTransaction: joinTx,
+		WorkChainId:         n.WorkchainId,
+		ShardChainId:        n.ShardchainId,
+	}
 
 	var out net.JoinResponse
 

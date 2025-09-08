@@ -5,26 +5,41 @@ import (
 	"kasper/src/abstract/models/core"
 	"kasper/src/drivers/network/chain/babble"
 	"kasper/src/drivers/network/chain/config"
+	"kasper/src/drivers/network/chain/crypto/keys"
 	"kasper/src/drivers/network/chain/hashgraph"
+	"kasper/src/drivers/network/chain/net"
+	"kasper/src/drivers/network/chain/net/signal/wamp"
 	"kasper/src/drivers/network/chain/node/state"
 	"kasper/src/drivers/network/chain/proxy"
 	"kasper/src/drivers/network/chain/proxy/inmem"
 	"kasper/src/shell/utils/future"
 	"os"
 	"strings"
+
+	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
-type Blockchain struct {
-	app        core.ICore
-	babbleInst *babble.Babble
-	proxy      *inmem.InmemProxy
-	pipeline   func([][]byte) []string
-	sharder    *ShardManager
+type WorkChain struct {
+	Id          string
+	blockchain  *Blockchain
+	mainLedger  *babble.Babble
+	mainProxy   *inmem.InmemProxy
+	sharder     *ShardManager
+	shardChains cmap.ConcurrentMap[string, *ShardChain]
 }
 
-type Ok struct {
-	Proof  string
-	RndNum int
+type ShardChain struct {
+	Id          string
+	shardLedger *babble.Babble
+	shardProxy  *inmem.InmemProxy
+}
+
+type Blockchain struct {
+	app      core.ICore
+	chains   cmap.ConcurrentMap[string, *WorkChain]
+	pipeline func([][]byte) []string
+	sharder  *ShardManager
+	trans    net.Transport
 }
 
 type CLIConfig struct {
@@ -33,41 +48,115 @@ type CLIConfig struct {
 	ClientAddr string        `mapstructure:"client-connect"`
 }
 
+func initTransport(config *config.Config) (net.Transport, error) {
+	// Leave nil transport if maintenance-mode is activated
+	if config.MaintenanceMode {
+		return nil, nil
+	}
+
+	if config.WebRTC {
+		signal, err := wamp.NewClient(
+			config.SignalAddr,
+			config.SignalRealm,
+			keys.PublicKeyHex(&config.Key.PublicKey),
+			config.CertFile(),
+			config.SignalSkipVerify,
+			config.TCPTimeout,
+			config.Logger().WithField("component", "webrtc-signal"),
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		webRTCTransport, err := net.NewWebRTCTransport(
+			signal,
+			config.ICEServers(),
+			config.MaxPool,
+			config.TCPTimeout,
+			config.JoinTimeout,
+			config.Logger().WithField("component", "webrtc-transport"),
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return webRTCTransport, nil
+	} else {
+		tcpTransport, err := net.NewTCPTransport(
+			config.BindAddr,
+			config.AdvertiseAddr,
+			config.MaxPool,
+			config.TCPTimeout,
+			config.JoinTimeout,
+			config.Logger(),
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return tcpTransport, nil
+	}
+}
+
+func (b *Blockchain) createNewWorkChain(chainId string) *WorkChain {
+	wchain := &WorkChain{Id: chainId, mainLedger: nil, mainProxy: nil, sharder: nil, shardChains: cmap.New[*ShardChain](), blockchain: b}
+	shardCreatorCb := func(shardId string) {
+		wchain.createNewShardChain(shardId)
+	}
+	wchain.sharder = NewShardManager(1, 1, 10, 5, 100000, 1, shardCreatorCb)
+	wchain.createNewShardChain("shard-main")
+	mainShardChain, _ := wchain.shardChains.Get("shard-main")
+	wchain.mainLedger = mainShardChain.shardLedger
+	wchain.mainProxy = mainShardChain.shardProxy
+	return wchain
+}
+
+func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
+	handler := &HgHandler{
+		Chain: w.blockchain,
+	}
+	proxy := inmem.NewInmemProxy(handler, nil)
+	engine := babble.NewBabble(config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT")))
+	if err := engine.Init(w.blockchain.trans, w.Id, chainId); err != nil {
+		panic(err)
+	}
+	engine.Run()
+	return &ShardChain{Id: chainId, shardLedger: engine, shardProxy: proxy}
+}
+
 func NewChain(core core.ICore) *Blockchain {
 	blockchain := &Blockchain{
 		app: core,
 	}
-	_config := &CLIConfig{
-		Babble:     *config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT")),
-		ProxyAddr:  "127.0.0.1:1338",
-		ClientAddr: "127.0.0.1:1339",
-	}
-	handler := &HgHandler{
-		Chain: blockchain,
-	}
-	proxy := inmem.NewInmemProxy(handler, nil)
-	_config.Babble.Proxy = proxy
-	engine := babble.NewBabble(&_config.Babble)
-	if err := engine.Init(); err != nil {
-		_config.Babble.Logger().Error("Cannot initialize engine:", err)
+	config := config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT"))
+	trans, err := initTransport(config)
+	if err != nil {
 		panic(err)
 	}
-	blockchain.babbleInst = engine
-	blockchain.proxy = proxy
-
-	blockchain.sharder = NewShardManager(1, 1, 10, 5, 100000, 1)
-
+	blockchain.trans = trans
+	blockchain.createNewWorkChain("main")
 	return blockchain
 }
 
 func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
 	future.Async(func() {
-		b.babbleInst.Run()
+		for wchain := range b.chains.IterBuffered() {
+			for schain := range wchain.Val.shardChains.IterBuffered() {
+				schain.Val.shardLedger.Run()
+			}
+		}
 	}, false)
 }
 
 func (b *Blockchain) Close() {
-	b.babbleInst.Node.Leave()
+	for wchain := range b.chains.IterBuffered() {
+		for schain := range wchain.Val.shardChains.IterBuffered() {
+			schain.Val.shardLedger.Node.Leave()
+		}
+	}
 }
 
 func (c *Blockchain) RegisterPipeline(pipeline func([][]byte) []string) {
@@ -76,14 +165,23 @@ func (c *Blockchain) RegisterPipeline(pipeline func([][]byte) []string) {
 
 func (c *Blockchain) Peers() []string {
 	peers := []string{}
-	for _, peer := range c.babbleInst.Peers.Peers {
+	mainWorkChain, _ := c.chains.Get("main")
+	mainShardChain, _ := mainWorkChain.shardChains.Get("shard-main")
+	for _, peer := range mainShardChain.shardLedger.Peers.Peers {
 		peers = append(peers, strings.Split(peer.NetAddr, ":")[0])
 	}
 	return peers
 }
 
 func (c *Blockchain) SubmitTrx(chainId string, machineId string, typ string, payload []byte) {
-	c.proxy.SubmitTx(payload)
+	mainWorkChain, _ := c.chains.Get(chainId)
+	if machineId == "" {
+		mainShardChain, _ := mainWorkChain.shardChains.Get("shard-main")
+		mainShardChain.shardProxy.SubmitTx(payload)
+	} else {
+		mainShardChain, _ := mainWorkChain.shardChains.Get(mainWorkChain.sharder.hasher.GetShard(machineId))
+		mainShardChain.shardProxy.SubmitTx(payload)
+	}
 }
 
 func (c *Blockchain) NotifyNewMachineCreated(chainId int64, machineId string) {
@@ -122,9 +220,7 @@ type HgHandler struct {
 func (p *HgHandler) CommitHandler(block hashgraph.Block) (proxy.CommitResponse, error) {
 	machineIds := p.Chain.pipeline(block.Transactions())
 
-	for _, macId := range machineIds {
-		p.Chain.sharder.ProcessDAppTransaction(macId)
-	}
+	p.Chain.sharder.ProcessDAppTransactionGroup(machineIds)
 
 	receipts := []hashgraph.InternalTransactionReceipt{}
 	for _, it := range block.InternalTransactions() {

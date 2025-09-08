@@ -71,7 +71,7 @@ func New(
 
 	engine := babble.NewBabble(babbleConfig)
 
-	if err := engine.Init(); err != nil {
+	if err := engine.Init(nil, "", ""); err != nil {
 		exceptionHandler.OnException(fmt.Sprintf("Cannot initialize engine: %s", err))
 		return nil
 	}

@@ -35,7 +35,7 @@ func TestTCPTransport_PooledConn(t *testing.T) {
 	}
 	go trans1.Listen()
 	defer trans1.Close()
-	rpcCh := trans1.Consumer()
+	rpcCh := trans1.Consumer("", "")
 
 	// Make the RPC request
 	args := SyncRequest{

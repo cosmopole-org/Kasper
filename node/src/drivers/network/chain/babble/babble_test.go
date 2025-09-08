@@ -109,7 +109,7 @@ func TestMaintenanceMode(t *testing.T) {
 
 	babble := NewBabble(conf)
 
-	if err := babble.Init(); err != nil {
+	if err := babble.Init(nil, "", ""); err != nil {
 		t.Fatal(err)
 	}
 

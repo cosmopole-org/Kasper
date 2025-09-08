@@ -55,7 +55,7 @@ func NewInmemTransport(addr string) (string, *InmemTransport) {
 }
 
 // Consumer implements the Transport interface.
-func (i *InmemTransport) Consumer() <-chan RPC {
+func (i *InmemTransport) Consumer(workChainId string, shardChainId string) <-chan RPC {
 	return i.consumerCh
 }
 

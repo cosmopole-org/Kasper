@@ -178,12 +178,12 @@ type ShardManager struct {
 	minShardLoad int
 	maxNodes     int
 	minNodes     int
-	shardCounter int // Used to generate unique IDs for new shards
+	shardCounter int64 // Used to generate unique IDs for new shards
 	nodeCounter  int // Used to generate unique IDs for new nodes
 }
 
 // NewShardManager initializes a new network with an initial number of nodes and shards.
-func NewShardManager(initialNodes, initialShards, maxShardLoad, minShardLoad, maxNodes, minNodes int) *ShardManager {
+func NewShardManager(initialNodes int, initialShards int64, maxShardLoad, minShardLoad, maxNodes, minNodes int, createChainCallback func(string)) *ShardManager {
 
 	rand.Seed(time.Now().UnixNano())
 
@@ -207,7 +207,7 @@ func NewShardManager(initialNodes, initialShards, maxShardLoad, minShardLoad, ma
 		manager.AddNode(nodeID)
 	}
 
-	for i := 0; i < initialShards; i++ {
+	for i := int64(0); i < initialShards; i++ {
 		shardID := fmt.Sprintf("shard-%d", i+1)
 		manager.AddShard(shardID)
 	}
@@ -425,6 +425,21 @@ func (sm *ShardManager) ProcessDAppTransaction(dappID string) {
 		return
 	}
 	dapp.ProcessTransaction()
+	sm.manageShards()
+}
+
+// ProcessDAppTransactionGroup simulates a transaction for a given DApp.
+func (sm *ShardManager) ProcessDAppTransactionGroup(dappIDs []string) {
+	for _, dappID := range dappIDs {
+		sm.mu.RLock()
+		dapp, ok := sm.dapps[dappID]
+		sm.mu.RUnlock()
+		if !ok {
+			fmt.Printf("Error: DApp %s not found.\n", dappID)
+			return
+		}
+		dapp.ProcessTransaction()
+	}
 	sm.manageShards()
 }
 

@@ -121,7 +121,7 @@ func TestTransport_Sync(t *testing.T) {
 
 		trans1 := NewTestTransport(ttype, addr1, wampserver, t)
 		defer trans1.Close()
-		rpcCh := trans1.Consumer()
+		rpcCh := trans1.Consumer("", "")
 
 		// Make the RPC request
 		args := SyncRequest{
@@ -212,7 +212,7 @@ func TestTransport_EagerSync(t *testing.T) {
 
 		trans1 := NewTestTransport(ttype, addr1, wampserver, t)
 		defer trans1.Close()
-		rpcCh := trans1.Consumer()
+		rpcCh := trans1.Consumer("", "")
 
 		// Make the RPC request
 		args := EagerSyncRequest{
@@ -293,7 +293,7 @@ func TestTransport_FastForward(t *testing.T) {
 
 		trans1 := NewTestTransport(ttype, addr1, wampserver, t)
 		defer trans1.Close()
-		rpcCh := trans1.Consumer()
+		rpcCh := trans1.Consumer("", "")
 
 		//Prepare the response Frame and corresponding Block
 
@@ -438,7 +438,7 @@ func TestTransport_Join(t *testing.T) {
 
 		trans1 := NewTestTransport(ttype, addr1, wampserver, t)
 		defer trans1.Close()
-		rpcCh := trans1.Consumer()
+		rpcCh := trans1.Consumer("", "")
 
 		//node1 asks to join node2
 		testPeers := []*peers.Peer{

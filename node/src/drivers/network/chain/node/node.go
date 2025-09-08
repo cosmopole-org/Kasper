@@ -25,6 +25,9 @@ type Node struct {
 	// object is used to manage the node's state.
 	_state.Manager
 
+	WorkchainId  string
+	ShardchainId string
+
 	conf *config.Config
 
 	logger *logrus.Entry
@@ -84,6 +87,8 @@ func NewNode(conf *config.Config,
 	store hg.Store,
 	trans net.Transport,
 	proxy proxy.AppProxy,
+	workChainId string,
+	shardChainId string,
 ) *Node {
 
 	// Prepare sigCh to relay SIGINT and SIGTERM system calls
@@ -100,7 +105,7 @@ func NewNode(conf *config.Config,
 
 	netCh := make(<-chan net.RPC)
 	if trans != nil {
-		netCh = trans.Consumer()
+		netCh = trans.Consumer(workChainId, shardChainId)
 	}
 
 	node := Node{

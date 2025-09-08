@@ -405,7 +405,7 @@ func newNode(peer *peers.Peer,
 		genesisPeers,
 		store,
 		trans,
-		prox)
+		prox, "", "")
 
 	if err := node.Init(); err != nil {
 		t.Fatalf("Fatal failed to initialize node%d: %s", peer.ID(), err)
@@ -499,7 +499,7 @@ func recycleNode(oldNode *Node, t *testing.T) *Node {
 	conf.Bootstrap = true
 
 	newNode := NewNode(conf, NewValidator(key, moniker), peers, genesisPeerSet,
-		store, trans, prox)
+		store, trans, prox, "", "")
 
 	if err := newNode.Init(); err != nil {
 		t.Error("Fatal Error 3 recycleNode", err)

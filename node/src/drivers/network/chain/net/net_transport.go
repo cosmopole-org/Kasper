@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"kasper/src/shell/utils/future"
+	"log"
 	"math"
 	"net"
 	"sync"
 	"time"
 
+	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/sirupsen/logrus"
 )
 
@@ -65,6 +68,8 @@ type NetworkTransport struct {
 
 	timeout     time.Duration
 	joinTimeout time.Duration
+
+	chainInputs cmap.ConcurrentMap[string, chan RPC]
 }
 
 type netConn struct {
@@ -107,7 +112,42 @@ func NewNetworkTransport(
 		stream:      stream,
 		timeout:     timeout,
 		joinTimeout: joinTimeout,
+		chainInputs: cmap.New[chan RPC](),
 	}
+
+	future.Async(func() {
+		for rpc := range trans.consumeCh {
+			switch cmd := rpc.Command.(type) {
+			case *SyncRequest:
+				chainId := fmt.Sprintf("%s::%s", cmd.WorkChainId, cmd.ShardChainId)
+				chainInput, found := trans.chainInputs.Get(chainId)
+				if found {
+					chainInput <- rpc
+				}
+			case *EagerSyncRequest:
+				chainId := fmt.Sprintf("%s::%s", cmd.WorkChainId, cmd.ShardChainId)
+				chainInput, found := trans.chainInputs.Get(chainId)
+				if found {
+					chainInput <- rpc
+				}
+			case *FastForwardRequest:
+				chainId := fmt.Sprintf("%s::%s", cmd.WorkChainId, cmd.ShardChainId)
+				chainInput, found := trans.chainInputs.Get(chainId)
+				if found {
+					chainInput <- rpc
+				}
+			case *JoinRequest:
+				chainId := fmt.Sprintf("%s::%s", cmd.WorkChainId, cmd.ShardChainId)
+				chainInput, found := trans.chainInputs.Get(chainId)
+				if found {
+					chainInput <- rpc
+				}
+			default:
+				log.Println("Unexpected RPC command")
+				rpc.Respond(nil, fmt.Errorf("unexpected command"))
+			}
+		}
+	}, true)
 
 	return trans
 }
@@ -127,8 +167,11 @@ func (n *NetworkTransport) Close() error {
 }
 
 // Consumer implements the Transport interface.
-func (n *NetworkTransport) Consumer() <-chan RPC {
-	return n.consumeCh
+func (n *NetworkTransport) Consumer(workChainId string, shardChainId string) <-chan RPC {
+	chainId := fmt.Sprintf("%s::%s", workChainId, shardChainId)
+	n.chainInputs.SetIfAbsent(chainId, make(chan RPC))
+	chainInput, _ := n.chainInputs.Get(chainId)
+	return chainInput
 }
 
 // LocalAddr implements the Transport interface.
