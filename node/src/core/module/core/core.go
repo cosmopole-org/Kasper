@@ -950,7 +950,7 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 				serialized, err := json.Marshal(op)
 				if err == nil {
 					log.Println(string(serialized))
-					c.tools.Network().Chain().SubmitTrx("1", machineId, typ, []byte(typ+"::"+string(serialized)))
+					c.tools.Network().Chain().SubmitTrx("main", machineId, typ, []byte(typ+"::"+string(serialized)))
 				} else {
 					log.Println(err)
 				}
