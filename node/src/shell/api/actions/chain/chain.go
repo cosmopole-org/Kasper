@@ -2,11 +2,9 @@ package actions_chain
 
 import (
 	"encoding/json"
-	"errors"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
 	inputs_chain "kasper/src/shell/api/inputs/chain"
-	"kasper/src/shell/api/model"
 	"net"
 )
 
@@ -20,21 +18,11 @@ func Install(a *Actions) error {
 
 // Create /chains/create check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Create(state state.IState, input inputs_chain.CreateInput) (any, error) {
-	for orig, stake := range input.Participants {
-		userId := a.App.Tools().Network().Chain().GetNodeOwnerId(orig)
-		if userId == "" {
-			return nil, errors.New("node owner not identified")
-		}
-		user := model.User{Id: userId}.Pull(state.Trx())
-		if user.Balance < stake {
-			return nil, errors.New("node owner balance is not enough")
-		}
-	}
-	id := int64(0)
+	id := ""
 	if *input.IsTemp {
-		id = a.App.Tools().Network().Chain().CreateTempChain(input.Participants)
+		id = a.App.Tools().Network().Chain().CreateTempChain()
 	} else {
-		id = a.App.Tools().Network().Chain().CreateWorkChain(input.Participants)
+		id = a.App.Tools().Network().Chain().CreateWorkChain()
 	}
 	return map[string]any{"chainId": id}, nil
 }

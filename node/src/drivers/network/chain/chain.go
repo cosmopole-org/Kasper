@@ -16,6 +16,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/google/uuid"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
@@ -188,12 +189,12 @@ func (c *Blockchain) NotifyNewMachineCreated(chainId int64, machineId string) {
 	c.sharder.DeployDapp(machineId)
 }
 
-func (c *Blockchain) CreateTempChain(peers map[string]int64) int64 {
-	return 0
+func (c *Blockchain) CreateTempChain() string {
+	return c.createNewWorkChain(uuid.NewString()).Id
 }
 
-func (c *Blockchain) CreateWorkChain(peers map[string]int64) int64 {
-	return 0
+func (c *Blockchain) CreateWorkChain() string {
+	return c.createNewWorkChain(uuid.NewString()).Id
 }
 
 func (c *Blockchain) UserOwnsOrigin(userId string, origin string) bool {
