@@ -179,7 +179,9 @@ type ShardManager struct {
 	maxNodes     int
 	minNodes     int
 	shardCounter int64 // Used to generate unique IDs for new shards
-	nodeCounter  int // Used to generate unique IDs for new nodes
+	nodeCounter  int   // Used to generate unique IDs for new nodes
+
+	createChainCb func(string)
 }
 
 // NewShardManager initializes a new network with an initial number of nodes and shards.
@@ -188,16 +190,17 @@ func NewShardManager(initialNodes int, initialShards int64, maxShardLoad, minSha
 	rand.Seed(time.Now().UnixNano())
 
 	manager := &ShardManager{
-		nodes:        make(map[string]*Node),
-		shards:       make(map[string]*Shard),
-		dapps:        make(map[string]*DApp),
-		hasher:       NewConsistentHasher(20),
-		maxShardLoad: maxShardLoad,
-		minShardLoad: minShardLoad,
-		maxNodes:     maxNodes,
-		minNodes:     minNodes,
-		shardCounter: initialShards,
-		nodeCounter:  initialNodes,
+		nodes:         make(map[string]*Node),
+		shards:        make(map[string]*Shard),
+		dapps:         make(map[string]*DApp),
+		hasher:        NewConsistentHasher(20),
+		maxShardLoad:  maxShardLoad,
+		minShardLoad:  minShardLoad,
+		maxNodes:      maxNodes,
+		minNodes:      minNodes,
+		shardCounter:  initialShards,
+		nodeCounter:   initialNodes,
+		createChainCb: createChainCallback,
 	}
 
 	fmt.Println("Initializing distributed ledger network...")
@@ -317,6 +320,8 @@ func (sm *ShardManager) AddShard(id string) {
 	sm.shards[id] = newShard
 	sm.hasher.AddShard(id)
 	fmt.Printf("Added logical shard %s and assigned it to nodes: %v\n", id, newShard.nodeIDs)
+
+	sm.createChainCb(id)
 }
 
 // MergeShard simulates a shard being merged into others.
