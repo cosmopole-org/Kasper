@@ -126,7 +126,9 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 	if err := engine.Init(w.blockchain.trans, w.Id, chainId); err != nil {
 		panic(err)
 	}
-	engine.Run()
+	future.Async(func() {
+		engine.Run()
+	}, false)
 	return &ShardChain{Id: chainId, shardLedger: engine, shardProxy: proxy}
 }
 
@@ -145,13 +147,13 @@ func NewChain(core core.ICore) *Blockchain {
 }
 
 func (b *Blockchain) Listen(port int, tlsConfig *tls.Config) {
-	future.Async(func() {
-		for wchain := range b.chains.IterBuffered() {
-			for schain := range wchain.Val.shardChains.IterBuffered() {
+	for wchain := range b.chains.IterBuffered() {
+		for schain := range wchain.Val.shardChains.IterBuffered() {
+			future.Async(func() {
 				schain.Val.shardLedger.Run()
-			}
+			}, false)
 		}
-	}, false)
+	}
 }
 
 func (b *Blockchain) Close() {
