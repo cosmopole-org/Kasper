@@ -120,7 +120,9 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 		Chain: w.blockchain,
 	}
 	proxy := inmem.NewInmemProxy(handler, nil)
-	engine := babble.NewBabble(config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT")))
+	config := config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT"))
+	config.Proxy = proxy
+	engine := babble.NewBabble(config)
 	if err := engine.Init(w.blockchain.trans, w.Id, chainId); err != nil {
 		panic(err)
 	}
