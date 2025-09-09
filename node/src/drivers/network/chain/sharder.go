@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-	"time"
+	// "time"
 )
 
 // Node represents a physical or virtual machine in the network.
@@ -187,7 +187,7 @@ type ShardManager struct {
 // NewShardManager initializes a new network with an initial number of nodes and shards.
 func NewShardManager(initialNodes int, initialShards int64, maxShardLoad, minShardLoad, maxNodes, minNodes int, createChainCallback func(string)) *ShardManager {
 
-	rand.Seed(time.Now().UnixNano())
+	// rand.Seed(time.Now().UnixNano())
 
 	manager := &ShardManager{
 		nodes:         make(map[string]*Node),

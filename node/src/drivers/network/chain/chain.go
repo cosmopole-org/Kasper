@@ -116,6 +116,7 @@ func initTransport(config *config.Config) (net.Transport, error) {
 
 func (b *Blockchain) createNewWorkChain(chainId string) *WorkChain {
 	wchain := &WorkChain{Id: chainId, mainLedger: nil, mainProxy: nil, sharder: nil, shardChains: cmap.New[*ShardChain](), blockchain: b}
+	b.chains.Set(chainId, wchain)
 	shardCreatorCb := func(shardId string) {
 		wchain.createNewShardChain(shardId)
 	}
