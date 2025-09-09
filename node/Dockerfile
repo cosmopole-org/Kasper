@@ -36,15 +36,13 @@ RUN make install
 
 WORKDIR /app
 
+RUN apt install -y imagemagick
+
 RUN apt install -y golang
 ENV GOPROXY=https://goproxy.io,direct
 ENV DOCKER_API_VERSION=1.39
 
-RUN echo 'installing firecracker...'
-
-RUN curl -sSf https://raw.githubusercontent.com/cosmopole-org/kasper-public/main/install-fcvmm-1.sh | bash -s
-
-RUN apt install -y imagemagick
+RUN bash scripts/install-fcvmm.sh
 
 RUN mkdir /app/storage
 
@@ -52,5 +50,4 @@ COPY . .
 
 RUN CGO_ENABLED=1 go build -o kasper .
 
-EXPOSE 80 8080 8081 8082
-ENTRYPOINT ["bash", "run.sh"]
+ENTRYPOINT ["bash", "/app/scripts/run.sh"]
