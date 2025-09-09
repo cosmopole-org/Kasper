@@ -42,11 +42,11 @@ RUN apt install -y golang
 ENV GOPROXY=https://goproxy.io,direct
 ENV DOCKER_API_VERSION=1.39
 
+COPY . .
+
 RUN bash scripts/install-fcvmm.sh
 
 RUN mkdir /app/storage
-
-COPY . .
 
 RUN CGO_ENABLED=1 go build -o kasper .
 
