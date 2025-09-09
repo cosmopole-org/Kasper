@@ -163,7 +163,7 @@ func Install(a *Actions) error {
 			w.Write([]byte(data))
 		} else {
 			r.Body = ioutil.NopCloser(bytes.NewReader(body))
-			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			url := fmt.Sprintf("%s://%s%s", "https", origin+":3000", r.RequestURI)
 			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader(body))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -214,7 +214,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + userId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath + ".jpg")
+					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath+".jpg")
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -241,7 +241,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath + ".jpg")
+					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath+".jpg")
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -303,7 +303,7 @@ func Install(a *Actions) error {
 				}
 				if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 					entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
-					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath + ".jpg")
+					cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath+".jpg")
 					output, err := cmd.Output()
 					if err != nil {
 						log.Fatalf("Command execution failed: %v", err)
@@ -331,7 +331,7 @@ func Install(a *Actions) error {
 				w.Write(b)
 			}
 		} else {
-			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			url := fmt.Sprintf("%s://%s%s", "https", origin+":3000", r.RequestURI)
 			proxyReq, err := http.NewRequest(r.Method, url, r.Body)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -399,7 +399,7 @@ func Install(a *Actions) error {
 			w.Write([]byte(data))
 		} else {
 			r.Body = ioutil.NopCloser(bytes.NewReader(body))
-			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			url := fmt.Sprintf("%s://%s%s", "https", origin+":3000", r.RequestURI)
 			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader(body))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -476,7 +476,7 @@ func Install(a *Actions) error {
 			defer resp.Body.Close()
 			io.Copy(w, resp.Body)
 		} else {
-			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			url := fmt.Sprintf("%s://%s%s", "https", origin+":3000", r.RequestURI)
 			proxyReq, err := http.NewRequest(r.Method, url, bytes.NewReader([]byte("{}")))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -562,7 +562,7 @@ func Install(a *Actions) error {
 			defer resp.Body.Close()
 			io.Copy(w, resp.Body)
 		} else {
-			url := fmt.Sprintf("%s://%s%s", "https", "api.decillionai.com:3000", r.RequestURI)
+			url := fmt.Sprintf("%s://%s%s", "https", origin+":3000", r.RequestURI)
 			proxyReq, err := http.NewRequest(r.Method, url, r.Body)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -640,7 +640,7 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		}
 		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + state.Info().UserId() + "/" + input.EntityId
-			cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath + ".jpg")
+			cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath+".jpg")
 			output, err := cmd.Output()
 			if err != nil {
 				log.Fatalf("Command execution failed: %v", err)
@@ -664,7 +664,7 @@ func (a *Actions) UploadUserEntity(state state.IState, input inputs_storage.Uplo
 		}
 		if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 			entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/users/" + vm.MachineId + "/" + input.EntityId
-			cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath + ".jpg")
+			cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath+".jpg")
 			output, err := cmd.Output()
 			if err != nil {
 				log.Fatalf("Command execution failed: %v", err)
@@ -720,7 +720,7 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 	}
 	if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
 		entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/points/" + input.PointId + "/" + input.EntityId
-		cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath + ".jpg")
+		cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath+".jpg")
 		output, err := cmd.Output()
 		if err != nil {
 			log.Fatalf("Command execution failed: %v", err)
