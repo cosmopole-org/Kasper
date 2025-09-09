@@ -92,10 +92,6 @@ func (b *Babble) Init(trans net.Transport, workChainId string, shardChainId stri
 
 // Run starts the Babble node.
 func (b *Babble) Run() {
-	if b.Service != nil && b.Config.ServiceAddr != "" {
-		go b.Service.Serve()
-	}
-
 	b.Node.Run(true)
 }
 

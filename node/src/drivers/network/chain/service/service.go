@@ -42,6 +42,10 @@ func NewService(bindAddress string, logger *logrus.Entry) *Service {
 	return &service
 }
 
+func (s *Service) RegisterNode(shardId string, node *node.Node) {
+	s.nodes.Set(shardId, node)
+}
+
 // registerHandlers registers the API handlers with the DefaultServerMux of the
 // http package. It is possible that another server in the same process is
 // simultaneously using the DefaultServerMux. In which case, the handlers will

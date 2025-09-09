@@ -139,6 +139,7 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 	}
 	shardChain := &ShardChain{Id: chainId, shardLedger: engine, shardProxy: proxy}
 	w.shardChains.Set(chainId, shardChain)
+	w.blockchain.service.RegisterNode(chainId, engine.Node)
 	future.Async(func() {
 		engine.Run()
 	}, false)
