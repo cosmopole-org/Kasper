@@ -12,6 +12,7 @@ import (
 	"kasper/src/drivers/network/chain/node/state"
 	"kasper/src/drivers/network/chain/proxy"
 	"kasper/src/drivers/network/chain/proxy/inmem"
+	"kasper/src/drivers/network/chain/service"
 	"kasper/src/shell/utils/future"
 	"os"
 	"strings"
@@ -41,12 +42,24 @@ type Blockchain struct {
 	pipeline func([][]byte) []string
 	sharder  *ShardManager
 	trans    net.Transport
+	service  *service.Service
 }
 
 type CLIConfig struct {
 	Babble     config.Config `mapstructure:",squash"`
 	ProxyAddr  string        `mapstructure:"proxy-listen"`
 	ClientAddr string        `mapstructure:"client-connect"`
+}
+
+func initChainService(config *config.Config) *service.Service {
+	if !config.NoService {
+		service := service.NewService(config.ServiceAddr, config.Logger())
+		future.Async(func() {
+			service.Serve()
+		}, false)
+		return service
+	}
+	return nil
 }
 
 func initTransport(config *config.Config) (net.Transport, error) {
@@ -142,6 +155,8 @@ func NewChain(core core.ICore) *Blockchain {
 		panic(err)
 	}
 	blockchain.trans = trans
+	service := initChainService(config)
+	blockchain.service = service
 	blockchain.createNewWorkChain("main")
 	return blockchain
 }

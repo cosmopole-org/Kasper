@@ -28,6 +28,8 @@ type Node struct {
 	WorkchainId  string
 	ShardchainId string
 
+	Graph *Graph
+
 	conf *config.Config
 
 	logger *logrus.Entry
@@ -122,7 +124,9 @@ func NewNode(conf *config.Config,
 		controlTimer: newRandomControlTimer(),
 		WorkchainId:  workChainId,
 		ShardchainId: shardChainId,
+		Graph:        nil,
 	}
+	node.Graph = NewGraph(&node)
 
 	return &node
 }

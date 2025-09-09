@@ -343,9 +343,6 @@ func (b *Babble) initNode(workChainId string, shardChainId string) error {
 }
 
 func (b *Babble) initService() error {
-	if !b.Config.NoService {
-		b.Service = service.NewService(b.Config.ServiceAddr, b.Node, b.Config.Logger())
-	}
 	return nil
 }
 

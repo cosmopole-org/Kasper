@@ -2,15 +2,17 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
 
 	hg "kasper/src/drivers/network/chain/hashgraph"
-
 	"kasper/src/drivers/network/chain/node"
+
 	"kasper/src/drivers/network/chain/peers"
 
+	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,18 +24,17 @@ type Service struct {
 	sync.Mutex
 
 	bindAddress string
-	node        *node.Node
-	graph       *node.Graph
 	logger      *logrus.Entry
+
+	nodes cmap.ConcurrentMap[string, *node.Node]
 }
 
 // NewService instantiates a Service linked to a Babble node and a bind address.
-func NewService(bindAddress string, n *node.Node, logger *logrus.Entry) *Service {
+func NewService(bindAddress string, logger *logrus.Entry) *Service {
 	service := Service{
 		bindAddress: bindAddress,
-		node:        n,
-		graph:       node.NewGraph(n),
 		logger:      logger,
+		nodes:       cmap.New[*node.Node](),
 	}
 
 	service.registerHandlers()
@@ -88,11 +89,14 @@ func (s *Service) Serve() {
 
 // GetStats returns a list of stats about the node's internal state.
 func (s *Service) GetStats(w http.ResponseWriter, r *http.Request) {
-	stats := s.node.GetStats()
+	node, found := s.nodes.Get(fmt.Sprintf("%s::%s", r.Header.Get("Work-Chain-Id"), r.Header.Get("Shard-Chain-Id")))
+	if found {
+		stats := node.GetStats()
 
-	w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/json")
 
-	json.NewEncoder(w).Encode(stats)
+		json.NewEncoder(w).Encode(stats)
+	}
 }
 
 // GetBlock returns a single Block by block index.
@@ -109,19 +113,22 @@ func (s *Service) GetBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	block, err := s.node.GetBlock(blockIndex)
+	node, found := s.nodes.Get(fmt.Sprintf("%s::%s", r.Header.Get("Work-Chain-Id"), r.Header.Get("Shard-Chain-Id")))
+	if found {
+		block, err := node.GetBlock(blockIndex)
 
-	if err != nil {
-		s.logger.WithError(err).Errorf("Retrieving block %d", blockIndex)
+		if err != nil {
+			s.logger.WithError(err).Errorf("Retrieving block %d", blockIndex)
 
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 
-		return
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		json.NewEncoder(w).Encode(block)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-
-	json.NewEncoder(w).Encode(block)
 }
 
 // GetBlocks will fetch an array of blocks starting at {startIndex} and finishing
@@ -140,54 +147,57 @@ func (s *Service) GetBlocks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	node, found := s.nodes.Get(fmt.Sprintf("%s::%s", r.Header.Get("Work-Chain-Id"), r.Header.Get("Shard-Chain-Id")))
+	if found {
 
-	lastBlockIndex := s.node.GetLastBlockIndex()
+		lastBlockIndex := node.GetLastBlockIndex()
 
-	if requestStart > lastBlockIndex {
-		http.Error(w, "Requested starting index larger than last block index", http.StatusInternalServerError)
-		return
-	}
-
-	count := 1
-
-	// get max limit, if empty just send requested index
-	qc := r.URL.Query().Get("count")
-	if qc != "" {
-		// parse to int
-		count, err = strconv.Atoi(qc)
-		if err != nil {
-			s.logger.WithError(err).Errorf("Converting blocks count to int")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if requestStart > lastBlockIndex {
+			http.Error(w, "Requested starting index larger than last block index", http.StatusInternalServerError)
 			return
 		}
 
-		// make sure requested limit does not exceed max
-		if count > MAXBLOCKS {
-			count = MAXBLOCKS
+		count := 1
+
+		// get max limit, if empty just send requested index
+		qc := r.URL.Query().Get("count")
+		if qc != "" {
+			// parse to int
+			count, err = strconv.Atoi(qc)
+			if err != nil {
+				s.logger.WithError(err).Errorf("Converting blocks count to int")
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// make sure requested limit does not exceed max
+			if count > MAXBLOCKS {
+				count = MAXBLOCKS
+			}
+
+			// make limit does not exceed last block index
+			if requestStart+count-1 > lastBlockIndex {
+				count = lastBlockIndex - requestStart + 1
+			}
 		}
 
-		// make limit does not exceed last block index
-		if requestStart+count-1 > lastBlockIndex {
-			count = lastBlockIndex - requestStart + 1
+		// blocks slice
+		var blocks []*hg.Block
+
+		// get blocks
+		for c := 0; c < count; c++ {
+			block, err := node.GetBlock(requestStart + c)
+			if err != nil {
+				s.logger.WithError(err).Errorf("Retrieving block %d", requestStart+c)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			blocks = append(blocks, block)
 		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(blocks)
 	}
-
-	// blocks slice
-	var blocks []*hg.Block
-
-	// get blocks
-	for c := 0; c < count; c++ {
-		block, err := s.node.GetBlock(requestStart + c)
-		if err != nil {
-			s.logger.WithError(err).Errorf("Retrieving block %d", requestStart+c)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		blocks = append(blocks, block)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(blocks)
 }
 
 // GetGraph returns information about the underlying hashgraph, which can be
@@ -197,9 +207,13 @@ func (s *Service) GetGraph(w http.ResponseWriter, r *http.Request) {
 
 	encoder := json.NewEncoder(w)
 
-	res, _ := s.graph.GetInfos()
+	node, found := s.nodes.Get(fmt.Sprintf("%s::%s", r.Header.Get("Work-Chain-Id"), r.Header.Get("Shard-Chain-Id")))
+	if found {
 
-	encoder.Encode(res)
+		res, _ := node.Graph.GetInfos()
+
+		encoder.Encode(res)
+	}
 }
 
 // GetPeers returns the node's current peers, which is not necessarily
@@ -208,7 +222,11 @@ func (s *Service) GetGraph(w http.ResponseWriter, r *http.Request) {
 //	GET /peers
 //	returns: JSON []peers.Peer
 func (s *Service) GetPeers(w http.ResponseWriter, r *http.Request) {
-	returnPeerSet(w, r, s.node.GetPeers())
+
+	node, found := s.nodes.Get(fmt.Sprintf("%s::%s", r.Header.Get("Work-Chain-Id"), r.Header.Get("Shard-Chain-Id")))
+	if found {
+		returnPeerSet(w, r, node.GetPeers())
+	}
 }
 
 // GetGenesisPeers returns the genesis validator-set
@@ -216,13 +234,17 @@ func (s *Service) GetPeers(w http.ResponseWriter, r *http.Request) {
 //	Get /genesispeers
 //	returns: JSON []peers.Peer
 func (s *Service) GetGenesisPeers(w http.ResponseWriter, r *http.Request) {
-	ps, err := s.node.GetValidatorSet(0)
-	if err != nil {
-		s.logger.WithError(err).Errorf("Fetching genesis validator-set")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+
+	node, found := s.nodes.Get(fmt.Sprintf("%s::%s", r.Header.Get("Work-Chain-Id"), r.Header.Get("Shard-Chain-Id")))
+	if found {
+		ps, err := node.GetValidatorSet(0)
+		if err != nil {
+			s.logger.WithError(err).Errorf("Fetching genesis validator-set")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		returnPeerSet(w, r, ps)
 	}
-	returnPeerSet(w, r, ps)
 }
 
 // GetValidatorSet returns the validator-set associated to a specific hashgraph
@@ -231,27 +253,31 @@ func (s *Service) GetGenesisPeers(w http.ResponseWriter, r *http.Request) {
 //	Get /validators/{round}
 //	returns: JSON []peers.Peer
 func (s *Service) GetValidatorSet(w http.ResponseWriter, r *http.Request) {
-	round := s.node.GetLastConsensusRoundIndex()
 
-	param := r.URL.Path[len("/validators/"):]
-	if param != "" {
-		r, err := strconv.Atoi(param)
+	node, found := s.nodes.Get(fmt.Sprintf("%s::%s", r.Header.Get("Work-Chain-Id"), r.Header.Get("Shard-Chain-Id")))
+	if found {
+		round := node.GetLastConsensusRoundIndex()
+
+		param := r.URL.Path[len("/validators/"):]
+		if param != "" {
+			r, err := strconv.Atoi(param)
+			if err != nil {
+				s.logger.WithError(err).Errorf("Parsing round parameter %s", param)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			round = r
+		}
+
+		validators, err := node.GetValidatorSet(round)
 		if err != nil {
-			s.logger.WithError(err).Errorf("Parsing round parameter %s", param)
+			s.logger.WithError(err).Errorf("Fetching round %d validators", round)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		round = r
-	}
 
-	validators, err := s.node.GetValidatorSet(round)
-	if err != nil {
-		s.logger.WithError(err).Errorf("Fetching round %d validators", round)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		returnPeerSet(w, r, validators)
 	}
-
-	returnPeerSet(w, r, validators)
 }
 
 // GetAllValidatorSets returns the entire map of round to validator-sets which
@@ -261,15 +287,19 @@ func (s *Service) GetValidatorSet(w http.ResponseWriter, r *http.Request) {
 //	Get /history
 //	returns: JSON map[int][]peers.Peer
 func (s *Service) GetAllValidatorSets(w http.ResponseWriter, r *http.Request) {
-	allPeerSets, err := s.node.GetAllValidatorSets()
-	if err != nil {
-		s.logger.WithError(err).Errorf("Fetching validator-sets")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(allPeerSets)
+	node, found := s.nodes.Get(fmt.Sprintf("%s::%s", r.Header.Get("Work-Chain-Id"), r.Header.Get("Shard-Chain-Id")))
+	if found {
+		allPeerSets, err := node.GetAllValidatorSets()
+		if err != nil {
+			s.logger.WithError(err).Errorf("Fetching validator-sets")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(allPeerSets)
+	}
 }
 
 func returnPeerSet(w http.ResponseWriter, r *http.Request, peers []*peers.Peer) {
