@@ -9,7 +9,7 @@ import (
 
 type App struct {
 	Id            string `json:"id"`
-	ChainId       int64  `json:"chainId"`
+	ChainId       string `json:"chainId"`
 	OwnerId       string `json:"ownerId"`
 	Username      string `json:"username"`
 	MachinesCount int    `json:"machinesCount"`
@@ -23,15 +23,13 @@ func (m App) Type() string {
 }
 
 func (d App) Push(trx trx.ITrx) {
-	cidBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(cidBytes, uint64(d.ChainId))
 	mcBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(mcBytes, uint32(d.MachinesCount))
 	trx.PutObj(d.Type(), d.Id, map[string][]byte{
 		"id":            []byte(d.Id),
 		"ownerId":       []byte(d.OwnerId),
 		"username":      []byte(d.Username),
-		"chainId":       cidBytes,
+		"chainId":       []byte(d.ChainId),
 		"machinesCount": mcBytes,
 	})
 }
@@ -42,7 +40,7 @@ func (d App) Pull(trx trx.ITrx, flags ...bool) App {
 		d.Id = string(m["id"])
 		d.Username = string(m["username"])
 		d.OwnerId = string(m["ownerId"])
-		d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
+		d.ChainId = string(m["chainId"])
 		d.MachinesCount = int(binary.LittleEndian.Uint32(m["machinesCount"]))
 		if len(flags) > 0 {
 			if flags[0] {
@@ -88,7 +86,7 @@ func (d App) List(trx trx.ITrx, prefix string) ([]App, error) {
 			d.Id = id
 			d.OwnerId = string(m["ownerId"])
 			d.Username = string(m["username"])
-			d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
+			d.ChainId = string(m["chainId"])
 			d.MachinesCount = int(binary.LittleEndian.Uint32(m["machinesCount"]))
 			entities = append(entities, d)
 		}
@@ -112,7 +110,7 @@ func (d App) All(trx trx.ITrx, offset int64, count int64) ([]App, error) {
 			d.Id = id
 			d.OwnerId = string(m["ownerId"])
 			d.Username = string(m["username"])
-			d.ChainId = int64(binary.LittleEndian.Uint64(m["chainId"]))
+			d.ChainId = string(m["chainId"])
 			d.MachinesCount = int(binary.LittleEndian.Uint32(m["machinesCount"]))
 			entities = append(entities, d)
 		}

@@ -1,7 +1,7 @@
 package inputs_machiner
 
 type CreateAppInput struct {
-	ChainId  int64  `json:"chainId" validate:"required"`
+	ChainId  string  `json:"chainId" validate:"required"`
 	Username string `json:"username" validate:"required"`
 	Metadata any    `json:"metadata" validate:"required"`
 }
