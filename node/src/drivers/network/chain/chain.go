@@ -40,7 +40,6 @@ type Blockchain struct {
 	app      core.ICore
 	chains   cmap.ConcurrentMap[string, *WorkChain]
 	pipeline func([][]byte) []string
-	sharder  *ShardManager
 	trans    net.Transport
 	service  *service.Service
 }
@@ -129,7 +128,7 @@ func (b *Blockchain) createNewWorkChain(chainId string) *WorkChain {
 
 func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 	handler := &HgHandler{
-		Chain: w.blockchain,
+		Chain: w,
 	}
 	proxy := inmem.NewInmemProxy(handler, nil)
 	config := config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT"))
@@ -148,7 +147,11 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 
 func NewChain(core core.ICore) *Blockchain {
 	blockchain := &Blockchain{
-		app: core,
+		app:      core,
+		chains:   cmap.New[*WorkChain](),
+		trans:    nil,
+		service:  nil,
+		pipeline: nil,
 	}
 	config := config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT"))
 	trans, err := initTransport(config)
@@ -205,8 +208,11 @@ func (c *Blockchain) SubmitTrx(chainId string, machineId string, typ string, pay
 	}
 }
 
-func (c *Blockchain) NotifyNewMachineCreated(chainId int64, machineId string) {
-	c.sharder.DeployDapp(machineId)
+func (c *Blockchain) NotifyNewMachineCreated(chainId string, machineId string) {
+	mainWorkChain, found := c.chains.Get(chainId)
+	if found {
+		mainWorkChain.sharder.DeployDapp(machineId)
+	}
 }
 
 func (c *Blockchain) CreateTempChain() string {
@@ -235,11 +241,11 @@ func (c *Blockchain) GetValidatorsOfMachineShard(machineId string) []string {
 
 type HgHandler struct {
 	State state.State
-	Chain *Blockchain
+	Chain *WorkChain
 }
 
 func (p *HgHandler) CommitHandler(block hashgraph.Block) (proxy.CommitResponse, error) {
-	machineIds := p.Chain.pipeline(block.Transactions())
+	machineIds := p.Chain.blockchain.pipeline(block.Transactions())
 
 	p.Chain.sharder.ProcessDAppTransactionGroup(machineIds)
 
