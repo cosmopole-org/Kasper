@@ -12,10 +12,10 @@ PORT=${5:-1337}
 dest=$DEST/node1
 mkdir -p $dest
 
-echo "165.232.32.106:$PORT" > $dest/addr
+echo "130.185.121.85:$PORT" > $dest/addr
 
 echo "Generating key pair for node$i"
-go run ../..//keygen/keygen.go
+go run ../keygen/keygen.go
 
 PFILE=$DEST/peers.json
 echo "[" > $PFILE
