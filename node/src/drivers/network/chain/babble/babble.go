@@ -42,9 +42,6 @@ func NewBabble(c *config.Config) *Babble {
 // Init initialises Babble based on its configuration.
 func (b *Babble) Init(trans net.Transport, workChainId string, shardChainId string) error {
 
-	b.Node.WorkchainId = workChainId
-	b.Node.ShardchainId = shardChainId
-
 	b.logger.Debug("validateConfig")
 	if err := b.validateConfig(); err != nil {
 		b.logger.WithError(err).Error("babble.go:Init() validateConfig")

@@ -120,6 +120,8 @@ func NewNode(conf *config.Config,
 		shutdownCh:   make(chan struct{}),
 		suspendCh:    make(chan struct{}),
 		controlTimer: newRandomControlTimer(),
+		WorkchainId:  workChainId,
+		ShardchainId: shardChainId,
 	}
 
 	return &node
