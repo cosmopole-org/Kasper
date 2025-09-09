@@ -121,8 +121,7 @@ func (b *Blockchain) createNewWorkChain(chainId string) *WorkChain {
 		wchain.createNewShardChain(shardId)
 	}
 	wchain.sharder = NewShardManager(1, 1, 10, 5, 100000, 1, shardCreatorCb)
-	wchain.createNewShardChain("shard-main")
-	mainShardChain, _ := wchain.shardChains.Get("shard-main")
+	mainShardChain := wchain.createNewShardChain("shard-main")
 	wchain.mainLedger = mainShardChain.shardLedger
 	wchain.mainProxy = mainShardChain.shardProxy
 	return wchain
@@ -139,10 +138,12 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 	if err := engine.Init(w.blockchain.trans, w.Id, chainId); err != nil {
 		panic(err)
 	}
+	shardChain := &ShardChain{Id: chainId, shardLedger: engine, shardProxy: proxy}
+	w.shardChains.Set(chainId, shardChain)
 	future.Async(func() {
 		engine.Run()
 	}, false)
-	return &ShardChain{Id: chainId, shardLedger: engine, shardProxy: proxy}
+	return shardChain
 }
 
 func NewChain(core core.ICore) *Blockchain {
