@@ -42,8 +42,8 @@ func NewService(bindAddress string, logger *logrus.Entry) *Service {
 	return &service
 }
 
-func (s *Service) RegisterNode(shardId string, node *node.Node) {
-	s.nodes.Set(shardId, node)
+func (s *Service) RegisterNode(workId string, shardId string, node *node.Node) {
+	s.nodes.Set(fmt.Sprintf("%s::%s", workId, shardId), node)
 }
 
 // registerHandlers registers the API handlers with the DefaultServerMux of the

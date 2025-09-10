@@ -14,7 +14,9 @@ import (
 	"kasper/src/drivers/network/chain/proxy/inmem"
 	"kasper/src/drivers/network/chain/service"
 	"kasper/src/shell/utils/future"
+	"log"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/google/uuid"
@@ -37,11 +39,12 @@ type ShardChain struct {
 }
 
 type Blockchain struct {
-	app      core.ICore
-	chains   cmap.ConcurrentMap[string, *WorkChain]
-	pipeline func([][]byte) []string
-	trans    net.Transport
-	service  *service.Service
+	app         core.ICore
+	chains      cmap.ConcurrentMap[string, *WorkChain]
+	pipeline    func([][]byte) []string
+	trans       net.Transport
+	service     *service.Service
+	storageRoot string
 }
 
 type CLIConfig struct {
@@ -132,7 +135,17 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 		Chain: w,
 	}
 	proxy := inmem.NewInmemProxy(handler, nil)
+
+	dataDir := w.blockchain.storageRoot + "/chains/" + w.Id + "/" + chainId
+	os.MkdirAll(dataDir, os.ModePerm)
+	cpCmd := exec.Command("bash", "/app/scripts/shardchain", w.blockchain.storageRoot, w.Id, chainId)
+	err := cpCmd.Run()
+	if err != nil {
+		log.Println(err)
+	}
+	
 	config := config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT"))
+	config.DataDir = dataDir
 	config.Proxy = proxy
 	engine := babble.NewBabble(config)
 	if err := engine.Init(w.blockchain.trans, w.Id, chainId); err != nil {
@@ -140,20 +153,21 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 	}
 	shardChain := &ShardChain{Id: chainId, shardLedger: engine, shardProxy: proxy}
 	w.shardChains.Set(chainId, shardChain)
-	w.blockchain.service.RegisterNode(chainId, engine.Node)
+	w.blockchain.service.RegisterNode(w.Id, chainId, engine.Node)
 	future.Async(func() {
 		engine.Run()
 	}, false)
 	return shardChain
 }
 
-func NewChain(core core.ICore) *Blockchain {
+func NewChain(core core.ICore, storageRoot string) *Blockchain {
 	blockchain := &Blockchain{
-		app:      core,
-		chains:   cmap.New[*WorkChain](),
-		trans:    nil,
-		service:  nil,
-		pipeline: nil,
+		app:         core,
+		chains:      cmap.New[*WorkChain](),
+		storageRoot: storageRoot,
+		trans:       nil,
+		service:     nil,
+		pipeline:    nil,
 	}
 	config := config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT"))
 	trans, err := initTransport(config)

@@ -65,7 +65,7 @@ func NewNetwork(
 		tcp:        tcp.NewTcp(core),
 		ws:         ws.NewWs(core),
 		fed:        fed,
-		chain:      chain.NewChain(core),
+		chain:      chain.NewChain(core, storage.StorageRoot()),
 		tlsConfig:  config,
 		tlsManager: manager,
 	}
