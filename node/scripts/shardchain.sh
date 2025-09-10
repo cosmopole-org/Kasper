@@ -14,10 +14,14 @@ mkdir -p $dest
 cp /root/.babble/key.pub $dest/key.pub
 cp /root/.babble/priv_key $dest/priv_key
 
-trueVal="true"
-if [ "$isHead" = "$trueVal" ]; then
+mode1="1"
+mode1="2"
+mode1="3"
+if [ "$isHead" = "$mode2" ]; then
     cp /root/.babble/peers.genesis.json $dest/peers.genesis.json
-    cp /root/.babble/peers.json $dest/peers.json
+    cp /root/.babble/peers.genesis.json $dest/peers.json
+elif [ "$isHead" = "$mode1" ]; then
+    cp /root/.babble/peers.genesis.json $dest/peers.genesis.json
 else
     # get genesis.peers.json
     echo "Fetching peers.genesis.json from node1"

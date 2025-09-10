@@ -135,7 +135,7 @@ func ExampleInmemDummyClient() {
 	babble := babble.NewBabble(babbleConfig)
 
 	// Read in the configuration and initialise the node accordingly.
-	if err := babble.Init(nil, "", ""); err != nil {
+	if err := babble.Init(nil, "", "", nil); err != nil {
 		babbleConfig.Logger().Error("Cannot initialize babble:", err)
 		os.Exit(1)
 	}

@@ -35,7 +35,7 @@ func TestProcessSync(t *testing.T) {
 		genesisPeerSet,
 		hg.NewInmemStore(config.CacheSize),
 		peer0Trans,
-		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "")
+		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "", nil)
 	node0.Init()
 
 	node0.RunAsync(false)
@@ -53,7 +53,7 @@ func TestProcessSync(t *testing.T) {
 		genesisPeerSet,
 		hg.NewInmemStore(config.CacheSize),
 		peer1Trans,
-		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "")
+		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "", nil)
 	node1.Init()
 
 	node1.RunAsync(false)
@@ -141,7 +141,7 @@ func TestProcessEagerSync(t *testing.T) {
 		genesisPeerSet,
 		hg.NewInmemStore(config.CacheSize),
 		peer0Trans,
-		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "")
+		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "", nil)
 	node0.Init()
 
 	node0.RunAsync(false)
@@ -159,7 +159,7 @@ func TestProcessEagerSync(t *testing.T) {
 		genesisPeerSet,
 		hg.NewInmemStore(config.CacheSize),
 		peer1Trans,
-		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "")
+		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "", nil)
 	node1.Init()
 
 	node1.RunAsync(false)
@@ -226,7 +226,7 @@ func TestProcessFastForward(t *testing.T) {
 		genesisPeerSet,
 		hg.NewInmemStore(config.CacheSize),
 		peer0Trans,
-		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "")
+		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "", nil)
 	node0.Init()
 
 	node0.RunAsync(false)
@@ -244,7 +244,7 @@ func TestProcessFastForward(t *testing.T) {
 		genesisPeerSet,
 		hg.NewInmemStore(config.CacheSize),
 		peer1Trans,
-		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "")
+		dummy.NewInmemDummyClient(common.NewTestEntry(t, common.TestLogLevel)), "", "", nil)
 	node1.Init()
 
 	node1.RunAsync(false)

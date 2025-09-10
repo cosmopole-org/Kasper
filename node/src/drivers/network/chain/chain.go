@@ -10,6 +10,7 @@ import (
 	"kasper/src/drivers/network/chain/net"
 	"kasper/src/drivers/network/chain/net/signal/wamp"
 	"kasper/src/drivers/network/chain/node/state"
+	"kasper/src/drivers/network/chain/peers"
 	"kasper/src/drivers/network/chain/proxy"
 	"kasper/src/drivers/network/chain/proxy/inmem"
 	"kasper/src/drivers/network/chain/service"
@@ -17,6 +18,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -41,7 +43,7 @@ type ShardChain struct {
 type Blockchain struct {
 	app         core.ICore
 	chains      cmap.ConcurrentMap[string, *WorkChain]
-	pipeline    func([][]byte) []string
+	pipeline    func([][]byte, func([]byte)) []string
 	trans       net.Transport
 	service     *service.Service
 	storageRoot string
@@ -120,17 +122,17 @@ func initTransport(config *config.Config) (net.Transport, error) {
 func (b *Blockchain) createNewWorkChain(chainId string) *WorkChain {
 	wchain := &WorkChain{Id: chainId, mainLedger: nil, mainProxy: nil, sharder: nil, shardChains: cmap.New[*ShardChain](), blockchain: b}
 	b.chains.Set(chainId, wchain)
-	shardCreatorCb := func(shardId string) {
-		wchain.createNewShardChain(shardId)
+	shardCreatorCb := func(shardId string, nodes []string) {
+		wchain.createNewShardChain(shardId, true, nodes)
 	}
-	wchain.sharder = NewShardManager(1, 1, 10, 5, 100000, 1, shardCreatorCb)
-	mainShardChain := wchain.createNewShardChain("shard-main")
+	wchain.sharder = NewShardManager(0, 0, 10, 5, 100000, 1, shardCreatorCb)
+	mainShardChain := wchain.createNewShardChain("shard-main", false, []string{})
 	wchain.mainLedger = mainShardChain.shardLedger
 	wchain.mainProxy = mainShardChain.shardProxy
 	return wchain
 }
 
-func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
+func (w *WorkChain) createNewShardChain(chainId string, created bool, peersArr []string) *ShardChain {
 	handler := &HgHandler{
 		Chain: w,
 	}
@@ -138,17 +140,50 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 
 	dataDir := w.blockchain.storageRoot + "/chains/" + w.Id + "/" + chainId
 	os.MkdirAll(dataDir, os.ModePerm)
-	cpCmd := exec.Command("bash", "/app/scripts/shardchain", w.blockchain.storageRoot, w.Id, chainId, os.Getenv("IS_HEAD"))
-	err := cpCmd.Run()
+
+	peersListMode := "0"
+
+	if created {
+		mainChain, _ := w.blockchain.chains.Get("main")
+		peersList := []*peers.Peer{}
+		for _, peer := range mainChain.mainLedger.Peers.Peers {
+			if slices.Contains(peersArr, strings.Split(peer.NetAddr, ":")[0]) {
+				peersList = append(peersList, peer)
+			}
+		}
+		peerset := peers.PeerSet{Peers: peersList}
+		peersStr, _ := peerset.Marshal()
+		peersFile, _ := os.OpenFile(dataDir+"/peers.json", os.O_WRONLY|os.O_CREATE, 0600)
+		defer peersFile.Close()
+		peersFile.Write(peersStr)
+		peersListMode = "1"
+	} else if os.Getenv("IS_HEAD") == "true" {
+		peersListMode = "2"
+	} else {
+		peersListMode = "3"
+	}
+
+	cmd := exec.Command("bash", "/app/scripts/shardchain", w.blockchain.storageRoot, w.Id, chainId, peersListMode)
+	err := cmd.Run()
 	if err != nil {
 		log.Println(err)
 	}
-	
+
 	config := config.NewDefaultConfig(os.Getenv("IPADDR") + ":" + os.Getenv("BLOCKCHAIN_API_PORT"))
 	config.DataDir = dataDir
 	config.Proxy = proxy
 	engine := babble.NewBabble(config)
-	if err := engine.Init(w.blockchain.trans, w.Id, chainId); err != nil {
+	if err := engine.Init(w.blockchain.trans, w.Id, chainId, func(origin string) {
+		w.sharder.AddNode(string(origin))
+		w.sharder.mu.Lock()
+		defer w.sharder.mu.Unlock()
+		state, err := w.sharder.ExportState()
+		if err == nil {
+			w.blockchain.SubmitTrx(w.Id, "", "sharderMap|"+string(origin), []byte(state))
+		} else {
+			log.Println(err)
+		}
+	}); err != nil {
 		panic(err)
 	}
 	shardChain := &ShardChain{Id: chainId, shardLedger: engine, shardProxy: proxy}
@@ -199,7 +234,7 @@ func (b *Blockchain) Close() {
 	}
 }
 
-func (c *Blockchain) RegisterPipeline(pipeline func([][]byte) []string) {
+func (c *Blockchain) RegisterPipeline(pipeline func([][]byte, func([]byte)) []string) {
 	c.pipeline = pipeline
 }
 
@@ -219,7 +254,7 @@ func (c *Blockchain) SubmitTrx(chainId string, machineId string, typ string, pay
 		mainShardChain, _ := mainWorkChain.shardChains.Get("shard-main")
 		mainShardChain.shardProxy.SubmitTx(payload)
 	} else {
-		mainShardChain, _ := mainWorkChain.shardChains.Get(mainWorkChain.sharder.hasher.GetShard(machineId))
+		mainShardChain, _ := mainWorkChain.shardChains.Get(mainWorkChain.sharder.Hasher.GetShard(machineId))
 		mainShardChain.shardProxy.SubmitTx(payload)
 	}
 }
@@ -261,7 +296,13 @@ type HgHandler struct {
 }
 
 func (p *HgHandler) CommitHandler(block hashgraph.Block) (proxy.CommitResponse, error) {
-	machineIds := p.Chain.blockchain.pipeline(block.Transactions())
+	machineIds := p.Chain.blockchain.pipeline(block.Transactions(), func(insiderTrx []byte) {
+		sharderMapKey := "sharderMap|" + p.Chain.blockchain.app.Id() + "::"
+		if strings.HasPrefix(string(insiderTrx), sharderMapKey) {
+			payload := insiderTrx[len(sharderMapKey):]
+			p.Chain.sharder.ImportState(string(payload))
+		}
+	})
 
 	p.Chain.sharder.ProcessDAppTransactionGroup(machineIds)
 

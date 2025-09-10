@@ -40,7 +40,7 @@ func NewBabble(c *config.Config) *Babble {
 }
 
 // Init initialises Babble based on its configuration.
-func (b *Babble) Init(trans net.Transport, workChainId string, shardChainId string) error {
+func (b *Babble) Init(trans net.Transport, workChainId string, shardChainId string, onNewNodeCb func(string)) error {
 
 	b.logger.Debug("validateConfig")
 	if err := b.validateConfig(); err != nil {
@@ -76,7 +76,7 @@ func (b *Babble) Init(trans net.Transport, workChainId string, shardChainId stri
 	}
 
 	b.logger.Debug("initNode")
-	if err := b.initNode(workChainId, shardChainId); err != nil {
+	if err := b.initNode(workChainId, shardChainId, onNewNodeCb); err != nil {
 		b.logger.WithError(err).Error("babble.go:Init() initNode")
 		return err
 	}
@@ -301,7 +301,7 @@ func (b *Babble) initKey() error {
 	return nil
 }
 
-func (b *Babble) initNode(workChainId string, shardChainId string) error {
+func (b *Babble) initNode(workChainId string, shardChainId string, onNewNodeCb func(string)) error {
 
 	validator := node.NewValidator(b.Config.Key, b.Config.Moniker)
 
@@ -333,6 +333,7 @@ func (b *Babble) initNode(workChainId string, shardChainId string) error {
 		b.Config.Proxy,
 		workChainId,
 		shardChainId,
+		onNewNodeCb,
 	)
 
 	return b.Node.Init()

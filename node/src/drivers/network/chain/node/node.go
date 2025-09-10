@@ -27,6 +27,7 @@ type Node struct {
 
 	WorkchainId  string
 	ShardchainId string
+	onNewNode    func(string)
 
 	Graph *Graph
 
@@ -91,6 +92,7 @@ func NewNode(conf *config.Config,
 	proxy proxy.AppProxy,
 	workChainId string,
 	shardChainId string,
+	onNewNodeCb func(string),
 ) *Node {
 
 	// Prepare sigCh to relay SIGINT and SIGTERM system calls
@@ -125,6 +127,7 @@ func NewNode(conf *config.Config,
 		WorkchainId:  workChainId,
 		ShardchainId: shardChainId,
 		Graph:        nil,
+		onNewNode:    onNewNodeCb,
 	}
 	node.Graph = NewGraph(&node)
 

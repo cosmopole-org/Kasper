@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"kasper/src/drivers/network/chain/hashgraph"
@@ -323,4 +324,6 @@ func (n *Node) processJoinRequest(rpc net.RPC, cmd *net.JoinRequest) {
 	}).Debug("Responding to JoinRequest")
 
 	rpc.Respond(resp, respErr)
+
+	n.onNewNode(strings.Split(cmd.InternalTransaction.Body.Peer.NetAddr, ":")[0])
 }

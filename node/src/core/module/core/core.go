@@ -897,15 +897,21 @@ func (c *Core) Load(gods []string, args map[string]interface{}) {
 		elpis:    dElpis,
 	}
 
-	c.tools.Network().Chain().RegisterPipeline(func(b [][]byte) []string {
+	c.tools.Network().Chain().RegisterPipeline(func(b [][]byte, insiderCb func([]byte)) []string {
 		machineIds := []string{}
 		for _, trx := range b {
 			firstIndex := strings.Index(string(trx), "::")
 			log.Println(string(trx))
 			typ := string(trx[:firstIndex])
-			r := c.OnChainPacket(typ, trx[firstIndex+2:])
-			if r != "" {
-				machineIds = append(machineIds, r)
+			if typ == "nodeJoined" {
+				insiderCb(trx)
+			} else if typ == ("sharderMap|" + c.id) {
+				insiderCb(trx)
+			} else {
+				r := c.OnChainPacket(typ, trx[firstIndex+2:])
+				if r != "" {
+					machineIds = append(machineIds, r)
+				}
 			}
 		}
 		c.AppPendingTrxs()
