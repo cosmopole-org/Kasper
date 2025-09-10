@@ -3,7 +3,7 @@
 storageRoot=${1:-"/home/keyhan/data"}
 workchainId=${2:-"main"}
 shardchainId=${3:-"shard-main"}
-isHead=${4:-"true"}
+peersMode=${4:-"3"}
 
 dest="${storageRoot}/chains/${workchainId}/${shardchainId}"
 
@@ -15,13 +15,13 @@ cp /root/.babble/key.pub $dest/key.pub
 cp /root/.babble/priv_key $dest/priv_key
 
 mode1="1"
-mode1="2"
-mode1="3"
-if [ "$isHead" = "$mode2" ]; then
+mode2="2"
+mode3="3"
+if [ "$peersMode" = "1" ]; then
+    cp /root/.babble/peers.genesis.json $dest/peers.genesis.json
+elif [ "$peersMode" = "2" ]; then
     cp /root/.babble/peers.genesis.json $dest/peers.genesis.json
     cp /root/.babble/peers.genesis.json $dest/peers.json
-elif [ "$isHead" = "$mode1" ]; then
-    cp /root/.babble/peers.genesis.json $dest/peers.genesis.json
 else
     # get genesis.peers.json
     echo "Fetching peers.genesis.json from node1"
