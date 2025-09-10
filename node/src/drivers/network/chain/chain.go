@@ -163,7 +163,7 @@ func (w *WorkChain) createNewShardChain(chainId string, created bool, peersArr [
 		peersListMode = "3"
 	}
 
-	cmd := exec.Command("bash", "/app/scripts/shardchain", w.blockchain.storageRoot, w.Id, chainId, peersListMode)
+	cmd := exec.Command("bash", "/app/scripts/shardchain.sh", w.blockchain.storageRoot, w.Id, chainId, peersListMode)
 	err := cmd.Run()
 	if err != nil {
 		log.Println(err)
