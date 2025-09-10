@@ -138,7 +138,7 @@ func (w *WorkChain) createNewShardChain(chainId string) *ShardChain {
 
 	dataDir := w.blockchain.storageRoot + "/chains/" + w.Id + "/" + chainId
 	os.MkdirAll(dataDir, os.ModePerm)
-	cpCmd := exec.Command("bash", "/app/scripts/shardchain", w.blockchain.storageRoot, w.Id, chainId)
+	cpCmd := exec.Command("bash", "/app/scripts/shardchain", w.blockchain.storageRoot, w.Id, chainId, os.Getenv("IS_HEAD"))
 	err := cpCmd.Run()
 	if err != nil {
 		log.Println(err)
