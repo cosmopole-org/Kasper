@@ -121,8 +121,8 @@ func (d User) All(trx trx.ITrx, offset int64, count int64, query map[string]stri
 	return entities, nil
 }
 
-func (d User) Search(trx trx.ITrx, offset int64, count int64, word string, filter map[string]string) ([]User, error) {
-	links, err := trx.SearchLinkValsList("User", "name", "id", word, filter, offset, count)
+func (d User) Search(trx trx.ITrx, offset int64, count int64, fromColumn string, word string, filter map[string]string) ([]User, error) {
+	links, err := trx.SearchLinkValsList("User", fromColumn, "id", word, filter, offset, count)
 	if err != nil {
 		log.Println(err)
 		return nil, err

@@ -359,7 +359,11 @@ func processPacket(callbackId int64, data []byte) {
 			}
 			fileType := ""
 			if strings.HasPrefix(mimeType, "image/") {
-				fileType = "image"
+				if mimeType == "image/gif" {
+					fileType = "gif"
+				} else {
+					fileType = "image"
+				}
 			} else if strings.HasPrefix(mimeType, "audio/") {
 				fileType = "audio"
 			} else if strings.HasPrefix(mimeType, "video/") {

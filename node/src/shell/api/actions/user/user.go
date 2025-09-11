@@ -276,7 +276,7 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	trx.PutLink("member::"+point.Id+"::"+user.Id, "true")
 	trx.PutLink("admin::"+point.Id+"::"+user.Id, "true")
 	trx.PutLink("adminof::"+user.Id+"::"+point.Id, "true")
-	trx.PutJson("PointMeta::"+point.Id, "metadata", map[string]any{"public": map[string]any{"profile": map[string]any{"title": "home", "avatar": "123"}}}, false)
+	trx.PutJson("PointMeta::"+point.Id, "metadata", map[string]any{"public": map[string]any{"profile": map[string]any{"title": "Home", "avatar": "avatar"}}}, false)
 	trx.PutIndex("Point", "title", "id", point.Id+"->home", []byte(point.Id))
 	a.App.Tools().Signaler().JoinGroup(point.Id, user.Id)
 	return outputsusers.CreateOutput{User: user, Session: session}, nil
@@ -457,7 +457,10 @@ func (a *Actions) Find(state state.IState, input inputsusers.FindInput) (any, er
 // List /users/list check [ true false false ] access [ true false false false GET ]
 func (a *Actions) List(state state.IState, input inputsusers.ListInput) (any, error) {
 	trx := state.Trx()
-	users, err := models.User{}.Search(trx, input.Offset, input.Count, input.Query, map[string]string{"type": "human"})
+	if input.Param != "username" && input.Param != "name" {
+		return nil, errors.New("param is not searchable")
+	}
+	users, err := models.User{}.Search(trx, input.Offset, input.Count, input.Param, input.Query, map[string]string{"type": "human"})
 	if err != nil {
 		log.Println(err)
 		return nil, err
