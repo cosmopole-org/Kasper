@@ -14,6 +14,8 @@ type User struct {
 	PublicKey string `json:"publicKey"`
 	Balance   int64  `json:"balance"`
 	Name      string `json:"name"`
+	Bio       string `json:"bio"`
+	Location  string `json:"location"`
 }
 
 func (d User) Type() string {
@@ -53,6 +55,8 @@ func (d User) Pull(trx trx.ITrx, flags ...bool) User {
 			if flags[0] {
 				if metadata, err := trx.GetJson("UserMeta::"+d.Id, "metadata.public.profile"); err == nil {
 					d.Name = metadata["name"].(string)
+					d.Bio = metadata["bio"].(string)
+					d.Location = metadata["location"].(string)
 				}
 			}
 		}

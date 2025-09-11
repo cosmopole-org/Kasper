@@ -3,6 +3,7 @@ package actions_space
 import (
 	"errors"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/state"
 	inputs_points "kasper/src/shell/api/inputs/points"
 	"kasper/src/shell/api/model"
@@ -499,6 +500,42 @@ func (a *Actions) GetDefaultAccess(state state.IState, input inputs_points.GetDe
 	return map[string]any{"access": access}, nil
 }
 
+func (a *Actions) getUserStatus(trx trx.ITrx, targetUserId string, requesterUserId string) string {
+	if targetUserId == requesterUserId {
+		if a.App.Tools().Signaler().Listeners().Has(targetUserId) {
+			return "online"
+		} else {
+			return "offline"
+		}
+	} else {
+		metaPriv, err := trx.GetJson("UserMeta::"+targetUserId, "metadata.private.settings.privacy")
+		if err != nil {
+			log.Println(err)
+			return "last seen recently"
+		}
+		onlineView := metaPriv["onlineView"].(string)
+		if onlineView == "all" {
+			if a.App.Tools().Signaler().Listeners().Has(targetUserId) {
+				return "online"
+			} else {
+				return "offline"
+			}
+		} else if onlineView == "contacts" {
+			if metaCont, _ := trx.GetJson("UserMeta::"+targetUserId, "metadata.private.contacts"); metaCont[requesterUserId] == true {
+				if a.App.Tools().Signaler().Listeners().Has(targetUserId) {
+					return "online"
+				} else {
+					return "offline"
+				}
+			} else {
+				return "last seen recently"
+			}
+		} else {
+			return "last seen recently"
+		}
+	}
+}
+
 // ReadMembers /points/readMembers check [ true true false ] access [ true false false false POST ]
 func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMemberInput) (any, error) {
 	if state.Trx().GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) != "true" {
@@ -527,6 +564,7 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 				"username":  member.Username,
 				"name":      metadata["name"],
 			}
+			memberData["status"] = a.getUserStatus(trx, member.Id, state.Info().UserId())
 			if isAdmin {
 				acc := map[string]bool{}
 				rawAcc, err := trx.GetJson("PointAccess::"+state.Info().PointId()+"::"+member.Id, "metadata")

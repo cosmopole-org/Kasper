@@ -14,6 +14,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	iaction "kasper/src/abstract/models/action"
 
@@ -23,12 +24,15 @@ import (
 )
 
 type Socket struct {
-	Id     string
-	Lock   sync.Mutex
-	Conn   net.Conn
-	Buffer [][]byte
-	Ack    bool
-	app    core.ICore
+	Id           string
+	Lock         sync.Mutex
+	Conn         net.Conn
+	Buffer       [][]byte
+	Ack          bool
+	Disconnected bool
+	app          core.ICore
+	server       *Tcp
+	userId       string
 }
 
 type Tcp struct {
@@ -175,10 +179,22 @@ func (t *Tcp) listenForPackets(socket *Socket) {
 }
 
 func (t *Tcp) handleConnection(conn net.Conn) {
-	socket := &Socket{Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true}
+	socket := &Socket{server: t, Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: t.app, Ack: true, Disconnected: false}
 	t.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
 	future.Async(func() {
 		t.listenForPackets(socket)
+		socket.Lock.Lock()
+		defer socket.Lock.Unlock()
+		socket.Disconnected = true
+		future.Async(func() {
+			time.Sleep(60 * time.Second)
+			socket.Lock.Lock()
+			defer socket.Lock.Unlock()
+			if socket.Disconnected {
+				t.sockets.Remove(socket.userId)
+				t.app.Tools().Signaler().Listeners().Remove(socket.userId)
+			}
+		}, false)
 	}, false)
 }
 
@@ -295,23 +311,6 @@ func (t *Socket) pushBuffer() {
 	}
 }
 
-func (t *Socket) connectListener(uid string) *signaler.Listener {
-	t.app.Tools().Signaler().Lock()
-	defer t.app.Tools().Signaler().Unlock()
-	lis := &signaler.Listener{
-		Id:      uid,
-		Paused:  false,
-		DisTime: 0,
-		Signal: func(key string, b any) {
-			if b != nil {
-				t.writeUpdate(key, b, true)
-			}
-		},
-	}
-	t.Ack = true
-	return lis
-}
-
 func (t *Socket) processPacket(packet []byte) {
 	if len(packet) == 1 && packet[0] == 0x01 {
 		send := func() {
@@ -378,10 +377,47 @@ func (t *Socket) processPacket(packet []byte) {
 		var lis *signaler.Listener
 		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
 		if success {
-			lis = t.connectListener(userId)
+			var chosenSocket *Socket
+			func() {
+				soc, found := t.server.sockets.Get(userId)
+				if !found {
+					lis = &signaler.Listener{
+						Id:      userId,
+						Paused:  false,
+						DisTime: 0,
+						Signal: func(key string, b any) {
+							if b != nil {
+								t.writeUpdate(key, b, true)
+							}
+						},
+					}
+					t.Ack = true
+					t.server.sockets.Set(userId, t)
+					chosenSocket = t
+					return
+				}
+				soc.Lock.Lock()
+				defer soc.Lock.Unlock()
+				soc.Disconnected = false
+				lis = &signaler.Listener{
+					Id:      userId,
+					Paused:  false,
+					DisTime: 0,
+					Signal: func(key string, b any) {
+						if b != nil {
+							soc.writeUpdate(key, b, true)
+						}
+					},
+				}
+				t.Ack = true
+				soc.server.sockets.Set(userId, soc)
+				chosenSocket = soc
+			}()
+			chosenSocket.userId = userId
 			var pointIds []string
-			t.app.ModifyState(true, func(trx trx.ITrx) error {
-				pIds, err := trx.GetLinksList("memberof::"+userId+"::", -1, -1)
+			prefix := "memberof::" + userId + "::"
+			chosenSocket.app.ModifyState(true, func(trx trx.ITrx) error {
+				pIds, err := trx.GetLinksList(prefix, -1, -1)
 				if err != nil {
 					log.Println(err)
 					pointIds = []string{}
@@ -391,10 +427,10 @@ func (t *Socket) processPacket(packet []byte) {
 				return nil
 			})
 			for _, pointId := range pointIds {
-				t.app.Tools().Signaler().JoinGroup(pointId, userId)
+				chosenSocket.app.Tools().Signaler().JoinGroup(pointId[len(prefix):], userId)
 			}
-			t.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
-			t.app.Tools().Signaler().ListenToSingle(lis)
+			chosenSocket.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
+			chosenSocket.app.Tools().Signaler().ListenToSingle(lis)
 			b, _ := json.Marshal(packetmodel.ResponseSimpleMessage{Message: "old_queue_end"})
 			lis.Signal("old_queue_end", b)
 		} else {

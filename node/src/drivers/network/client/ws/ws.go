@@ -25,12 +25,15 @@ import (
 )
 
 type Socket struct {
-	Id     string
-	Lock   sync.Mutex
-	Conn   *gws.Conn
-	Buffer [][]byte
-	Ack    bool
-	app    core.ICore
+	Id           string
+	Lock         sync.Mutex
+	Conn         *gws.Conn
+	Buffer       [][]byte
+	Ack          bool
+	Disconnected bool
+	app          core.ICore
+	server       *Ws
+	userId       string
 }
 
 type Ws struct {
@@ -49,10 +52,8 @@ type Handler struct {
 }
 
 func (c *Handler) OnOpen(conn *gws.Conn) {
-	// _ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
 	log.Println("new ws client connect")
-	socket := &Socket{Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: c.wsServer.app, Ack: true}
-	c.wsServer.sockets.Set(strings.Split(conn.RemoteAddr().String(), ":")[0], socket)
+	socket := &Socket{server: c.wsServer, Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: c.wsServer.app, Ack: true, Disconnected: false}
 	conn.Session().Store("session", socket)
 }
 
@@ -87,6 +88,22 @@ func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
 				}
 				go func() {
 					conn.ReadLoop()
+					s, exist := conn.Session().Load("session")
+					if exist {
+						soc := s.(*Socket)
+						soc.Lock.Lock()
+						defer soc.Lock.Unlock()
+						soc.Disconnected = true
+						future.Async(func() {
+							time.Sleep(60 * time.Second)
+							soc.Lock.Lock()
+							defer soc.Lock.Unlock()
+							if soc.Disconnected {
+								t.sockets.Remove(soc.userId)
+								t.app.Tools().Signaler().Listeners().Remove(soc.userId)
+							}
+						}, false)
+					}
 				}()
 			}),
 			TLSConfig: tlsConfig,
@@ -214,23 +231,6 @@ func (t *Socket) pushBuffer() {
 	}
 }
 
-func (t *Socket) connectListener(uid string) *signaler.Listener {
-	t.app.Tools().Signaler().Lock()
-	defer t.app.Tools().Signaler().Unlock()
-	lis := &signaler.Listener{
-		Id:      uid,
-		Paused:  false,
-		DisTime: 0,
-		Signal: func(key string, b any) {
-			if b != nil {
-				t.writeUpdate(key, b, true)
-			}
-		},
-	}
-	t.Ack = true
-	return lis
-}
-
 func (t *Socket) processPacket(packet []byte) {
 	if len(packet) == 1 && packet[0] == 0x01 {
 		send := func() {
@@ -297,10 +297,46 @@ func (t *Socket) processPacket(packet []byte) {
 		var lis *signaler.Listener
 		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
 		if success {
-			lis = t.connectListener(userId)
+			var chosenSocket *Socket
+			func() {
+				soc, found := t.server.sockets.Get(userId)
+				if !found {
+					lis = &signaler.Listener{
+						Id:      userId,
+						Paused:  false,
+						DisTime: 0,
+						Signal: func(key string, b any) {
+							if b != nil {
+								t.writeUpdate(key, b, true)
+							}
+						},
+					}
+					t.Ack = true
+					t.server.sockets.Set(userId, t)
+					chosenSocket = t
+					return
+				}
+				soc.Lock.Lock()
+				defer soc.Lock.Unlock()
+				soc.Disconnected = false
+				lis = &signaler.Listener{
+					Id:      userId,
+					Paused:  false,
+					DisTime: 0,
+					Signal: func(key string, b any) {
+						if b != nil {
+							soc.writeUpdate(key, b, true)
+						}
+					},
+				}
+				t.Ack = true
+				soc.server.sockets.Set(userId, soc)
+				chosenSocket = soc
+			}()
+			chosenSocket.userId = userId
 			var pointIds []string
 			prefix := "memberof::" + userId + "::"
-			t.app.ModifyState(true, func(trx trx.ITrx) error {
+			chosenSocket.app.ModifyState(true, func(trx trx.ITrx) error {
 				pIds, err := trx.GetLinksList(prefix, -1, -1)
 				if err != nil {
 					log.Println(err)
@@ -311,10 +347,10 @@ func (t *Socket) processPacket(packet []byte) {
 				return nil
 			})
 			for _, pointId := range pointIds {
-				t.app.Tools().Signaler().JoinGroup(pointId[len(prefix):], userId)
+				chosenSocket.app.Tools().Signaler().JoinGroup(pointId[len(prefix):], userId)
 			}
-			t.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
-			t.app.Tools().Signaler().ListenToSingle(lis)
+			chosenSocket.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
+			chosenSocket.app.Tools().Signaler().ListenToSingle(lis)
 			b, _ := json.Marshal(packetmodel.ResponseSimpleMessage{Message: "old_queue_end"})
 			lis.Signal("old_queue_end", b)
 		} else {

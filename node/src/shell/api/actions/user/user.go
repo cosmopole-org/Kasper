@@ -7,6 +7,7 @@ import (
 	"errors"
 	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
+	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/state"
 	"kasper/src/core/module/actor/model/base"
 	mainstate "kasper/src/core/module/actor/model/state"
@@ -256,6 +257,8 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	user.Push(trx)
 	session.Push(trx)
 	trx.PutJson("UserMeta::"+user.Id, "metadata", input.Metadata, false)
+	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile.bio", "DecillionAI User", false)
+	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile.location", "DecillionAI Land", false)
 	meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
 	if err != nil {
 		log.Println(err)
@@ -321,6 +324,16 @@ func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any
 		log.Println(err)
 		return nil, err
 	}
+	if meta["bio"] == nil {
+		err := errors.New("bio can't be empty")
+		log.Println(err)
+		return nil, err
+	}
+	if meta["location"] == nil {
+		err := errors.New("location can't be empty")
+		log.Println(err)
+		return nil, err
+	}
 	trx.PutIndex("User", "name", "id", state.Info().UserId()+"->"+meta["name"].(string), []byte(state.Info().UserId()))
 	return map[string]any{}, nil
 }
@@ -342,6 +355,42 @@ func (a *Actions) Meta(state state.IState, input inputsusers.MetaInput) (any, er
 	return map[string]any{"metadata": metadata}, nil
 }
 
+func (a *Actions) getUserStatus(trx trx.ITrx, targetUserId string, requesterUserId string) string {
+	if targetUserId == requesterUserId {
+		if a.App.Tools().Signaler().Listeners().Has(targetUserId) {
+			return "online"
+		} else {
+			return "offline"
+		}
+	} else {
+		metaPriv, err := trx.GetJson("UserMeta::"+targetUserId, "metadata.private.settings.privacy")
+		if err != nil {
+			log.Println(err)
+			return "last seen recently"
+		}
+		onlineView := metaPriv["onlineView"].(string)
+		if onlineView == "all" {
+			if a.App.Tools().Signaler().Listeners().Has(targetUserId) {
+				return "online"
+			} else {
+				return "offline"
+			}
+		} else if onlineView == "contacts" {
+			if metaCont, _ := trx.GetJson("UserMeta::"+targetUserId, "metadata.private.contacts"); metaCont[requesterUserId] == true {
+				if a.App.Tools().Signaler().Listeners().Has(targetUserId) {
+					return "online"
+				} else {
+					return "offline"
+				}
+			} else {
+				return "last seen recently"
+			}
+		} else {
+			return "last seen recently"
+		}
+	}
+}
+
 // Get /users/get check [ true false false ] access [ true false false false GET ]
 func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, error) {
 	trx := state.Trx()
@@ -355,6 +404,8 @@ func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, erro
 		"type":      user.Typ,
 		"username":  user.Username,
 		"name":      user.Name,
+		"bio":       user.Bio,
+		"location":  user.Location,
 	}
 	if user.Typ == "human" {
 		meta, err := trx.GetJson("UserMeta::"+input.UserId, "metadata.public.profile")
@@ -367,6 +418,9 @@ func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, erro
 	if input.UserId == state.Info().UserId() {
 		result["balance"] = user.Balance
 	}
+
+	result["status"] = a.getUserStatus(trx, input.UserId, state.Info().UserId())
+
 	return outputsusers.GetOutput{User: result}, nil
 }
 
@@ -390,10 +444,13 @@ func (a *Actions) Find(state state.IState, input inputsusers.FindInput) (any, er
 		return nil, err
 	}
 	result["name"] = meta["name"]
+	result["bio"] = meta["bio"]
+	result["location"] = meta["location"]
 	result["avatar"] = meta["avatar"]
 	if userId == state.Info().UserId() {
 		result["balance"] = user.Balance
 	}
+	result["status"] = a.getUserStatus(trx, user.Id, state.Info().UserId())
 	return outputsusers.GetOutput{User: result}, nil
 }
 
@@ -419,7 +476,10 @@ func (a *Actions) List(state state.IState, input inputsusers.ListInput) (any, er
 			return nil, err
 		}
 		result["name"] = meta["name"]
+		result["bio"] = meta["bio"]
+		result["location"] = meta["location"]
 		result["avatar"] = meta["avatar"]
+		result["status"] = a.getUserStatus(trx, user.Id, state.Info().UserId())
 		results = append(results, result)
 	}
 	return map[string]any{"users": results}, nil
