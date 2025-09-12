@@ -14,11 +14,11 @@ go run ../..//keygen/keygen.go
 
 # get genesis.peers.json
 echo "Fetching peers.genesis.json from node1"
-curl -s http://165.232.32.106:8079/genesispeers > $dest/peers.genesis.json
+curl -s http://api.kproto.app:8079/genesispeers > $dest/peers.genesis.json
 
 # get up-to-date peers.json
 echo "Fetching peers.json from node1"
-curl -s http://165.232.32.106:8079/peers > $dest/peers.json
+curl -s http://api.kproto.app:8079/peers > $dest/peers.json
 
 cp $dest/peers.json /root/.babble/peers.json
 cp $dest/peers.genesis.json /root/.babble/peers.genesis.json
