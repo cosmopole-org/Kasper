@@ -186,7 +186,7 @@ type ShardManager struct {
 }
 
 // NewShardManager initializes a new network with an initial number of Nodes and Shards.
-func NewShardManager(initialNodes int, initialShards int64, MaxShardLoad, MinShardLoad, MaxNodes, MinNodes int, createChainCallback func(string, []string)) *ShardManager {
+func NewShardManager(initialNodes []string, initialShards int64, MaxShardLoad, MinShardLoad, MaxNodes, MinNodes int, createChainCallback func(string, []string)) *ShardManager {
 
 	// rand.Seed(time.Now().UnixNano())
 
@@ -200,14 +200,13 @@ func NewShardManager(initialNodes int, initialShards int64, MaxShardLoad, MinSha
 		MaxNodes:      MaxNodes,
 		MinNodes:      MinNodes,
 		ShardCounter:  initialShards,
-		NodeCounter:   initialNodes,
+		NodeCounter:   len(initialNodes),
 		createChainCb: createChainCallback,
 	}
 
 	fmt.Println("Initializing distributed ledger network...")
 
-	for i := 0; i < initialNodes; i++ {
-		nodeID := fmt.Sprintf("node-%d", i+1)
+	for _, nodeID := range initialNodes {
 		manager.AddNode(nodeID)
 	}
 
