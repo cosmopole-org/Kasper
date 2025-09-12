@@ -441,10 +441,10 @@ func (sm *ShardManager) DeployDapp(dappID string) {
 	sm.mu.Lock()
 	dapp := &DApp{ID: dappID}
 	sm.Dapps[dappID] = dapp
-	sm.mu.RUnlock()
+	sm.mu.Unlock()
 
 	shardID := sm.Hasher.GetShard(dappID)
-	sm.mu.Lock()
+	sm.mu.RLock()
 	shard, ok := sm.Shards[shardID]
 	sm.mu.RUnlock()
 
