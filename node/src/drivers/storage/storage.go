@@ -33,6 +33,9 @@ func (sm *StorageManager) StorageRoot() string {
 func (sm *StorageManager) KvDb() *badger.DB {
 	return sm.kvdb
 }
+func (sm *StorageManager) Searcher() bleve.Index {
+	return sm.searcher
+}
 
 func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string, timeVal int64) packet.LogPacket {
 	sm.lock.Lock()
