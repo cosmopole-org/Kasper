@@ -2,6 +2,7 @@ package actions_invite
 
 import (
 	"errors"
+	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/state"
 	inputsinvites "kasper/src/shell/api/inputs/invites"
@@ -16,21 +17,20 @@ import (
 )
 
 type Actions struct {
-	App core.ICore
+	App           core.ICore
+	modelExtender map[string]map[string]action.ExtendedField
 }
 
-func Install(a *Actions) error {
+func Install(a *Actions, params ...any) error {
+	if len(params) >= 1 {
+		a.modelExtender = params[0].(map[string]map[string]action.ExtendedField)
+	} else {
+		a.modelExtender = map[string]map[string]action.ExtendedField{}
+	}
+	if _, ok := a.modelExtender["user"]; !ok {
+		a.modelExtender["user"] = map[string]action.ExtendedField{}
+	}
 	return nil
-}
-
-type UserInviteTemp struct {
-	model.User
-	Time int64 `json:"time"`
-}
-
-type PointInviteTemp struct {
-	model.Point
-	Time int64 `json:"time"`
 }
 
 // Create /invites/create check [ true true false ] access [ true false false false POST ]
@@ -70,11 +70,22 @@ func (a *Actions) ListPointInvites(state state.IState, input inputsinvites.ListP
 		log.Println(err)
 		return nil, err
 	}
-	users := []UserInviteTemp{}
+	users := []map[string]any{}
 	for _, link := range links {
-		user := model.User{Id: link[len(prefix):]}.Pull(trx, true)
+		user := model.User{Id: link[len(prefix):]}.Pull(trx)
 		t, _ := strconv.ParseInt(trx.GetLink("invitetime::"+state.Info().PointId()+"::"+user.Id), 10, 64)
-		users = append(users, UserInviteTemp{User: user, Time: t})
+		result := map[string]any{
+			"id":       user.Id,
+			"username": user.Username,
+			"type":     user.Typ,
+			"time":     t,
+		}
+		for _, v := range a.modelExtender["user"] {
+			if meta, err := trx.GetJson("UserMeta::"+user.Id, v.Path); err == nil || meta[v.Name] != nil {
+				result[v.Name] = meta[v.Name]
+			}
+		}
+		users = append(users, result)
 	}
 	return map[string]any{"users": users}, nil
 }
@@ -88,11 +99,27 @@ func (a *Actions) ListUserInvites(state state.IState, input inputsinvites.ListUs
 		log.Println(err)
 		return nil, err
 	}
-	points := []PointInviteTemp{}
+	points := []map[string]any{}
 	for _, link := range links {
-		point := model.Point{Id: link[len(prefix):]}.Pull(trx, true)
+		point := model.Point{Id: link[len(prefix):]}.Pull(trx)
 		t, _ := strconv.ParseInt(trx.GetLink("invitetime::"+point.Id+"::"+state.Info().UserId()), 10, 64)
-		points = append(points, PointInviteTemp{Point: point, Time: t})
+
+		result := map[string]any{
+			"id":          point.Id,
+			"isPublic":    point.IsPublic,
+			"persHist":    point.PersHist,
+			"memberCount": point.MemberCount,
+			"signalCount": point.SignalCount,
+			"parentId":    point.ParentId,
+			"tag":         point.Tag,
+			"time":        t,
+		}
+		for _, v := range a.modelExtender["point"] {
+			if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err == nil || meta[v.Name] != nil {
+				result[v.Name] = meta[v.Name]
+			}
+		}
+		points = append(points, result)
 	}
 	return map[string]any{"points": points}, nil
 }

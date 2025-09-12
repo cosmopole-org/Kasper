@@ -20,7 +20,7 @@ type Actions struct {
 	App core.ICore
 }
 
-func Install(a *Actions) error {
+func Install(a *Actions, extra ...any) error {
 	a.App.ModifyState(true, func(trx trx.ITrx) error {
 		vms, err := model.Vm{}.All(trx, -1, -1)
 		if err != nil {

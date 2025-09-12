@@ -23,9 +23,10 @@ import (
 )
 
 type Actions struct {
-	App         core.ICore
-	OauthCtx    context.Context
-	firebaseApp *firebase.App
+	App           core.ICore
+	OauthCtx      context.Context
+	firebaseApp   *firebase.App
+	modelExtender map[string]map[string]action.ExtendedField
 }
 
 func (a *Actions) initFirebase() {
@@ -37,9 +38,17 @@ func (a *Actions) initFirebase() {
 	a.firebaseApp = app
 }
 
-func Install(a *Actions) error {
+func Install(a *Actions, params ...any) error {
 	a.OauthCtx = context.Background()
 	a.initFirebase()
+	if len(params) >= 1 {
+		a.modelExtender = params[0].(map[string]map[string]action.ExtendedField)
+	} else {
+		a.modelExtender = map[string]map[string]action.ExtendedField{}
+	}
+	if _, ok := a.modelExtender["user"]; !ok {
+		a.modelExtender["user"] = map[string]action.ExtendedField{}
+	}
 	return nil
 }
 
@@ -256,19 +265,25 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	session = models.Session{Id: a.App.Tools().Storage().GenId(trx, input.Origin()), UserId: user.Id}
 	user.Push(trx)
 	session.Push(trx)
-	trx.PutJson("UserMeta::"+user.Id, "metadata", input.Metadata, false)
-	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile", map[string]any{"bio": "DecillionAI User", "location": "DecillionAI Land"}, true)
-	meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
-	if err != nil {
-		log.Println(err)
-		return nil, err
+
+	for _, v := range a.modelExtender["user"] {
+		trx.PutJson("UserMeta::"+user.Id, v.Path, map[string]any{
+			v.Name: v.Default,
+		}, true)
 	}
-	if meta["name"] == nil {
-		err := errors.New("name can't be empty")
-		log.Println(err)
-		return nil, err
+	trx.PutJson("UserMeta::"+user.Id, "metadata", input.Metadata, true)
+	for _, v := range a.modelExtender["user"] {
+		if meta, err := trx.GetJson("UserMeta::"+user.Id, v.Path); err != nil || meta[v.Name] == nil {
+			if v.Required {
+				return nil, errors.New(v.Name + " can not be empty.")
+			}
+		} else {
+			if v.Searchable {
+				trx.PutIndex("User", v.Name, "id", user.Id+"->"+meta[v.Name].(string), []byte(user.Id))
+			}
+		}
 	}
-	trx.PutIndex("User", "name", "id", user.Id+"->"+meta["name"].(string), []byte(user.Id))
+
 	point := models.Point{Id: a.App.Tools().Storage().GenId(trx, "global"), Tag: "home", IsPublic: false, PersHist: true, ParentId: ""}
 	point.Push(trx)
 	trx.PutLink("memberof::"+user.Id+"::"+point.Id, "true")
@@ -303,12 +318,13 @@ func (a *Actions) Delete(state state.IState, input inputsusers.DeleteInput) (any
 	if err != nil {
 		return nil, errors.New("error deleting user: " + err.Error())
 	}
-
-	meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
-	if err == nil && meta["name"] != nil {
-		trx.DelIndex("User", "name", "id", user.Id+"->"+meta["name"].(string))
+	for _, v := range a.modelExtender["user"] {
+		if v.Searchable {
+			if meta, err := trx.GetJson("UserMeta::"+user.Id, v.Path); err == nil || meta[v.Name] != nil {
+				trx.DelIndex("User", v.Name, "id", user.Id+"->"+meta[v.Name].(string))
+			}
+		}
 	}
-	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile", map[string]any{"name": "", "avatar": "empty"}, true)
 	trx.DelKey("link::UserPrivateKey::" + user.Id)
 	trx.DelKey("link::UserEmailToId::" + email)
 	trx.DelKey("link::UserIdToEmail::" + user.Id)
@@ -316,42 +332,33 @@ func (a *Actions) Delete(state state.IState, input inputsusers.DeleteInput) (any
 	user.Username = "deleted_user@deleted"
 	user.PublicKey = ""
 	user.Balance = 0
-	user.Name = "Deleted User"
 	user.Push(trx)
+	trx.DelJson("UserMeta::"+user.Id, "metadata")
 	return map[string]any{}, nil
 }
 
 // Update /users/update check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Update(state state.IState, input inputsusers.UpdateInput) (any, error) {
 	trx := state.Trx()
-	meta, err := trx.GetJson("UserMeta::"+state.Info().UserId(), "metadata.public.profile")
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	for _, v := range a.modelExtender["user"] {
+		if v.Searchable {
+			if meta, err := trx.GetJson("UserMeta::"+state.Info().UserId(), v.Path); err == nil || meta[v.Name] != nil {
+				trx.DelIndex("User", v.Name, "id", state.Info().UserId()+"->"+meta[v.Name].(string))
+			}
+		}
 	}
-	trx.DelIndex("User", "name", "id", state.Info().UserId()+"->"+meta["name"].(string))
 	trx.PutJson("UserMeta::"+state.Info().UserId(), "metadata", input.Metadata, true)
-	meta, err = trx.GetJson("UserMeta::"+state.Info().UserId(), "metadata.public.profile")
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	for _, v := range a.modelExtender["user"] {
+		if meta, err := trx.GetJson("UserMeta::"+state.Info().UserId(), v.Path); err != nil || meta[v.Name] == nil {
+			if v.Required {
+				return nil, errors.New(v.Name + " can not be empty.")
+			}
+		} else {
+			if v.Searchable {
+				trx.PutIndex("User", v.Name, "id", state.Info().UserId()+"->"+meta[v.Name].(string), []byte(state.Info().UserId()))
+			}
+		}
 	}
-	if meta["name"] == nil {
-		err := errors.New("name can't be empty")
-		log.Println(err)
-		return nil, err
-	}
-	if meta["bio"] == nil {
-		err := errors.New("bio can't be empty")
-		log.Println(err)
-		return nil, err
-	}
-	if meta["location"] == nil {
-		err := errors.New("location can't be empty")
-		log.Println(err)
-		return nil, err
-	}
-	trx.PutIndex("User", "name", "id", state.Info().UserId()+"->"+meta["name"].(string), []byte(state.Info().UserId()))
 	return map[string]any{}, nil
 }
 
@@ -414,23 +421,17 @@ func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, erro
 	if !trx.HasObj("User", input.UserId) {
 		return nil, errors.New("user not found")
 	}
-	user := models.User{Id: input.UserId}.Pull(trx, true)
+	user := models.User{Id: input.UserId}.Pull(trx)
 	result := map[string]any{
 		"id":        user.Id,
 		"publicKey": user.PublicKey,
 		"type":      user.Typ,
 		"username":  user.Username,
-		"name":      user.Name,
-		"bio":       user.Bio,
-		"location":  user.Location,
 	}
-	if user.Typ == "human" {
-		meta, err := trx.GetJson("UserMeta::"+input.UserId, "metadata.public.profile")
-		if err != nil {
-			log.Println(err)
-			return nil, err
+	for _, v := range a.modelExtender["user"] {
+		if meta, err := trx.GetJson("UserMeta::"+state.Info().UserId(), v.Path); err == nil || meta[v.Name] != nil {
+			result[v.Name] = meta[v.Name]
 		}
-		result["avatar"] = meta["avatar"]
 	}
 	if input.UserId == state.Info().UserId() {
 		result["balance"] = user.Balance
@@ -455,15 +456,11 @@ func (a *Actions) Find(state state.IState, input inputsusers.FindInput) (any, er
 		"type":      user.Typ,
 		"username":  user.Username,
 	}
-	meta, err := trx.GetJson("UserMeta::"+userId, "metadata.public.profile")
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	for _, v := range a.modelExtender["user"] {
+		if meta, err := trx.GetJson("UserMeta::"+user.Id, v.Path); err == nil || meta[v.Name] != nil {
+			result[v.Name] = meta[v.Name]
+		}
 	}
-	result["name"] = meta["name"]
-	result["bio"] = meta["bio"]
-	result["location"] = meta["location"]
-	result["avatar"] = meta["avatar"]
 	if userId == state.Info().UserId() {
 		result["balance"] = user.Balance
 	}
@@ -490,15 +487,11 @@ func (a *Actions) List(state state.IState, input inputsusers.ListInput) (any, er
 			"type":      user.Typ,
 			"username":  user.Username,
 		}
-		meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
-		if err != nil {
-			log.Println(err)
-			return nil, err
+		for _, v := range a.modelExtender["user"] {
+			if meta, err := trx.GetJson("UserMeta::"+user.Id, v.Path); err == nil || meta[v.Name] != nil {
+				result[v.Name] = meta[v.Name]
+			}
 		}
-		result["name"] = meta["name"]
-		result["bio"] = meta["bio"]
-		result["location"] = meta["location"]
-		result["avatar"] = meta["avatar"]
 		result["status"] = a.getUserStatus(trx, user.Id, state.Info().UserId())
 		results = append(results, result)
 	}

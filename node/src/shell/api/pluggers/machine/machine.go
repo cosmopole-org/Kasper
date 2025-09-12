@@ -66,8 +66,8 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.ListAppMachs)
 		}
 		
-	func (c *Plugger) Install(a *actions.Actions) *Plugger {
-		err := actions.Install(a)
+	func (c *Plugger) Install(a *actions.Actions, extra ...any) *Plugger {
+		err := actions.Install(a, extra...)
 		if err != nil {
 			panic(err)
 		}

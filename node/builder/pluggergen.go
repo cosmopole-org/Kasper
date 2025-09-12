@@ -40,7 +40,7 @@ func main() {
 		}
 		code += `
 		)
-
+		
 		func PlugThePlugger(core core.ICore, plugger interface{}) {
 			s := reflect.TypeOf(plugger)
 			for i := 0; i < s.NumMethod(); i++ {
@@ -53,14 +53,14 @@ func main() {
 			}
 		}
 	
-		func PlugAll(core core.ICore) {
+		func PlugAll(core core.ICore, modelExtender map[string]map[string]iaction.ExtendedField) {
 		`
 		for _, serviceName := range serviceNames {
 			code += `
 				a_` + serviceName + ` := &action_` + serviceName + `.Actions{App: core}
 				p_` + serviceName + ` := plugger_` + serviceName + `.New(a_` + serviceName + `, core)
 				PlugThePlugger(core, p_` + serviceName + `)
-				p_` + serviceName + `.Install(a_` + serviceName + `)
+				p_` + serviceName + `.Install(a_` + serviceName + `, modelExtender)
 			`
 		}
 		code += `
@@ -129,8 +129,8 @@ func build(pluggerName string, serviceName string, serviceRoot string) {
 	}
 	code +=
 		`
-	func (c *Plugger) Install(a *actions.Actions) *Plugger {
-		err := actions.Install(a)
+	func (c *Plugger) Install(a *actions.Actions, extra ...any) *Plugger {
+		err := actions.Install(a, extra...)
 		if err != nil {
 			panic(err)
 		}

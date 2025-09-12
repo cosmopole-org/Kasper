@@ -14,8 +14,6 @@ type Point struct {
 	ParentId    string `json:"parentId"`
 	PersHist    bool   `json:"persHist"`
 	IsPublic    bool   `json:"isPublic"`
-	Title       string `json:"title"`
-	Avatar      string `json:"avatar"`
 	MemberCount int32  `json:"memberCount"`
 	SignalCount int64  `json:"signalCount"`
 }
@@ -62,7 +60,7 @@ func (d Point) Delete(trx trx.ITrx) {
 	trx.DelJson("PointMeta::"+d.Id, "metadata")
 }
 
-func (d Point) Pull(trx trx.ITrx, flags ...bool) Point {
+func (d Point) Pull(trx trx.ITrx) Point {
 	m := trx.GetObj(d.Type(), d.Id)
 	if len(m) > 0 {
 		d.Tag = string(m["tag"])
@@ -71,14 +69,6 @@ func (d Point) Pull(trx trx.ITrx, flags ...bool) Point {
 		d.SignalCount = int64(binary.LittleEndian.Uint64(m["signalCount"]))
 		d.IsPublic = bytes.Equal(m["isPublic"], []byte{0x01})
 		d.PersHist = bytes.Equal(m["persHist"], []byte{0x01})
-		if len(flags) > 0 {
-			if flags[0] {
-				if metadata, err := trx.GetJson("PointMeta::"+d.Id, "metadata.public.profile"); err == nil {
-					d.Title = metadata["title"].(string)
-					d.Avatar = metadata["avatar"].(string)
-				}
-			}
-		}
 	}
 	return d
 }

@@ -7,7 +7,6 @@ type Fn struct {
 	Typ        string          `json:"type"`
 	Username   string          `json:"username"`
 	PublicKey  string          `json:"publicKey"`
-	Name       string          `json:"name"`
 	AppId      string          `json:"appId"`
 	Runtime    string          `json:"runtime"`
 	Path       string          `json:"path"`

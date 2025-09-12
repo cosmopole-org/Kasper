@@ -7,7 +7,7 @@ import (
 )
 
 type IActions interface {
-	Install(state.IState)
+	Install(state.IState, ...any)
 }
 
 type IAction interface {
@@ -23,4 +23,14 @@ type ISecureAction interface {
 	SecurelyAct(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, dummy string) (int, any, error)
 	SecurlyActChain(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, origin string, tag string)
 	SecurelyActFed(userId string, packetBinary []byte, packetSignature string, input input.IInput) (int, any, error)
+}
+
+type ExtendedField struct {
+	Name        string
+	Path        string
+	Type        string
+	Default     any
+	Required    bool
+	Searchable  bool
+	PrimaryProp bool
 }

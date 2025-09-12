@@ -13,7 +13,7 @@ type Actions struct {
 	App core.ICore
 }
 
-func Install(a *Actions) error {
+func Install(a *Actions, extra ...any) error {
 	return nil
 }
 

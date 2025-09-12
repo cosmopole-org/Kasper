@@ -130,7 +130,7 @@ func (sm *StorageManager) GenId(t trx.ITrx, origin string) string {
 func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPath string) *StorageManager {
 	log.Println("connecting to database...")
 	os.MkdirAll(baseDbPath, os.ModePerm)
-	kvdb, err := badger.Open(badger.DefaultOptions(baseDbPath).WithSyncWrites(true).WithTruncate(true))
+	kvdb, err := badger.Open(badger.DefaultOptions(baseDbPath).WithSyncWrites(true))
 	if err != nil {
 		panic(err)
 	}

@@ -2,6 +2,7 @@ package actions_space
 
 import (
 	"errors"
+	"kasper/src/abstract/models/action"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/state"
@@ -28,11 +29,20 @@ type Actions struct {
 	App           core.ICore
 	Locks         cmap.ConcurrentMap[string, *LockHolder]
 	OneToOneLocks cmap.ConcurrentMap[string, *LockHolder]
+	modelExtender map[string]map[string]action.ExtendedField
 }
 
-func Install(a *Actions) error {
+func Install(a *Actions, params ...any) error {
 	a.Locks = cmap.New[*LockHolder]()
 	a.OneToOneLocks = cmap.New[*LockHolder]()
+	if len(params) >= 1 {
+		a.modelExtender = params[0].(map[string]map[string]action.ExtendedField)
+	} else {
+		a.modelExtender = map[string]map[string]action.ExtendedField{}
+	}
+	if _, ok := a.modelExtender["user"]; !ok {
+		a.modelExtender["user"] = map[string]action.ExtendedField{}
+	}
 	return nil
 }
 
@@ -96,6 +106,7 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 	m := map[string]*updates_points.Fn{}
 	uniqueMacs := map[string][]string{}
 	for _, machine := range input.MachinesMeta {
+
 		mac := macMap[machine.MachineId]
 		vm := vmMap[machine.MachineId]
 		fn := &updates_points.Fn{
@@ -103,7 +114,6 @@ func (a *Actions) AddApp(state state.IState, input inputs_points.AddAppInput) (a
 			Typ:        mac.Typ,
 			Username:   mac.Username,
 			PublicKey:  mac.PublicKey,
-			Name:       mac.Name,
 			AppId:      vm.AppId,
 			Runtime:    vm.Runtime,
 			Path:       vm.Path,
@@ -154,7 +164,7 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 		appId := parts[0]
 		machineId := parts[1]
 		identifier := parts[2]
-		machine := model.User{Id: machineId}.Pull(trx, true)
+		machine := model.User{Id: machineId}.Pull(trx)
 		metadata, err := trx.GetJson("FnMeta::"+state.Info().PointId()+"::"+appId+"::"+machineId+"::"+identifier, "metadata")
 		if err != nil {
 			log.Println(err)
@@ -185,7 +195,6 @@ func (a *Actions) ListPointApps(state state.IState, input inputs_points.ListPoin
 			Typ:        machine.Typ,
 			Username:   machine.Username,
 			PublicKey:  machine.PublicKey,
-			Name:       machine.Name,
 			AppId:      vm.AppId,
 			Runtime:    vm.Runtime,
 			Path:       vm.Path,
@@ -227,7 +236,6 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_points.UpdateMa
 		Typ:        machine.Typ,
 		Username:   machine.Username,
 		PublicKey:  machine.PublicKey,
-		Name:       machine.Name,
 		AppId:      vm.AppId,
 		Runtime:    vm.Runtime,
 		Path:       vm.Path,
@@ -327,7 +335,6 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		Typ:        machine.Typ,
 		Username:   machine.Username,
 		PublicKey:  machine.PublicKey,
-		Name:       machine.Name,
 		AppId:      vm.AppId,
 		Runtime:    vm.Runtime,
 		Path:       vm.Path,
@@ -384,7 +391,6 @@ func (a *Actions) RemoveMachine(state state.IState, input inputs_points.RemoveMa
 		Typ:        machine.Typ,
 		Username:   machine.Username,
 		PublicKey:  machine.PublicKey,
-		Name:       machine.Name,
 		AppId:      vm.AppId,
 		Runtime:    vm.Runtime,
 		Path:       vm.Path,
@@ -552,17 +558,18 @@ func (a *Actions) ReadMembers(state state.IState, input inputs_points.ReadMember
 	isAdmin := trx.GetLink("admin::"+state.Info().PointId()+"::"+state.Info().UserId()) == "true"
 	for _, member := range members {
 		if member.Typ == "human" {
-			metadata, err := trx.GetJson("UserMeta::"+member.Id, "metadata.public.profile")
-			if err != nil {
-				log.Println(err)
-				return nil, err
-			}
 			memberData := map[string]any{
 				"id":        member.Id,
 				"publicKey": member.PublicKey,
 				"type":      member.Typ,
 				"username":  member.Username,
-				"name":      metadata["name"],
+			}
+			for _, v := range a.modelExtender["user"] {
+				if v.PrimaryProp {
+					if meta, err := trx.GetJson("UserMeta::"+member.Id, v.Path); err == nil || meta[v.Name] != nil {
+						memberData[v.Name] = meta[v.Name]
+					}
+				}
 			}
 			memberData["status"] = a.getUserStatus(trx, member.Id, state.Info().UserId())
 			if isAdmin {
@@ -656,7 +663,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		locker.Lock.Lock()
 		defer locker.Lock.Unlock()
 		if pointId := trx.GetLink("1-to-1-map::" + ids[0] + "<->" + ids[1]); pointId != "" {
-			point := model.Point{Id: pointId}.Pull(trx, true)
+			point := model.Point{Id: pointId}.Pull(trx)
 			return outputs_points.CreateOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
 		}
 	}
@@ -689,25 +696,25 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 			}
 		}
 	}
+	for _, v := range a.modelExtender["point"] {
+		trx.PutJson("PointMeta::"+point.Id, v.Path, map[string]any{
+			v.Name: v.Default,
+		}, true)
+	}
 	if input.Metadata != nil {
-		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, false)
+		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, true)
 	}
-	meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	for _, v := range a.modelExtender["point"] {
+		if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err != nil || meta[v.Name] == nil {
+			if v.Required {
+				return nil, errors.New(v.Name + " can not be empty.")
+			}
+		} else {
+			if v.Searchable {
+				trx.PutIndex("Point", v.Name, "id", point.Id+"->"+meta[v.Name].(string), []byte(point.Id))
+			}
+		}
 	}
-	if meta["title"] == nil {
-		err := errors.New("title can't be empty")
-		log.Println(err)
-		return nil, err
-	}
-	if meta["avatar"] == nil {
-		err := errors.New("avatar can't be empty")
-		log.Println(err)
-		return nil, err
-	}
-	trx.PutIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string), []byte(point.Id))
 	if input.Tag == "1-to-1" {
 		ids := []string{}
 		for k := range input.Members {
@@ -719,7 +726,7 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	for memberId := range input.Members {
 		a.App.Tools().Signaler().JoinGroup(point.Id, memberId)
 	}
-	point = point.Pull(trx, true)
+	point = point.Pull(trx)
 	a.App.Tools().Signaler().SignalGroup("points/create", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
 	return outputs_points.CreateOutput{Point: outputs_points.AdminPoiint{Point: point, Admin: true}}, nil
 }
@@ -744,36 +751,27 @@ func (a *Actions) Update(state state.IState, input inputs_points.UpdateInput) (a
 		point.PersHist = *input.PersHist
 	}
 	if input.Metadata != nil {
-		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
-		if err != nil {
-			log.Println(err)
-			return nil, err
+		for _, v := range a.modelExtender["point"] {
+			if v.Searchable {
+				if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err == nil || meta[v.Name] != nil {
+					trx.DelIndex("Point", v.Name, "id", point.Id+"->"+meta[v.Name].(string))
+				}
+			}
 		}
-		trx.DelIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string))
 		trx.PutJson("PointMeta::"+point.Id, "metadata", input.Metadata, true)
-		meta, err = trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
-		if err != nil {
-			log.Println(err)
-			return nil, err
+		for _, v := range a.modelExtender["point"] {
+			if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err != nil || meta[v.Name] == nil {
+				if v.Required {
+					return nil, errors.New(v.Name + " can not be empty.")
+				}
+			} else {
+				if v.Searchable {
+					trx.PutIndex("Point", v.Name, "id", point.Id+"->"+meta[v.Name].(string), []byte(point.Id))
+				}
+			}
 		}
-		trx.PutIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string), []byte(point.Id))
 	}
 	point.Push(trx)
-	meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	if meta["title"] == nil {
-		err := errors.New("title can't be empty")
-		log.Println(err)
-		return nil, err
-	}
-	if meta["avatar"] == nil {
-		err := errors.New("avatar can't be empty")
-		log.Println(err)
-		return nil, err
-	}
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("points/update", point.Id, updates_points.Update{Point: point}, true, []string{state.Info().UserId()})
 	}, false)
@@ -801,12 +799,13 @@ func (a *Actions) Delete(state state.IState, input inputs_points.DeleteInput) (a
 	if point.Tag == "home" {
 		return nil, errors.New("your home can not be deleted")
 	}
-	meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	for _, v := range a.modelExtender["point"] {
+		if v.Searchable {
+			if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err == nil || meta[v.Name] != nil {
+				trx.DelIndex("Point", v.Name, "id", point.Id+"->"+meta[v.Name].(string))
+			}
+		}
 	}
-	trx.DelIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string))
 	point.Delete(trx)
 	members, _ := trx.GetLinksList("member::"+point.Id+"::", 0, 0)
 	usersList := []string{}
@@ -868,6 +867,11 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 			"signalCount": point.SignalCount,
 			"tag":         point.Tag,
 		}
+		for _, v := range a.modelExtender["point"] {
+			if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err == nil || meta[v.Name] != nil {
+				result[v.Name] = meta[v.Name]
+			}
+		}
 		if input.IncludeMeta {
 			metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
 			if err != nil {
@@ -898,6 +902,11 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 		"signalCount": point.SignalCount,
 		"tag":         point.Tag,
 		"lastPacket":  lastPacket,
+	}
+	for _, v := range a.modelExtender["point"] {
+		if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err == nil || meta[v.Name] != nil {
+			result[v.Name] = meta[v.Name]
+		}
 	}
 	if input.IncludeMeta {
 		metadata, err := trx.GetJson("PointMeta::"+point.Id, "metadata")
@@ -938,13 +947,11 @@ func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, 
 			"tag":         point.Tag,
 			"lastPacket":  lastPacket,
 		}
-		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
-		if err != nil {
-			log.Println(err)
-			return nil, err
+		for _, v := range a.modelExtender["point"] {
+			if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err == nil || meta[v.Name] != nil {
+				result[v.Name] = meta[v.Name]
+			}
 		}
-		result["title"] = meta["title"]
-		result["avatar"] = meta["avatar"]
 		if trx.GetLink("adminof::"+state.Info().UserId()+"::"+point.Id) == "true" {
 			result["admin"] = true
 		}
@@ -1015,12 +1022,13 @@ func (a *Actions) Leave(state state.IState, input inputs_points.JoinInput) (any,
 		a.App.Tools().Signaler().SignalGroup("points/join", point.Id, updates_points.Join{PointId: point.Id, User: user}, true, []string{state.Info().UserId()})
 	}, false)
 	if point.MemberCount == 0 {
-		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
-		if err != nil {
-			log.Println(err)
-			return nil, err
+		for _, v := range a.modelExtender["point"] {
+			if v.Searchable {
+				if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err == nil || meta[v.Name] != nil {
+					trx.DelIndex("Point", v.Name, "id", point.Id+"->"+meta[v.Name].(string))
+				}
+			}
 		}
-		trx.DelIndex("Point", "title", "id", point.Id+"->"+meta["title"].(string))
 		point.Delete(trx)
 		a.Locks.Remove(state.Info().PointId())
 	}
@@ -1039,8 +1047,8 @@ func (a *Actions) Signal(state state.IState, input inputs_points.SignalInput) (a
 	locker, _ := a.Locks.Get(state.Info().PointId())
 	locker.Lock.Lock()
 	defer locker.Lock.Unlock()
-	point := model.Point{Id: state.Info().PointId()}.Pull(trx, true)
-	user := model.User{Id: state.Info().UserId()}.Pull(trx, true)
+	point := model.Point{Id: state.Info().PointId()}.Pull(trx)
+	user := model.User{Id: state.Info().UserId()}.Pull(trx)
 	t := time.Now().UnixMilli()
 	if input.Type == "broadcast" {
 		if point.PersHist && !input.Temp {
@@ -1112,13 +1120,11 @@ func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, 
 			"memberCount": point.MemberCount,
 			"tag":         point.Tag,
 		}
-		meta, err := trx.GetJson("PointMeta::"+point.Id, "metadata.public.profile")
-		if err != nil {
-			log.Println(err)
-			return nil, err
+		for _, v := range a.modelExtender["point"] {
+			if meta, err := trx.GetJson("PointMeta::"+point.Id, v.Path); err == nil || meta[v.Name] != nil {
+				result[v.Name] = meta[v.Name]
+			}
 		}
-		result["title"] = meta["title"]
-		result["avatar"] = meta["avatar"]
 		if trx.GetLink("adminof::"+state.Info().UserId()+"::"+point.Id) == "true" {
 			result["admin"] = true
 		}

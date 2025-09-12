@@ -103,7 +103,7 @@ func registerRoute(mux *http.ServeMux, path string, handler func(w http.Response
 	})
 }
 
-func Install(a *Actions) error {
+func Install(a *Actions, extra ...any) error {
 	mux := http.NewServeMux()
 	portStr := os.Getenv("ENTITY_API_PORT")
 	port, err := strconv.ParseInt(portStr, 10, 32)

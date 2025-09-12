@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"kasper/src/abstract/models/action"
 	kasper "kasper/src/shell"
 	plugger_api "kasper/src/shell/api/main"
 	"os"
@@ -78,11 +79,71 @@ func main() {
 		os.Exit(0)
 	}()
 
+	plugger_api.PlugAll(app, map[string]map[string]action.ExtendedField{
+		"user": {
+			"name": {
+				Name:         "name",
+				Path:         "metadata.public.profile",
+				Type:         "string",
+				Default:      "Anonymous User",
+				Required:     true,
+				Searchable:   true,
+				PrimaryProp: true,
+			},
+			"avatar": {
+				Name:         "avatar",
+				Path:         "metadata.public.profile",
+				Type:         "string",
+				Default:      "avatar",
+				Required:     true,
+				Searchable:   false,
+				PrimaryProp: true,
+			},
+			"bio": {
+				Name:         "bio",
+				Path:         "metadata.public.profile",
+				Type:         "string",
+				Default:      "I'm a DecillionAI User",
+				Required:     true,
+				Searchable:   false,
+				PrimaryProp: false,
+			},
+			"location": {
+				Name:         "location",
+				Path:         "metadata.public.profile",
+				Type:         "string",
+				Default:      "DecillionAI Land",
+				Required:     true,
+				Searchable:   false,
+				PrimaryProp: false,
+			},
+		},
+		"point": {
+			"title": {
+				Name:        "title",
+				Path:        "metadata.public.profile",
+				Type:        "string",
+				Default:     "Untitled Point",
+				Required:    true,
+				Searchable:  true,
+				PrimaryProp: true,
+			},
+			"avatar": {
+				Name:         "avatar",
+				Path:         "metadata.public.profile",
+				Type:         "string",
+				Default:      "avatar",
+				Required:     true,
+				Searchable:   false,
+				PrimaryProp: true,
+			},
+		},
+	})
+
 	portStr := os.Getenv("CLIENT_TCP_API_PORT")
 	port, _ := strconv.ParseInt(portStr, 10, 64)
 	portStr2 := os.Getenv("CLIENT_WS_API_PORT")
 	port2, _ := strconv.ParseInt(portStr2, 10, 64)
-	plugger_api.PlugAll(app)
 
 	app.Tools().Network().Run(
 		map[string]int{
