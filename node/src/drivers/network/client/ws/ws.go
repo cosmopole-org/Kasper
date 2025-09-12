@@ -318,6 +318,7 @@ func (t *Socket) processPacket(packet []byte) {
 				}
 				soc.Lock.Lock()
 				defer soc.Lock.Unlock()
+				soc.Conn = t.Conn
 				soc.Disconnected = false
 				lis = &signaler.Listener{
 					Id:      userId,
@@ -329,7 +330,7 @@ func (t *Socket) processPacket(packet []byte) {
 						}
 					},
 				}
-				t.Ack = true
+				soc.Ack = true
 				soc.server.sockets.Set(userId, soc)
 				chosenSocket = soc
 			}()
