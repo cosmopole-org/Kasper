@@ -297,7 +297,6 @@ func (t *Socket) processPacket(packet []byte) {
 		var lis *signaler.Listener
 		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
 		if success {
-			var chosenSocket *Socket
 			func() {
 				soc, found := t.server.sockets.Get(userId)
 				if !found {
@@ -312,14 +311,11 @@ func (t *Socket) processPacket(packet []byte) {
 						},
 					}
 					t.Ack = true
-					t.server.sockets.Set(userId, t)
-					chosenSocket = t
 					return
 				}
 				soc.Lock.Lock()
 				defer soc.Lock.Unlock()
-				soc.Conn = t.Conn
-				soc.Disconnected = false
+				t.Buffer = soc.Buffer
 				lis = &signaler.Listener{
 					Id:      userId,
 					Paused:  false,
@@ -330,14 +326,13 @@ func (t *Socket) processPacket(packet []byte) {
 						}
 					},
 				}
-				soc.Ack = true
-				soc.server.sockets.Set(userId, soc)
-				chosenSocket = soc
+				t.Ack = true
 			}()
-			chosenSocket.userId = userId
+			t.server.sockets.Set(userId, t)
+			t.userId = userId
 			var pointIds []string
 			prefix := "memberof::" + userId + "::"
-			chosenSocket.app.ModifyState(true, func(trx trx.ITrx) error {
+			t.app.ModifyState(true, func(trx trx.ITrx) error {
 				pIds, err := trx.GetLinksList(prefix, -1, -1)
 				if err != nil {
 					log.Println(err)
@@ -348,10 +343,10 @@ func (t *Socket) processPacket(packet []byte) {
 				return nil
 			})
 			for _, pointId := range pointIds {
-				chosenSocket.app.Tools().Signaler().JoinGroup(pointId[len(prefix):], userId)
+				t.app.Tools().Signaler().JoinGroup(pointId[len(prefix):], userId)
 			}
-			chosenSocket.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
-			chosenSocket.app.Tools().Signaler().ListenToSingle(lis)
+			t.writeResponse(packetId, 0, packetmodel.BuildErrorJson("authenticated"), false)
+			t.app.Tools().Signaler().ListenToSingle(lis)
 			b, _ := json.Marshal(packetmodel.ResponseSimpleMessage{Message: "old_queue_end"})
 			lis.Signal("old_queue_end", b)
 		} else {
