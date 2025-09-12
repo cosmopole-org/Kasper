@@ -125,13 +125,13 @@ func (b *Blockchain) createNewWorkChain(chainId string) *WorkChain {
 	shardCreatorCb := func(shardId string, nodes []string) {
 		wchain.createNewShardChain(shardId, true, nodes)
 	}
-	wchain.sharder = NewShardManager(1, 1, 10, 5, 100000, 1, shardCreatorCb)
 	mainShardChain := wchain.createNewShardChain("shard-main", false, []string{})
+	wchain.mainLedger = mainShardChain.shardLedger
+	wchain.mainProxy = mainShardChain.shardProxy
+	wchain.sharder = NewShardManager(0, 1, 10, 5, 100000, 1, shardCreatorCb)
 	if b.app.Id() == "api.kproto.app" && chainId == "main" {
 		wchain.sharder.AddNode(b.app.Id())
 	}
-	wchain.mainLedger = mainShardChain.shardLedger
-	wchain.mainProxy = mainShardChain.shardProxy
 	return wchain
 }
 
