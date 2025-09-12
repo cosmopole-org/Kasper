@@ -103,7 +103,7 @@ func (sm *StorageManager) SearchPointLogs(pointId string, quest string) []packet
 	defer sm.lock.Unlock()
 	ctx := context.Background()
 
-	query := bleve.NewWildcardQuery(quest)
+	query := bleve.NewMatchQuery(quest)
 	searchRequest := bleve.NewSearchRequest(query)
 	searchRequest.Explain = true
 	searchRequest.Fields = []string{"data"}
