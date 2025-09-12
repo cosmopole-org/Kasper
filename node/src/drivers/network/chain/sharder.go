@@ -450,8 +450,10 @@ func (sm *ShardManager) DeployDapp(dappID string) {
 
 	if !ok {
 		fmt.Printf("Error: Shard %s not found for DApp %s. Re-routing...\n", shardID, dappID)
-		sm.DeployDapp(dappID)
-		return
+		sm.AddShard(shardID)
+		sm.mu.RLock()
+		shard = sm.Shards[shardID]
+		sm.mu.RUnlock()
 	}
 
 	nodeID := shard.nodeIDs[rand.Intn(len(shard.nodeIDs))]
