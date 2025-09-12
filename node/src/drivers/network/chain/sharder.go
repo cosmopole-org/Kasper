@@ -439,12 +439,12 @@ func (sm *ShardManager) SplitShard(id string) {
 // DeployDapp routes a new DApp to the correct shard and deploys it.
 func (sm *ShardManager) DeployDapp(dappID string) {
 	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	dapp := &DApp{ID: dappID}
 	sm.Dapps[dappID] = dapp
 	sm.mu.RUnlock()
 
 	shardID := sm.Hasher.GetShard(dappID)
+	sm.mu.Lock()
 	shard, ok := sm.Shards[shardID]
 	sm.mu.RUnlock()
 

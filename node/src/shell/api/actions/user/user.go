@@ -285,13 +285,31 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 // Delete /users/delete check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Delete(state state.IState, input inputsusers.DeleteInput) (any, error) {
 	trx := state.Trx()
+
+	ctx := a.OauthCtx
+	client, err := a.firebaseApp.Auth(ctx)
+	if err != nil {
+		log.Println(err)
+		e := errors.New("error getting Auth client")
+		log.Println(e)
+		return nil, e
+	}
 	user := models.User{Id: state.Info().UserId()}.Pull(trx)
+	email := trx.GetLink("UserIdToEmail::" + user.Id)
+	userRecord, err := client.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, errors.New("error getting user by email " + email + " " + err.Error())
+	}
+	err = client.DeleteUser(ctx, userRecord.UID)
+	if err != nil {
+		return nil, errors.New("error deleting user: " + err.Error())
+	}
+
 	meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
 	if err == nil && meta["name"] != nil {
 		trx.DelIndex("User", "name", "id", user.Id+"->"+meta["name"].(string))
 	}
 	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile", map[string]any{"name": "", "avatar": "empty"}, true)
-	email := trx.GetLink("UserIdToEmail::" + user.Id)
 	trx.DelKey("link::UserPrivateKey::" + user.Id)
 	trx.DelKey("link::UserEmailToId::" + email)
 	trx.DelKey("link::UserIdToEmail::" + user.Id)
