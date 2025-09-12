@@ -149,11 +149,15 @@ func (w *WorkChain) createNewShardChain(chainId string, created bool, peersArr [
 	if created {
 		mainChain, _ := w.blockchain.chains.Get("main")
 		peersList := []*peers.Peer{}
+		log.Println("shard peers", peersArr)
+		log.Println("inspecting all nodes...")
 		for _, peer := range mainChain.mainLedger.Peers.Peers {
 			if slices.Contains(peersArr, strings.Split(peer.NetAddr, ":")[0]) {
+				log.Println("node matched", peer)
 				peersList = append(peersList, peer)
 			}
 		}
+		log.Println("inspection finished.")
 		peerset := peers.PeerSet{Peers: peersList}
 		peersStr, _ := peerset.Marshal()
 		peersFile, _ := os.OpenFile(dataDir+"/peers.json", os.O_WRONLY|os.O_CREATE, 0600)
