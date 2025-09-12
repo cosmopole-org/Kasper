@@ -257,8 +257,7 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 	user.Push(trx)
 	session.Push(trx)
 	trx.PutJson("UserMeta::"+user.Id, "metadata", input.Metadata, false)
-	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile.bio", "DecillionAI User", false)
-	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile.location", "DecillionAI Land", false)
+	trx.PutJson("UserMeta::"+user.Id, "metadata.public.profile", map[string]any{"bio": "DecillionAI User", "location": "DecillionAI Land"}, true)
 	meta, err := trx.GetJson("UserMeta::"+user.Id, "metadata.public.profile")
 	if err != nil {
 		log.Println(err)
