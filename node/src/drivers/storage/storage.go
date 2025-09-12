@@ -3,6 +3,7 @@ package tool_storage
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/packet"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/dgraph-io/badger"
 
+	bleve "github.com/blevesearch/bleve/v2"
 	gocql "github.com/gocql/gocql"
 )
 
@@ -21,6 +23,7 @@ type StorageManager struct {
 	storageRoot string
 	kvdb        *badger.DB
 	tsdb        *gocql.Session
+	searcher    bleve.Index
 	lock        sync.Mutex
 }
 
@@ -40,7 +43,9 @@ func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data str
 		id, pointId, userId, data, timeVal, false).WithContext(ctx).Exec(); err != nil {
 		log.Fatal(err)
 	}
-	return packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: false}
+	packet := packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: false}
+	sm.searcher.Index(packet.Id, packet)
+	return packet
 }
 
 func (sm *StorageManager) UpdateLog(pointId string, userId string, signalId string, data string, timeVal int64) packet.LogPacket {
@@ -51,7 +56,9 @@ func (sm *StorageManager) UpdateLog(pointId string, userId string, signalId stri
 	if err := sm.tsdb.Query(`UPDATE storage SET data = ?, time = ?, edited = ? WHERE user_id = ? IF id = ?;`, data, timeVal, true, userId, id).WithContext(ctx).Exec(); err != nil {
 		log.Println(err)
 	}
-	return packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: true}
+	packet := packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: true}
+	sm.searcher.Index(packet.Id, packet)
+	return packet
 }
 
 func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count int) []packet.LogPacket {
@@ -69,6 +76,45 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count
 		}
 		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time, edited FROM storage WHERE point_id = ? and id < ? limit ? ALLOW FILTERING`, pointId, uuid, count).WithContext(ctx).Iter().Scanner()
 	}
+	logs := []packet.LogPacket{}
+	for scanner.Next() {
+		var id gocql.UUID
+		var userId string
+		var data string
+		var timeVal int64
+		var edited bool
+		err := scanner.Scan(&id, &userId, &data, &timeVal, &edited)
+		if err != nil {
+			log.Fatal(err)
+		}
+		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: edited})
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return logs
+}
+
+func (sm *StorageManager) SearchPointLogs(pointId string, quest string) []packet.LogPacket {
+	sm.lock.Lock()
+	defer sm.lock.Unlock()
+	ctx := context.Background()
+
+	query := bleve.NewQueryStringQuery(quest)
+	searchRequest := bleve.NewSearchRequest(query)
+	searchRequest.Explain = true
+	searchRequest.Fields = []string{"data"}
+	searchResult, err := sm.searcher.Search(searchRequest)
+	if err != nil {
+		log.Println(err)
+		return []packet.LogPacket{}
+	}
+	ids := []string{}
+	for _, hit := range searchResult.Hits {
+		ids = append(ids, hit.ID)
+	}
+	var scanner gocql.Scanner
+	scanner = sm.tsdb.Query(`SELECT id, user_id, data, time, edited FROM storage WHERE point_id = ? and id in ? ALLOW FILTERING`, pointId, ids).WithContext(ctx).Iter().Scanner()
 	logs := []packet.LogPacket{}
 	for scanner.Next() {
 		var id gocql.UUID
@@ -127,7 +173,7 @@ func (sm *StorageManager) GenId(t trx.ITrx, origin string) string {
 	}
 }
 
-func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPath string) *StorageManager {
+func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPath string, searcherDbPath string) *StorageManager {
 	log.Println("connecting to database...")
 	os.MkdirAll(baseDbPath, os.ModePerm)
 	kvdb, err := badger.Open(badger.DefaultOptions(baseDbPath).WithSyncWrites(true))
@@ -141,5 +187,18 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	if err != nil {
 		panic(err)
 	}
-	return &StorageManager{core: core, tsdb: session, kvdb: kvdb, storageRoot: storageRoot}
+	var searcher bleve.Index
+	if _, err := os.Stat(searcherDbPath); errors.Is(err, os.ErrNotExist) {
+		mapping := bleve.NewIndexMapping()
+		searcher, err = bleve.New(searcherDbPath, mapping)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		searcher, err = bleve.Open(searcherDbPath)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return &StorageManager{core: core, tsdb: session, kvdb: kvdb, searcher: searcher, storageRoot: storageRoot}
 }
