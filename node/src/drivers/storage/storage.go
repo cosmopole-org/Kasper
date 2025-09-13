@@ -134,7 +134,7 @@ func (sm *StorageManager) SearchPointLogs(pointId string, quest string) []packet
 		ids = append(ids, hit.ID)
 	}
 	var rows *sql.Rows
-	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in $2", pointId, "(" + strings.Join(ids, " , ") + ")")
+	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in $2", pointId, "("+strings.Join(ids, " , ")+")")
 	if err != nil {
 		log.Println(err)
 		return []packet.LogPacket{}
@@ -208,14 +208,19 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 		if err != nil {
 			log.Println(err)
 			time.Sleep(2 * time.Second)
+			continue
+		}
+		_, err = tsdb.ExecContext(context.Background(),
+			"create table storage(id text, point_id text, user_id text, data text, time bigint, edited boolean);",
+		)
+		if err != nil {
+			log.Println(err)
+			time.Sleep(2 * time.Second)
 		} else {
 			tsdb = tsdbObj
 			break
 		}
 	}
-	_, err = tsdb.ExecContext(context.Background(),
-		"create table storage(id text, point_id text, user_id text, data text, time bigint, edited boolean);",
-	)
 	if err != nil {
 		log.Println(err)
 	}
