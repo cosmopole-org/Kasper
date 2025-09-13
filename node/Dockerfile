@@ -46,6 +46,7 @@ COPY . .
 
 RUN bash scripts/install-fcvmm.sh
 RUN bash scripts/install-questdb.sh
+RUN apt install -y postgresql-client
 
 RUN mkdir /app/storage
 
