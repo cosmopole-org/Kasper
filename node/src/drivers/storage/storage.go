@@ -204,6 +204,12 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	if err != nil {
 		log.Fatal(err)
 	}
+	_, err = tsdb.ExecContext(context.Background(),
+		"create table storage(id text, point_id text, user_id text, data text, time bigint, edited boolean);",
+	)
+	if err != nil {
+		log.Println(err)
+	}
 	var searcher bleve.Index
 	if _, err := os.Stat(searcherDbPath); errors.Is(err, os.ErrNotExist) {
 		mapping := bleve.NewIndexMapping()
