@@ -349,23 +349,22 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 				log.Println(err3)
 			}
 		}, false)
+		if standalone {
+			vm.Runtime = input.Runtime
+			vm.Push(trx)
+			a.App.Tools().Docker().Assign(vm.MachineId)
+		}
 	} else {
 		err2 := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+pluginsTemplateName+vm.MachineId+"/", data, "module", true)
 		if err2 != nil {
 			return nil, err2
 		}
-		if input.Runtime == "docker" && standalone {
-			vm.Runtime = input.Runtime
-		} else if input.Runtime != "docker" {
-			vm.Runtime = input.Runtime
-		}
+		vm.Runtime = input.Runtime
 		vm.Push(trx)
 		if vm.Runtime == "wasm" {
 			a.App.Tools().Wasm().Assign(vm.MachineId)
 		} else if vm.Runtime == "elpis" {
 			a.App.Tools().Elpis().Assign(vm.MachineId)
-		} else if vm.Runtime == "docker" {
-			a.App.Tools().Docker().Assign(vm.MachineId)
 		}
 	}
 	return outputs_machiner.PlugInput{}, nil
