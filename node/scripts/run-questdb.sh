@@ -13,8 +13,8 @@ $QUESTDB_DIR/bin/questdb.sh start &
 
 # Wait until QuestDB is ready (port 9000)
 echo "Waiting for QuestDB to start..."
-until pg_isready -h localhost -p 5432; do
-    echo "Waiting for QuestDB to be ready..."
+until wget -q --spider http://localhost:9000; do
+    echo "Waiting for QuestDB to start..."
     sleep 1
 done
 
