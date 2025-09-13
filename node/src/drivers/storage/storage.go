@@ -54,7 +54,7 @@ func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data str
 		id, pointId, userId, data, timeVal, false,
 	)
 	if err != nil {
-		log.Fatal("Insert error:", err)
+		log.Println("Insert error: " + err.Error())
 	}
 	packet := packet.LogPacket{Id: id, UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: false}
 	sm.searcher.Index(packet.Id, packet)
@@ -70,7 +70,7 @@ func (sm *StorageManager) UpdateLog(pointId string, userId string, signalId stri
 		data, pointId, signalId, true,
 	)
 	if err != nil {
-		log.Fatal("Update error:", err)
+		log.Println("Update error: " + err.Error())
 	}
 	packet := packet.LogPacket{Id: signalId, UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: true}
 	sm.searcher.Index(packet.Id, packet)
@@ -203,7 +203,7 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	}
 	var tsdb *sql.DB
 	for {
-		tsdb, err = sql.Open("pgx", "postgres://kasper:questdb@localhost:5432/qdb?sslmode=disable")
+		tsdb, err = sql.Open("pgx", "postgres://kasper@localhost:5432/qdb?sslmode=disable")
 		if err != nil {
 			log.Println(err)
 			time.Sleep(2 * time.Second)

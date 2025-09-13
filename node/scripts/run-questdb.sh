@@ -2,10 +2,9 @@
 set -e
 
 # Variables
-QUESTDB_VERSION="7.7.0"
-QUESTDB_DIR="/app/questdb"
-QUESTDB_PORT=9000
-PG_PORT=5432
+export QDB_PG_ENABLED=true
+export QDB_PG_PORT=5432
+export QDB_PG_BIND=0.0.0.0
 
 # Start QuestDB in background
 echo "Starting QuestDB..."
