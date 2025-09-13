@@ -12,5 +12,5 @@ if [ ! -d "$QUESTDB_DIR" ]; then
     echo "Downloading QuestDB $QUESTDB_VERSION..."
     wget -q https://github.com/questdb/questdb/releases/download/$QUESTDB_VERSION/questdb-$QUESTDB_VERSION-rt-linux-x86-64.tar.gz -O /tmp/questdb.tar.gz
     tar -xzf /tmp/questdb.tar.gz -C /app
-    mv /app/questdb-$QUESTDB_VERSION $QUESTDB_DIR
+    mv /app/questdb-$QUESTDB_VERSION-rt-linux-x86-64 $QUESTDB_DIR
 fi
