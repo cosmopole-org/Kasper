@@ -9,7 +9,7 @@ PG_PORT=5432
 
 # Start QuestDB in background
 echo "Starting QuestDB..."
-$QUESTDB_DIR/bin/questdb.sh &
+$QUESTDB_DIR/bin/questdb.sh start &
 
 # Wait until QuestDB is ready (port 9000)
 echo "Waiting for QuestDB to start..."
