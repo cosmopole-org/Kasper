@@ -1100,7 +1100,7 @@ func (a *Actions) History(state state.IState, input inputs_points.HistoryInput) 
 		}
 	}
 	if input.Query == "" {
-		return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().ReadPointLogs(state.Info().PointId(), input.BeforeId, input.Count)}, nil
+		return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().ReadPointLogs(state.Info().PointId(), input.BeforeTime, input.Count)}, nil
 	} else {
 		return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().SearchPointLogs(state.Info().PointId(), input.Query)}, nil
 	}

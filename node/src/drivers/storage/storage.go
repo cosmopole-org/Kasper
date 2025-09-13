@@ -13,16 +13,19 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger"
+	"github.com/google/uuid"
+
+	"database/sql"
 
 	bleve "github.com/blevesearch/bleve/v2"
-	gocql "github.com/gocql/gocql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type StorageManager struct {
 	core        core.ICore
 	storageRoot string
 	kvdb        *badger.DB
-	tsdb        *gocql.Session
+	tsdb        *sql.DB
 	searcher    bleve.Index
 	lock        sync.Mutex
 }
@@ -33,6 +36,9 @@ func (sm *StorageManager) StorageRoot() string {
 func (sm *StorageManager) KvDb() *badger.DB {
 	return sm.kvdb
 }
+func (sm *StorageManager) TsDb() *sql.DB {
+	return sm.tsdb
+}
 func (sm *StorageManager) Searcher() bleve.Index {
 	return sm.searcher
 }
@@ -41,12 +47,15 @@ func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data str
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	id := gocql.TimeUUID()
-	if err := sm.tsdb.Query(`INSERT INTO storage(id, point_id, user_id, data, time, edited) VALUES (?, ?, ?, ?, ?, ?)`,
-		id, pointId, userId, data, timeVal, false).WithContext(ctx).Exec(); err != nil {
-		log.Fatal(err)
+	id := uuid.NewString()
+	_, err := sm.tsdb.ExecContext(ctx,
+		"INSERT INTO storage (id, point_id, user_id, data, time, edited) VALUES ($1, $2, $3, $4, $5, $6)",
+		id, pointId, userId, data, timeVal, false,
+	)
+	if err != nil {
+		log.Fatal("Insert error:", err)
 	}
-	packet := packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: false}
+	packet := packet.LogPacket{Id: id, UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: false}
 	sm.searcher.Index(packet.Id, packet)
 	return packet
 }
@@ -55,45 +64,52 @@ func (sm *StorageManager) UpdateLog(pointId string, userId string, signalId stri
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	id := gocql.TimeUUID()
-	if err := sm.tsdb.Query(`UPDATE storage SET data = ?, time = ?, edited = ? WHERE user_id = ? IF id = ?;`, data, timeVal, true, userId, id).WithContext(ctx).Exec(); err != nil {
-		log.Println(err)
+	_, err := sm.tsdb.ExecContext(ctx,
+		"update storage set data = $1 where point_id = $2 and id = $3 and edited = $4",
+		data, pointId, signalId, true,
+	)
+	if err != nil {
+		log.Fatal("Update error:", err)
 	}
-	packet := packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: true}
+	packet := packet.LogPacket{Id: signalId, UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: true}
 	sm.searcher.Index(packet.Id, packet)
 	return packet
 }
 
-func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime string, count int) []packet.LogPacket {
+func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime int64, count int) []packet.LogPacket {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-	var scanner gocql.Scanner
-	if beforeTime == "" {
-		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time, edited FROM storage WHERE point_id = ? limit ? ALLOW FILTERING`, pointId, count).WithContext(ctx).Iter().Scanner()
-	} else {
-		uuid, err := gocql.ParseUUID(beforeTime)
+	var rows *sql.Rows
+	var err error
+	if beforeTime == 0 {
+		rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 limit $2", pointId, count)
 		if err != nil {
-			fmt.Println("Invalid UUID:", err)
+			log.Println(err)
 			return []packet.LogPacket{}
 		}
-		scanner = sm.tsdb.Query(`SELECT id, user_id, data, time, edited FROM storage WHERE point_id = ? and id < ? limit ? ALLOW FILTERING`, pointId, uuid, count).WithContext(ctx).Iter().Scanner()
+		defer rows.Close()
+	} else {
+		rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and time < $2 limit $3", pointId, beforeTime, count)
+		if err != nil {
+			log.Println(err)
+			return []packet.LogPacket{}
+		}
+		defer rows.Close()
 	}
 	logs := []packet.LogPacket{}
-	for scanner.Next() {
-		var id gocql.UUID
+
+	fmt.Println("Query results:")
+	for rows.Next() {
+		var id string
 		var userId string
 		var data string
 		var timeVal int64
 		var edited bool
-		err := scanner.Scan(&id, &userId, &data, &timeVal, &edited)
-		if err != nil {
-			log.Fatal(err)
+		if err := rows.Scan(&id, &userId, &data, &timeVal, &edited); err != nil {
+			log.Println(err)
 		}
-		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: edited})
-	}
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		logs = append(logs, packet.LogPacket{Id: id, UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: edited})
 	}
 	return logs
 }
@@ -102,7 +118,6 @@ func (sm *StorageManager) SearchPointLogs(pointId string, quest string) []packet
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 	ctx := context.Background()
-
 	query := bleve.NewMatchQuery(quest)
 	searchRequest := bleve.NewSearchRequest(query)
 	searchRequest.Explain = true
@@ -116,23 +131,25 @@ func (sm *StorageManager) SearchPointLogs(pointId string, quest string) []packet
 	for _, hit := range searchResult.Hits {
 		ids = append(ids, hit.ID)
 	}
-	var scanner gocql.Scanner
-	scanner = sm.tsdb.Query(`SELECT id, user_id, data, time, edited FROM storage WHERE point_id = ? and id in ? ALLOW FILTERING`, pointId, ids).WithContext(ctx).Iter().Scanner()
+	var rows *sql.Rows
+	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in $2", pointId, ids)
+	if err != nil {
+		log.Println(err)
+		return []packet.LogPacket{}
+	}
+	defer rows.Close()
 	logs := []packet.LogPacket{}
-	for scanner.Next() {
-		var id gocql.UUID
+	fmt.Println("Query results:")
+	for rows.Next() {
+		var id string
 		var userId string
 		var data string
 		var timeVal int64
 		var edited bool
-		err := scanner.Scan(&id, &userId, &data, &timeVal, &edited)
-		if err != nil {
-			log.Fatal(err)
+		if err := rows.Scan(&id, &userId, &data, &timeVal, &edited); err != nil {
+			log.Println(err)
 		}
-		logs = append(logs, packet.LogPacket{Id: id.String(), UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: edited})
-	}
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		logs = append(logs, packet.LogPacket{Id: id, UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: edited})
 	}
 	return logs
 }
@@ -183,12 +200,9 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	if err != nil {
 		panic(err)
 	}
-	cluster := gocql.NewCluster(logsDbPath)
-	cluster.Keyspace = "kasper"
-	cluster.Consistency = gocql.Quorum
-	session, err := cluster.CreateSession()
+	tsdb, err := sql.Open("pgx", "postgres://kasper:questdb@localhost:5432/qdb?sslmode=disable")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	var searcher bleve.Index
 	if _, err := os.Stat(searcherDbPath); errors.Is(err, os.ErrNotExist) {
@@ -203,5 +217,5 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 			panic(err)
 		}
 	}
-	return &StorageManager{core: core, tsdb: session, kvdb: kvdb, searcher: searcher, storageRoot: storageRoot}
+	return &StorageManager{core: core, tsdb: tsdb, kvdb: kvdb, searcher: searcher, storageRoot: storageRoot}
 }
