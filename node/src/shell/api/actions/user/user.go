@@ -429,7 +429,7 @@ func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, erro
 		"username":  user.Username,
 	}
 	for _, v := range a.modelExtender["user"] {
-		if meta, err := trx.GetJson("UserMeta::"+state.Info().UserId(), v.Path); err == nil || meta[v.Name] != nil {
+		if meta, err := trx.GetJson("UserMeta::"+user.Id, v.Path); err == nil || meta[v.Name] != nil {
 			result[v.Name] = meta[v.Name]
 		}
 	}
