@@ -11,4 +11,4 @@ echo "pg.enabled=true\npg.port=5432\npg.bind=0.0.0.0">/root/.questdb/conf/server
 
 # Start QuestDB in background
 echo "Starting QuestDB..."
-$QUESTDB_DIR/bin/questdb.sh start
+$QUESTDB_DIR/bin/questdb.sh start -d $QUESTDB_DIR -f
