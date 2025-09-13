@@ -10,7 +10,6 @@ import (
 	"kasper/src/abstract/models/trx"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -134,7 +133,7 @@ func (sm *StorageManager) SearchPointLogs(pointId string, quest string) []packet
 		ids = append(ids, hit.ID)
 	}
 	var rows *sql.Rows
-	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in $2", pointId, "("+strings.Join(ids, " , ")+")")
+	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id = any($2)", pointId, ids)
 	if err != nil {
 		log.Println(err)
 		return []packet.LogPacket{}
