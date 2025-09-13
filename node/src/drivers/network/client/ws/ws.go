@@ -322,7 +322,7 @@ func (t *Socket) processPacket(packet []byte) {
 					DisTime: 0,
 					Signal: func(key string, b any) {
 						if b != nil {
-							soc.writeUpdate(key, b, true)
+							t.writeUpdate(key, b, true)
 						}
 					},
 				}
