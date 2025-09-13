@@ -202,22 +202,18 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	if err != nil {
 		panic(err)
 	}
-	var tsdb *sql.DB
+	tsdb, err := sql.Open("pgx", "postgres://admin:quest@localhost:8812/qdb?sslmode=disable")
+	if err != nil {
+		panic(err)
+	}
 	for {
-		tsdbObj, err := sql.Open("pgx", "postgres://admin:quest@localhost:8812/qdb?sslmode=disable")
-		if err != nil {
-			log.Println(err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
 		_, err = tsdb.ExecContext(context.Background(),
-			"create table storage(id text, point_id text, user_id text, data text, time bigint, edited boolean);",
+			"create table if not exists storage(id text, point_id text, user_id text, data text, time bigint, edited boolean);",
 		)
 		if err != nil {
 			log.Println(err)
 			time.Sleep(2 * time.Second)
 		} else {
-			tsdb = tsdbObj
 			break
 		}
 	}
