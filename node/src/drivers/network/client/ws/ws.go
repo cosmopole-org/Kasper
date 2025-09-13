@@ -98,9 +98,12 @@ func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
 							time.Sleep(60 * time.Second)
 							soc.Lock.Lock()
 							defer soc.Lock.Unlock()
-							if soc.Disconnected {
-								t.sockets.Remove(soc.userId)
-								t.app.Tools().Signaler().Listeners().Remove(soc.userId)
+							currentSoc, found := soc.server.sockets.Get(soc.userId)
+							if found {
+								if currentSoc.Disconnected {
+									t.sockets.Remove(currentSoc.userId)
+									t.app.Tools().Signaler().Listeners().Remove(currentSoc.userId)
+								}
 							}
 						}, false)
 					}

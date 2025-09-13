@@ -190,9 +190,12 @@ func (t *Tcp) handleConnection(conn net.Conn) {
 			time.Sleep(60 * time.Second)
 			socket.Lock.Lock()
 			defer socket.Lock.Unlock()
-			if socket.Disconnected {
-				t.sockets.Remove(socket.userId)
-				t.app.Tools().Signaler().Listeners().Remove(socket.userId)
+			currentSoc, found := socket.server.sockets.Get(socket.userId)
+			if found {
+				if currentSoc.Disconnected {
+					t.sockets.Remove(currentSoc.userId)
+					t.app.Tools().Signaler().Listeners().Remove(currentSoc.userId)
+				}
 			}
 		}, false)
 	}, false)
@@ -402,7 +405,7 @@ func (t *Socket) processPacket(packet []byte) {
 					DisTime: 0,
 					Signal: func(key string, b any) {
 						if b != nil {
-							soc.writeUpdate(key, b, true)
+							t.writeUpdate(key, b, true)
 						}
 					},
 				}
