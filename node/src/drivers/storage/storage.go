@@ -133,8 +133,11 @@ func (sm *StorageManager) SearchPointLogs(pointId string, quest string) []packet
 	for _, hit := range searchResult.Hits {
 		ids = append(ids, hit.ID)
 	}
+	if len(ids) == 0 {
+		return []packet.LogPacket{}
+	}
 	var rows *sql.Rows
-	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in (" + strings.Join(ids, ",") + ")", pointId)
+	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in ('" + strings.Join(ids, "','") + "')", pointId)
 	if err != nil {
 		log.Println(err)
 		return []packet.LogPacket{}
