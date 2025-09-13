@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/dgraph-io/badger"
 	"github.com/google/uuid"
@@ -200,9 +201,15 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	if err != nil {
 		panic(err)
 	}
-	tsdb, err := sql.Open("pgx", "postgres://kasper:questdb@localhost:5432/qdb?sslmode=disable")
-	if err != nil {
-		log.Fatal(err)
+	var tsdb *sql.DB
+	for {
+		tsdb, err = sql.Open("pgx", "postgres://kasper:questdb@localhost:5432/qdb?sslmode=disable")
+		if err != nil {
+			log.Println(err)
+			time.Sleep(2 * time.Second)
+		} else {
+			break
+		}
 	}
 	_, err = tsdb.ExecContext(context.Background(),
 		"create table storage(id text, point_id text, user_id text, data text, time bigint, edited boolean);",
