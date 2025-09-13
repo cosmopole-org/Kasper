@@ -204,11 +204,12 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 	}
 	var tsdb *sql.DB
 	for {
-		tsdb, err = sql.Open("pgx", "postgres://admin:quest@localhost:8812/qdb?sslmode=disable")
+		tsdbObj, err := sql.Open("pgx", "postgres://admin:quest@localhost:8812/qdb?sslmode=disable")
 		if err != nil {
 			log.Println(err)
 			time.Sleep(2 * time.Second)
 		} else {
+			tsdb = tsdbObj
 			break
 		}
 	}
