@@ -45,6 +45,7 @@ ENV DOCKER_API_VERSION=1.39
 COPY . .
 
 RUN bash scripts/install-fcvmm.sh
+RUN bash scripts/install-questdb.sh
 
 RUN mkdir /app/storage
 
