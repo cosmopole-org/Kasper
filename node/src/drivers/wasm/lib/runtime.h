@@ -166,7 +166,7 @@ public:
     WasmMac(std::string machineId, std::string vmId, int index, std::string modPath, function<char *(char *)> cb);
     void registerHost(std::string modPath);
     void registerFunction(WasmEdge_ModuleInstanceContext *HostMod, char *name, WasmEdge_HostFunc_t fn, WasmEdge_ValType *ParamList, int paramsLength, WasmEdge_ValType *ReturnList);
-    vector<WasmDbOp> finalize(bool sideEffect = true);
+    vector<WasmDbOp> finalize();
     void enqueue(function<void()> task);
     void executeOnUpdate(std::string input);
     void runTask(std::string taskId);
@@ -601,7 +601,7 @@ void WasmMac::registerFunction(WasmEdge_ModuleInstanceContext *HostMod, char *na
     WasmEdge_ModuleInstanceAddFunction(HostMod, HostName, HostFunc);
 }
 
-vector<WasmDbOp> WasmMac::finalize(bool sideEffect = true)
+vector<WasmDbOp> WasmMac::finalize()
 {
     if (this->onchain)
     {
