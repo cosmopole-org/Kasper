@@ -515,7 +515,7 @@ WasmMac::WasmMac(std::string machineId, std::string vmId, int index, std::string
 void WasmMac::registerHost(std::string modPath)
 {
     WasmEdge_ConfigureContext *ConfCxt = WasmEdge_ConfigureCreate();
-    this->configCxt = configCxt;
+    this->configCxt = ConfCxt;
     WasmEdge_ConfigureAddHostRegistration(ConfCxt, WasmEdge_HostRegistration_Wasi);
     WasmEdge_ConfigureStatisticsSetInstructionCounting(ConfCxt, true);
     WasmEdge_VMContext *VMCxt = WasmEdge_VMCreate(ConfCxt, NULL);
