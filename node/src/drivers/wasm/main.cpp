@@ -46,6 +46,7 @@ void wasmRunVm(
     auto rt = new WasmMac(machineId, pointId, astPath, wasmCallback);
     rt->executeOnUpdate(input);
     rt->finalize();
+    delete rt;
   }
   catch (int errCode)
   {
@@ -78,16 +79,18 @@ void wasmRunEffects(char *effectsStr)
   {
     log("committing transaction group effects failed.");
   }
+  delete trx;
 }
 
 void wasmRunTrxs(
     char *astStorePath,
     char *input)
 {
+  ConcurrentRunner *cr;
+  vector<ChainTrx *> trxs{};
   try
   {
     json j = json::parse(input);
-    vector<ChainTrx *> trxs{};
     for (json::iterator item = j.begin(); item != j.end(); ++item)
     {
       trxs.push_back(new ChainTrx(
@@ -97,11 +100,19 @@ void wasmRunTrxs(
           item.value()["userId"].template get<std::string>(),
           item.value()["callbackId"].template get<std::string>()));
     }
-    ConcurrentRunner *cr = new ConcurrentRunner(astStorePath, trxs);
+    cr = new ConcurrentRunner(astStorePath, trxs);
     cr->run();
   }
   catch (int errCode)
   {
     std::cout << errCode << std::endl;
+  }
+  for (auto ctrx : trxs)
+  {
+    delete ctrx;
+  }
+  if (cr != NULL)
+  {
+    delete cr;
   }
 }

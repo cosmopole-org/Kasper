@@ -125,6 +125,11 @@ public:
 
 class WasmMac
 {
+    std::vector<WasmEdge_FunctionTypeContext *> fnContexts = {};
+    std::vector<WasmEdge_FunctionInstanceContext *> hostFns = {};
+    std::vector<WasmEdge_String> vmStrs = {};
+    WasmEdge_ConfigureContext *configCxt;
+
 public:
     std::string executionResult;
     bool onchain;
@@ -161,7 +166,7 @@ public:
     WasmMac(std::string machineId, std::string vmId, int index, std::string modPath, function<char *(char *)> cb);
     void registerHost(std::string modPath);
     void registerFunction(WasmEdge_ModuleInstanceContext *HostMod, char *name, WasmEdge_HostFunc_t fn, WasmEdge_ValType *ParamList, int paramsLength, WasmEdge_ValType *ReturnList);
-    vector<WasmDbOp> finalize();
+    vector<WasmDbOp> finalize(bool sideEffect = true);
     void enqueue(function<void()> task);
     void executeOnUpdate(std::string input);
     void runTask(std::string taskId);
@@ -510,6 +515,7 @@ WasmMac::WasmMac(std::string machineId, std::string vmId, int index, std::string
 void WasmMac::registerHost(std::string modPath)
 {
     WasmEdge_ConfigureContext *ConfCxt = WasmEdge_ConfigureCreate();
+    this->configCxt = configCxt;
     WasmEdge_ConfigureAddHostRegistration(ConfCxt, WasmEdge_HostRegistration_Wasi);
     WasmEdge_ConfigureStatisticsSetInstructionCounting(ConfCxt, true);
     WasmEdge_VMContext *VMCxt = WasmEdge_VMCreate(ConfCxt, NULL);
@@ -587,14 +593,15 @@ void WasmMac::registerHost(std::string modPath)
 void WasmMac::registerFunction(WasmEdge_ModuleInstanceContext *HostMod, char *name, WasmEdge_HostFunc_t fn, WasmEdge_ValType *ParamList, int paramsLength, WasmEdge_ValType *ReturnList)
 {
     WasmEdge_FunctionTypeContext *HostFType = WasmEdge_FunctionTypeCreate(ParamList, paramsLength, ReturnList, 1);
+    this->fnContexts.push_back(HostFType);
     WasmEdge_FunctionInstanceContext *HostFunc = WasmEdge_FunctionInstanceCreate(HostFType, fn, this, 0);
+    this->hostFns.push_back(HostFunc);
     WasmEdge_String HostName = WasmEdge_StringCreateByCString(name);
+    this->vmStrs.push_back(HostName);
     WasmEdge_ModuleInstanceAddFunction(HostMod, HostName, HostFunc);
-    // WasmEdge_StringDelete(HostName);
-    // WasmEdge_FunctionTypeDelete(HostFType);
 }
 
-vector<WasmDbOp> WasmMac::finalize()
+vector<WasmDbOp> WasmMac::finalize(bool sideEffect = true)
 {
     if (this->onchain)
     {
@@ -604,8 +611,24 @@ vector<WasmDbOp> WasmMac::finalize()
     {
         this->trx->commitAsOffchain();
     }
+    std::vector<WasmDbOp> ops = this->trx->ops;
+    for (auto cxt : this->fnContexts)
+    {
+        WasmEdge_FunctionTypeDelete(cxt);
+    }
+    for (auto hostFn : this->hostFns)
+    {
+        WasmEdge_FunctionInstanceDelete(hostFn);
+    }
+    for (auto str : this->vmStrs)
+    {
+        WasmEdge_StringDelete(str);
+    }
     WasmEdge_VMDelete(this->vm);
-    return this->trx->ops;
+    WasmEdge_ConfigureDelete(this->configCxt);
+    delete this->trx->trx;
+    delete this->trx;
+    return ops;
 }
 
 void WasmMac::enqueue(function<void()> task)
@@ -1724,6 +1747,8 @@ void ConcurrentRunner::run()
     tp.stick();
     for (auto rt : this->wasmVms)
     {
+        auto cost = WasmEdge_StatisticsGetTotalCost(WasmEdge_VMGetStatisticsContext(rt->vm));
+
         auto changes = rt->finalize();
         auto output = rt->executionResult;
         json arr;
@@ -1736,8 +1761,6 @@ void ConcurrentRunner::run()
             arr.push_back(item);
         }
         std::string opsStr = arr.dump();
-
-        auto cost = WasmEdge_StatisticsGetTotalCost(WasmEdge_VMGetStatisticsContext(rt->vm));
 
         json j;
         j["key"] = "submitOnchainResponse";
@@ -1753,7 +1776,6 @@ void ConcurrentRunner::run()
         std::string packet = j.dump();
 
         wasmSend(&packet[0]);
-        WasmEdge_VMDelete(rt->vm);
     }
     auto stopTime = std::chrono::high_resolution_clock::now();
     auto passedTime = std::chrono::duration_cast<std::chrono::microseconds>(stopTime - startTime).count();
