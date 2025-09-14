@@ -1816,6 +1816,8 @@ void ConcurrentRunner::run()
         std::string packet = j.dump();
 
         wasmSend(&packet[0]);
+
+        delete rt;
     }
     auto stopTime = std::chrono::high_resolution_clock::now();
     auto passedTime = std::chrono::duration_cast<std::chrono::microseconds>(stopTime - startTime).count();
