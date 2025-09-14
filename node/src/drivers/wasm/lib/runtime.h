@@ -131,6 +131,7 @@ class WasmMac
     WasmEdge_ConfigureContext *configCxt;
 
 public:
+    map<int64_t, unsigned char *> tempDataMap = {};
     std::string executionResult;
     bool onchain;
     function<char *(char *)> callback;
@@ -206,6 +207,7 @@ WasmEdge_Result consoleLog(void *data, const WasmEdge_CallingFrameContext *, con
 WasmEdge_Result trx_put(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result trx_del(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result trx_get(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
+WasmEdge_Result freeDisposable(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
 WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out);
@@ -564,6 +566,9 @@ void WasmMac::registerHost(std::string modPath)
     WasmEdge_ValType Params13[8] = {WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32(), WasmEdge_ValTypeGenI32()};
     WasmEdge_ValType Returns13[1] = {WasmEdge_ValTypeGenI64()};
     this->registerFunction(HostMod, "copyToDocker", copyToDocker, Params13, 8, Returns13);
+    WasmEdge_ValType Params4[1] = {WasmEdge_ValTypeGenI64()};
+    WasmEdge_ValType Returns4[1] = {WasmEdge_ValTypeGenI64()};
+    this->registerFunction(HostMod, "freeDisposable", freeDisposable, Params4, 2, Returns4);
 
     auto Res = WasmEdge_VMRegisterModuleFromImport(VMCxt, HostMod);
     if (!WasmEdge_ResultOK(Res))
@@ -623,6 +628,10 @@ vector<WasmDbOp> WasmMac::finalize()
     for (auto str : this->vmStrs)
     {
         WasmEdge_StringDelete(str);
+    }
+    for (auto dis : this->tempDataMap)
+    {
+        free(dis.second);
     }
     WasmEdge_VMDelete(this->vm);
     WasmEdge_ConfigureDelete(this->configCxt);
@@ -883,7 +892,7 @@ WasmEdge_Result newSyncTask(void *data, const WasmEdge_CallingFrameContext *, co
 
     rt->syncTasks.push_back({deps, name});
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
 
     return WasmEdge_Result_Success;
 }
@@ -914,7 +923,7 @@ WasmEdge_Result output(void *data, const WasmEdge_CallingFrameContext *, const W
 
     rt->executionResult = text;
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
 
     return WasmEdge_Result_Success;
 }
@@ -943,7 +952,7 @@ WasmEdge_Result consoleLog(void *data, const WasmEdge_CallingFrameContext *, con
 
     log(text);
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
 
     return WasmEdge_Result_Success;
 }
@@ -1049,9 +1058,12 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
+    rt->tempDataMap[c] = arr;
+
     Out[0] = WasmEdge_ValueGenI64(c);
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }
@@ -1113,7 +1125,8 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
 
     rt->callback(&packet[0]);
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }
@@ -1191,8 +1204,10 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
     Out[0] = WasmEdge_ValueGenI64(c);
+    rt->tempDataMap[c] = arr;
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }
@@ -1271,8 +1286,10 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
     Out[0] = WasmEdge_ValueGenI64(c);
+    rt->tempDataMap[c] = arr;
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }
@@ -1355,8 +1372,10 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
     Out[0] = WasmEdge_ValueGenI64(c);
+    rt->tempDataMap[c] = arr;
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }
@@ -1451,8 +1470,10 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
     Out[0] = WasmEdge_ValueGenI64(c);
+    rt->tempDataMap[c] = arr;
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }
@@ -1542,8 +1563,10 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
     Out[0] = WasmEdge_ValueGenI64(c);
+    rt->tempDataMap[c] = arr;
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }
@@ -1579,7 +1602,7 @@ WasmEdge_Result trx_put(void *data, const WasmEdge_CallingFrameContext *, const 
     }
     auto val = std::string(rawValC.begin(), rawValC.end());
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
 
     rt->trx->put(rt->machineId + "::" + key, val);
 
@@ -1606,9 +1629,24 @@ WasmEdge_Result trx_del(void *data, const WasmEdge_CallingFrameContext *, const 
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    // WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(memName);
 
     rt->trx->del(rt->machineId + "::" + key);
+
+    return WasmEdge_Result_Success;
+}
+
+WasmEdge_Result freeDisposable(void *data, const WasmEdge_CallingFrameContext *, const WasmEdge_Value *In, WasmEdge_Value *Out)
+{
+    uint64_t disposableId = WasmEdge_ValueGetI64(In[0]);
+    WasmMac *rt = (WasmMac *)data;
+
+    auto disposable = rt->tempDataMap.find(disposableId);
+    if (disposable != rt->tempDataMap.end())
+    {
+        rt->tempDataMap.erase(disposableId);
+        free(disposable->second);
+    }
 
     return WasmEdge_Result_Success;
 }
@@ -1654,9 +1692,10 @@ WasmEdge_Result trx_get(void *data, const WasmEdge_CallingFrameContext *, const 
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
     Out[0] = WasmEdge_ValueGenI64(c);
+    rt->tempDataMap[c] = arr;
 
-    // WasmEdge_StringDelete(memName);
-    // WasmEdge_StringDelete(mallocName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }
@@ -1715,9 +1754,10 @@ WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext
     int64_t c = ((ino64_t)valOffset << 32) | valL;
 
     Out[0] = WasmEdge_ValueGenI64(c);
+    rt->tempDataMap[c] = arr;
 
-    // WasmEdge_StringDelete(memName);
-    // WasmEdge_StringDelete(mallocName);
+    WasmEdge_StringDelete(memName);
+    WasmEdge_StringDelete(mallocName);
 
     return WasmEdge_Result_Success;
 }

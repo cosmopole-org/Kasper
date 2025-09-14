@@ -4,6 +4,7 @@ package wasm
  #cgo CXXFLAGS: -std=c++17
  #cgo LDFLAGS: -lrocksdb -lpthread -lz -lsnappy -lzstd -llz4 -lbz2 -lwasmedge -static-libgcc -static-libstdc++
 
+ #include <stdlib.h>
  #include "main.h"
 */
 import "C"
@@ -37,6 +38,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unsafe"
 )
 
 type Wasm struct {
@@ -58,6 +60,9 @@ func (wm *Wasm) Assign(machineId string) {
 				input := C.CString(data)
 				future.Async(func() {
 					C.wasmRunVm(astPath, input, machId)
+					C.free(unsafe.Pointer(input))
+					C.free(unsafe.Pointer(astPath))
+					C.free(unsafe.Pointer(machId))
 				}, false)
 			}
 		},
@@ -73,11 +78,14 @@ func (wm *Wasm) ExecuteChainTrxsGroup(trxs []*worker.Trx) {
 	input := C.CString(string(b))
 	astStorePath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines")
 	C.wasmRunTrxs(astStorePath, input)
+	C.free(unsafe.Pointer(astStorePath))
+	C.free(unsafe.Pointer(input))
 }
 
 func (wm *Wasm) ExecuteChainEffects(effects string) {
 	effectsStr := C.CString(effects)
 	C.wasmRunEffects(effectsStr)
+	C.free(unsafe.Pointer(effectsStr))
 }
 
 type ChainDbOp struct {
@@ -103,6 +111,9 @@ func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
 	input := C.CString(string(b))
 	future.Async(func() {
 		C.wasmRunVm(astPath, input, machId)
+		C.free(unsafe.Pointer(input))
+		C.free(unsafe.Pointer(astPath))
+		C.free(unsafe.Pointer(machId))
 	}, false)
 }
 
