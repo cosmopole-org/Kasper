@@ -164,6 +164,7 @@ require (
 	github.com/btcsuite/btcd v0.0.0-20190523000118-16327141da8c
 	github.com/gammazero/nexus/v3 v3.2.2
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/mux v1.7.2
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
 	github.com/lxzan/gws v1.8.9

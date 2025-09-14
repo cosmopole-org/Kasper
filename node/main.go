@@ -7,6 +7,7 @@ import (
 	"kasper/src/abstract/models/action"
 	kasper "kasper/src/shell"
 	plugger_api "kasper/src/shell/api/main"
+	"log"
 	"os"
 	"os/signal"
 	"strconv"
@@ -14,8 +15,10 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"github.com/gorilla/mux"
+
 	"net/http"
-	_ "net/http/pprof"
+	"net/http/pprof"
 )
 
 import "C"
@@ -35,6 +38,19 @@ func wasmCallback(dataRaw *C.char) *C.char {
 var exit = make(chan int, 1)
 
 func main() {
+
+	go func() {
+		router := mux.NewRouter()
+		router.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+		router.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+		router.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+		router.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+		router.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+		router.Handle("/debug/pprof/{cmd}", http.HandlerFunc(pprof.Index))
+		
+		err := http.ListenAndServe("0.0.0.0:9999", router)
+		log.Println("pprof server listen failed: " + err.Error())
+	}()
 
 	err2 := godotenv.Load()
 	if err2 != nil {
@@ -148,10 +164,6 @@ func main() {
 	port, _ := strconv.ParseInt(portStr, 10, 64)
 	portStr2 := os.Getenv("CLIENT_WS_API_PORT")
 	port2, _ := strconv.ParseInt(portStr2, 10, 64)
-
-	go func() {
-		http.ListenAndServe("localhost:8080", nil)
-	}()
 
 	app.Tools().Network().Run(
 		map[string]int{
