@@ -41,7 +41,7 @@ const (
 	DefaultSlowHeartbeatTimeout = 1000 * time.Millisecond
 	DefaultTCPTimeout           = 1000 * time.Millisecond
 	DefaultJoinTimeout          = 10000 * time.Millisecond
-	DefaultCacheSize            = 10000
+	DefaultCacheSize            = 2000000000
 	DefaultSyncLimit            = 1000
 	DefaultMaxPool              = 2
 	DefaultStore                = true
