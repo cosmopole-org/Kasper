@@ -13,6 +13,9 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 import "C"
@@ -145,6 +148,10 @@ func main() {
 	port, _ := strconv.ParseInt(portStr, 10, 64)
 	portStr2 := os.Getenv("CLIENT_WS_API_PORT")
 	port2, _ := strconv.ParseInt(portStr2, 10, 64)
+
+	go func() {
+		http.ListenAndServe("localhost:8080", nil)
+	}()
 
 	app.Tools().Network().Run(
 		map[string]int{

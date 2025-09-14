@@ -42,6 +42,8 @@ RUN apt install -y golang
 ENV GOPROXY=https://goproxy.io,direct
 ENV DOCKER_API_VERSION=1.39
 
+RUN apt install valgrind
+
 COPY . .
 
 RUN bash scripts/install-fcvmm.sh
@@ -50,7 +52,5 @@ RUN bash scripts/install-questdb.sh
 RUN mkdir /app/storage
 
 RUN CGO_ENABLED=1 go build -o kasper .
-
-RUN apt install valgrind
 
 ENTRYPOINT ["bash", "/app/scripts/run.sh"]
