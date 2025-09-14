@@ -41,10 +41,10 @@ const (
 	DefaultSlowHeartbeatTimeout = 1000 * time.Millisecond
 	DefaultTCPTimeout           = 1000 * time.Millisecond
 	DefaultJoinTimeout          = 10000 * time.Millisecond
-	DefaultCacheSize            = 10
+	DefaultCacheSize            = 10000
 	DefaultSyncLimit            = 1000
 	DefaultMaxPool              = 2
-	DefaultStore                = false
+	DefaultStore                = true
 	DefaultMaintenanceMode      = false
 	DefaultSuspendLimit         = 100
 	DefaultWebRTC               = false
