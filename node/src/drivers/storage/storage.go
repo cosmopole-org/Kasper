@@ -77,14 +77,14 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime int64, count 
 	var rows *sql.Rows
 	var err error
 	if beforeTime == 0 {
-		rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 limit $2", pointId, count)
+		rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 order by time desc limit $2", pointId, count)
 		if err != nil {
 			log.Println(err)
 			return []packet.LogPacket{}
 		}
 		defer rows.Close()
 	} else {
-		rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and time < $2 limit $3", pointId, beforeTime, count)
+		rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and time < $2 order by time desc limit $3", pointId, beforeTime, count)
 		if err != nil {
 			log.Println(err)
 			return []packet.LogPacket{}
