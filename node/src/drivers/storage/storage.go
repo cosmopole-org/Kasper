@@ -3,7 +3,6 @@ package tool_storage
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"kasper/src/abstract/models/core"
 	"kasper/src/abstract/models/packet"
@@ -19,7 +18,6 @@ import (
 
 	"database/sql"
 
-	bleve "github.com/blevesearch/bleve/v2"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -28,7 +26,6 @@ type StorageManager struct {
 	storageRoot string
 	kvdb        *badger.DB
 	tsdb        *sql.DB
-	searcher    bleve.Index
 	lock        sync.Mutex
 }
 
@@ -40,9 +37,6 @@ func (sm *StorageManager) KvDb() *badger.DB {
 }
 func (sm *StorageManager) TsDb() *sql.DB {
 	return sm.tsdb
-}
-func (sm *StorageManager) Searcher() bleve.Index {
-	return sm.searcher
 }
 
 func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string, timeVal int64) packet.LogPacket {
@@ -58,7 +52,6 @@ func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data str
 		log.Println("Insert error: " + err.Error())
 	}
 	packet := packet.LogPacket{Id: id, UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: false}
-	sm.searcher.Index(packet.Id, packet)
 	return packet
 }
 
@@ -74,7 +67,6 @@ func (sm *StorageManager) UpdateLog(pointId string, userId string, signalId stri
 		log.Println("Update error: " + err.Error())
 	}
 	packet := packet.LogPacket{Id: signalId, UserId: userId, Data: data, PointId: pointId, Time: timeVal, Edited: true}
-	sm.searcher.Index(packet.Id, packet)
 	return packet
 }
 
@@ -116,28 +108,13 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime int64, count 
 	return logs
 }
 
-func (sm *StorageManager) SearchPointLogs(pointId string, quest string) []packet.LogPacket {
-	sm.lock.Lock()
-	defer sm.lock.Unlock()
+func (sm *StorageManager) PickPointLogs(pointId string, ids []string) []packet.LogPacket {
+	
 	ctx := context.Background()
-	query := bleve.NewMatchQuery(quest)
-	searchRequest := bleve.NewSearchRequest(query)
-	searchRequest.Explain = true
-	searchRequest.Fields = []string{"data"}
-	searchResult, err := sm.searcher.Search(searchRequest)
-	if err != nil {
-		log.Println(err)
-		return []packet.LogPacket{}
-	}
-	ids := []string{}
-	for _, hit := range searchResult.Hits {
-		ids = append(ids, hit.ID)
-	}
 	if len(ids) == 0 {
 		return []packet.LogPacket{}
 	}
-	var rows *sql.Rows
-	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in ('" + strings.Join(ids, "','") + "')", pointId)
+	rows, err := sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in ('" + strings.Join(ids, "','") + "')", pointId)
 	if err != nil {
 		log.Println(err)
 		return []packet.LogPacket{}
@@ -220,18 +197,5 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 			break
 		}
 	}
-	var searcher bleve.Index
-	if _, err := os.Stat(searcherDbPath); errors.Is(err, os.ErrNotExist) {
-		mapping := bleve.NewIndexMapping()
-		searcher, err = bleve.New(searcherDbPath, mapping)
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		searcher, err = bleve.Open(searcherDbPath)
-		if err != nil {
-			panic(err)
-		}
-	}
-	return &StorageManager{core: core, tsdb: tsdb, kvdb: kvdb, searcher: searcher, storageRoot: storageRoot}
+	return &StorageManager{core: core, tsdb: tsdb, kvdb: kvdb, storageRoot: storageRoot}
 }

@@ -848,7 +848,6 @@ func (c *Core) Close() {
 	c.tools.Network().Chain().Close()
 	c.tools.Storage().KvDb().Close()
 	c.tools.Storage().TsDb().Close()
-	c.tools.Storage().Searcher().Close()
 	c.tools.Wasm().CloseKVDB()
 }
 

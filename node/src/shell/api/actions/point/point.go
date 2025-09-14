@@ -1099,10 +1099,10 @@ func (a *Actions) History(state state.IState, input inputs_points.HistoryInput) 
 			return nil, errors.New("access not permitted")
 		}
 	}
-	if input.Query == "" {
+	if len(input.Ids) == 0 {
 		return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().ReadPointLogs(state.Info().PointId(), input.BeforeTime, input.Count)}, nil
 	} else {
-		return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().SearchPointLogs(state.Info().PointId(), input.Query)}, nil
+		return outputs_points.HistoryOutput{Packets: a.App.Tools().Storage().PickPointLogs(state.Info().PointId(), input.Ids)}, nil
 	}
 }
 
