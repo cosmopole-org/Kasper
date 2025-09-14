@@ -16,7 +16,7 @@ type Fn struct {
 
 type App struct {
 	Id            string `json:"id"`
-	ChainId       int64  `json:"chainId"`
+	ChainId       string `json:"chainId"`
 	OwnerId       string `json:"ownerId"`
 	Username      string `json:"username"`
 	MachinesCount int    `json:"machinesCount"`

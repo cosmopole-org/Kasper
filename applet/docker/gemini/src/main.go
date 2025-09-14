@@ -187,138 +187,86 @@ func processPacket(callbackId int64, data []byte) {
 		pointId := packet["point"].(map[string]any)["id"].(string)
 
 		if input["type"] == "textMessage" {
-
-			message := input["text"].(string)
-
-			inp := ListPointAppsInput{
-				PointId: pointId,
-			}
-			submitOffchainBaseTrx(pointId, "/points/listApps", "", "", "", "", inp, func(pointsAppsRes []byte) {
-				log.Println(string(pointsAppsRes))
-				out := ListPointAppsOutput{}
-				log.Println("parsing...")
-				err := json.Unmarshal(pointsAppsRes, &out)
-				if err != nil {
-					log.Println(err.Error())
-					signalPoint("single", pointId, userId, map[string]any{"type": "textMessage", "text": "an error happended " + string(pointsAppsRes)}, true)
+			message := strings.Trim(input["text"].(string), " ")
+			if strings.HasPrefix(message, "@gemini") {
+				inp := ListPointAppsInput{
+					PointId: pointId,
 				}
-				log.Println("parsed.")
+				submitOffchainBaseTrx(pointId, "/points/listApps", "", "", "", "", inp, func(pointsAppsRes []byte) {
+					log.Println(string(pointsAppsRes))
+					out := ListPointAppsOutput{}
+					log.Println("parsing...")
+					err := json.Unmarshal(pointsAppsRes, &out)
+					if err != nil {
+						log.Println(err.Error())
+						signalPoint("single", pointId, userId, map[string]any{"type": "textMessage", "text": "an error happended " + string(pointsAppsRes)}, true)
+					}
+					log.Println("parsed.")
 
-				machinesMeta := []map[string]any{}
-				log.Println("starting to extract...")
-				for k, v := range out.Machines {
-					log.Println(k)
-					if v.Identifier == "0" {
-						if isMcpRaw, ok := v.Metadata["isMcp"]; ok {
-							if isMcp, ok := isMcpRaw.(bool); ok && isMcp {
-								log.Println(k + " is mcp")
-								machinesMeta = append(machinesMeta, map[string]any{
-									"machineId": v.UserId,
-									"metadata":  v.Metadata,
-								})
+					machinesMeta := []map[string]any{}
+					log.Println("starting to extract...")
+					for k, v := range out.Machines {
+						log.Println(k)
+						if v.Identifier == "0" {
+							if isMcpRaw, ok := v.Metadata["isMcp"]; ok {
+								if isMcp, ok := isMcpRaw.(bool); ok && isMcp {
+									log.Println(k + " is mcp")
+									machinesMeta = append(machinesMeta, map[string]any{
+										"machineId": v.UserId,
+										"metadata":  v.Metadata,
+									})
+								}
 							}
 						}
 					}
-				}
 
-				toolsList := []*genai.FunctionDeclaration{}
+					toolsList := []*genai.FunctionDeclaration{}
 
-				toolToMachIdMap := map[string]string{}
+					toolToMachIdMap := map[string]string{}
 
-				for _, metaRaw := range machinesMeta {
-					machineId := metaRaw["machineId"].(string)
-					metaObj := metaRaw["metadata"].(map[string]any)
-					tools := metaObj["tools"].([]any)
-					for _, toolRaw := range tools {
-						toolObj := toolRaw.(map[string]any)
-						params := map[string]*genai.Schema{}
-						for k, v := range toolObj["args"].(map[string]any) {
-							t := v.(map[string]any)["type"]
-							var typ genai.Type
-							if t == "STRING" {
-								typ = genai.TypeString
-							} else if t == "NUMBER" {
-								typ = genai.TypeNumber
-							} else if t == "BOOL" {
-								typ = genai.TypeBoolean
-							} else {
-								typ = genai.TypeUnspecified
+					for _, metaRaw := range machinesMeta {
+						machineId := metaRaw["machineId"].(string)
+						metaObj := metaRaw["metadata"].(map[string]any)
+						tools := metaObj["tools"].([]any)
+						for _, toolRaw := range tools {
+							toolObj := toolRaw.(map[string]any)
+							params := map[string]*genai.Schema{}
+							for k, v := range toolObj["args"].(map[string]any) {
+								t := v.(map[string]any)["type"]
+								var typ genai.Type
+								if t == "STRING" {
+									typ = genai.TypeString
+								} else if t == "NUMBER" {
+									typ = genai.TypeNumber
+								} else if t == "BOOL" {
+									typ = genai.TypeBoolean
+								} else {
+									typ = genai.TypeUnspecified
+								}
+								params[k] = &genai.Schema{
+									Title:       k,
+									Type:        typ,
+									Description: v.(map[string]any)["desc"].(string),
+								}
 							}
-							params[k] = &genai.Schema{
-								Title:       k,
-								Type:        typ,
-								Description: v.(map[string]any)["desc"].(string),
-							}
+							toolName := toolObj["name"].(string)
+							toolsList = append(toolsList, &genai.FunctionDeclaration{
+								Name: toolName,
+								Parameters: &genai.Schema{
+									Type:       genai.TypeObject,
+									Properties: params,
+								},
+								Description: toolObj["desc"].(string),
+							})
+							toolToMachIdMap[toolName] = machineId
 						}
-						toolName := toolObj["name"].(string)
-						toolsList = append(toolsList, &genai.FunctionDeclaration{
-							Name: toolName,
-							Parameters: &genai.Schema{
-								Type:       genai.TypeObject,
-								Properties: params,
-							},
-							Description: toolObj["desc"].(string),
-						})
-						toolToMachIdMap[toolName] = machineId
 					}
-				}
 
-				temp := strings.ReplaceAll(message, "\n", "")
-				temp = strings.ReplaceAll(temp, "\t", "")
-				temp = strings.Trim(temp, " ")
+					temp := strings.ReplaceAll(message, "\n", "")
+					temp = strings.ReplaceAll(temp, "\t", "")
+					temp = strings.Trim(temp, " ")
 
-				if temp == "/reset" {
-					history := []*genai.Content{}
-					chatObj, ok := chats[pointId]
-					if ok {
-						history = chatObj.History
-					} else {
-						chatObj = &Chat{Key: pointId, History: history}
-						chats[pointId] = chatObj
-					}
-					chatObj.History = []*genai.Content{}
-					signalPoint("broadcast", pointId, "-", map[string]any{"type": "textMessage", "text": "context reset"})
-					return
-				}
-
-				ctx := context.Background()
-				client, err := genai.NewClient(ctx, &genai.ClientConfig{
-					APIKey:  "AIzaSyAekCwMAh1HlKtogiUVsfkMEEzOcN1pRSs",
-					Backend: genai.BackendGeminiAPI,
-				})
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				history := []*genai.Content{}
-
-				chatObj, ok := chats[pointId]
-				if ok {
-					history = chatObj.History
-				} else {
-					chatObj = &Chat{Key: pointId, History: history}
-					chats[pointId] = chatObj
-				}
-				chatObj.History = append(chatObj.History, genai.NewContentFromText(message, genai.RoleUser))
-
-				log.Println(toolsList)
-
-				chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
-					Tools: []*genai.Tool{
-						{
-							FunctionDeclarations: toolsList,
-						},
-					},
-				}, history)
-
-				res, _ := chat.SendMessage(ctx, genai.Part{Text: message})
-
-				fc := res.FunctionCalls()
-				if len(fc) > 0 {
-					toolName := fc[0].Name
-					args := fc[0].Args
-					id := fc[0].ID
-					toolCallbacks[pointId] = func(result map[string]any) []byte {
+					if temp == "/reset" {
 						history := []*genai.Content{}
 						chatObj, ok := chats[pointId]
 						if ok {
@@ -327,29 +275,81 @@ func processPacket(callbackId int64, data []byte) {
 							chatObj = &Chat{Key: pointId, History: history}
 							chats[pointId] = chatObj
 						}
-						chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
-							Tools: []*genai.Tool{
-								{
-									FunctionDeclarations: toolsList,
-								},
+						chatObj.History = []*genai.Content{}
+						signalPoint("broadcast", pointId, "-", map[string]any{"type": "textMessage", "text": "context reset"})
+						return
+					}
+
+					ctx := context.Background()
+					client, err := genai.NewClient(ctx, &genai.ClientConfig{
+						APIKey:  "AIzaSyAekCwMAh1HlKtogiUVsfkMEEzOcN1pRSs",
+						Backend: genai.BackendGeminiAPI,
+					})
+					if err != nil {
+						log.Println(err)
+					}
+
+					history := []*genai.Content{}
+
+					chatObj, ok := chats[pointId]
+					if ok {
+						history = chatObj.History
+					} else {
+						chatObj = &Chat{Key: pointId, History: history}
+						chats[pointId] = chatObj
+					}
+					chatObj.History = append(chatObj.History, genai.NewContentFromText(message, genai.RoleUser))
+
+					log.Println(toolsList)
+
+					chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
+						Tools: []*genai.Tool{
+							{
+								FunctionDeclarations: toolsList,
 							},
-						}, history)
-						res, _ = chat.SendMessage(ctx, genai.Part{FunctionResponse: &genai.FunctionResponse{ID: id, Name: toolName, Response: result}})
+						},
+					}, history)
+
+					res, _ := chat.SendMessage(ctx, genai.Part{Text: message})
+
+					fc := res.FunctionCalls()
+					if len(fc) > 0 {
+						toolName := fc[0].Name
+						args := fc[0].Args
+						id := fc[0].ID
+						toolCallbacks[pointId] = func(result map[string]any) []byte {
+							history := []*genai.Content{}
+							chatObj, ok := chats[pointId]
+							if ok {
+								history = chatObj.History
+							} else {
+								chatObj = &Chat{Key: pointId, History: history}
+								chats[pointId] = chatObj
+							}
+							chat, _ := client.Chats.Create(ctx, "gemini-2.5-flash", &genai.GenerateContentConfig{
+								Tools: []*genai.Tool{
+									{
+										FunctionDeclarations: toolsList,
+									},
+								},
+							}, history)
+							res, _ = chat.SendMessage(ctx, genai.Part{FunctionResponse: &genai.FunctionResponse{ID: id, Name: toolName, Response: result}})
+							response := res.Candidates[0].Content.Parts[0].Text
+							chatObj.History = append(chatObj.History, genai.NewContentFromText(response, genai.RoleModel))
+							return []byte(response)
+						}
+						point := Point{Id: pointId, PendingUserId: userId}
+						point.Push()
+						machId := toolToMachIdMap[toolName]
+						log.Println(res)
+						signalPoint("single", pointId, machId, map[string]any{"name": toolName, "args": args, "type": "execute", "machineId": toolToMachIdMap[toolName]}, true)
+					} else if len(res.Candidates) > 0 {
 						response := res.Candidates[0].Content.Parts[0].Text
 						chatObj.History = append(chatObj.History, genai.NewContentFromText(response, genai.RoleModel))
-						return []byte(response)
+						signalPoint("broadcast", pointId, "-", map[string]any{"type": "textMessage", "text": response})
 					}
-					point := Point{Id: pointId, PendingUserId: userId}
-					point.Push()
-					machId := toolToMachIdMap[toolName]
-					log.Println(res)
-					signalPoint("single", pointId, machId, map[string]any{"name": toolName, "args": args, "type": "execute", "machineId": toolToMachIdMap[toolName]}, true)
-				} else if len(res.Candidates) > 0 {
-					response := res.Candidates[0].Content.Parts[0].Text
-					chatObj.History = append(chatObj.History, genai.NewContentFromText(response, genai.RoleModel))
-					signalPoint("broadcast", pointId, "-", map[string]any{"type": "textMessage", "text": response})
-				}
-			})
+				})
+			}
 		} else if input["type"] == "mcpCallback" {
 
 			params := map[string]any{}
@@ -461,17 +461,20 @@ func signalPoint(typ string, pointId string, userId string, data any, temp ...bo
 		return
 	}
 	if len(temp) > 0 {
+		isTemp := "false"
+		if temp[0] {
+			isTemp = "true"
+		}
 		packet, _ := json.Marshal(map[string]any{"key": "signalPoint", "input": map[string]any{
-			"type":    typ + "|true",
+			"type":    typ + "|" + isTemp,
 			"pointId": pointId,
 			"userId":  userId,
 			"data":    string(dataBytes),
-			"temp":    temp[0],
 		}})
 		writePacket(packet, nil)
 	} else {
 		packet, _ := json.Marshal(map[string]any{"key": "signalPoint", "input": map[string]any{
-			"type":    typ + "|true",
+			"type":    typ + "|false",
 			"pointId": pointId,
 			"userId":  userId,
 			"data":    string(dataBytes),
@@ -490,7 +493,7 @@ func submitOffchainBaseTrx(pointId string, key string, requesterUserId string, r
 		"isFile":             false,
 		"isBase":             true,
 		"tag":                tag,
-		"packet":             inp,
+		"packet":             string(inp),
 	}})
 	writePacket(packet, func(output []byte) {
 		cb(output)
