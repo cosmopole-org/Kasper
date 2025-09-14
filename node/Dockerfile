@@ -51,4 +51,6 @@ RUN mkdir /app/storage
 
 RUN CGO_ENABLED=1 go build -o kasper .
 
+RUN apt install valgrind
+
 ENTRYPOINT ["bash", "/app/scripts/run.sh"]
