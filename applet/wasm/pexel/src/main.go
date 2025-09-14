@@ -49,7 +49,7 @@ func Run(signal model.Send) {
 				m := map[string]any{}
 				j, _ := base64.StdEncoding.DecodeString(res)
 				json.Unmarshal([]byte(j), &m)
-				url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["large"].(string)
+				url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["original"].(string)
 				data := trx.Network.Request("GET", url, map[string]string{}, map[string]any{})
 				inp := model.UploadPointEntityInput{
 					EntityId: "background",
@@ -78,7 +78,7 @@ func Run(signal model.Send) {
 					m := map[string]any{}
 					j, _ := base64.StdEncoding.DecodeString(res)
 					json.Unmarshal([]byte(j), &m)
-					url := m["photos"].([]any)[rand.Intn(len(m["photos"].([]any)))].(map[string]any)["src"].(map[string]any)["large"].(string)
+					url := m["photos"].([]any)[rand.Intn(len(m["photos"].([]any)))].(map[string]any)["src"].(map[string]any)["original"].(string)
 					data := trx.Network.Request("GET", url, map[string]string{}, map[string]any{})
 					inp := model.UploadPointEntityInput{
 						EntityId: "background",
@@ -107,7 +107,7 @@ func Run(signal model.Send) {
 					m := map[string]any{}
 					j, _ := base64.StdEncoding.DecodeString(res)
 					json.Unmarshal([]byte(j), &m)
-					url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["large"].(string)
+					url := m["photos"].([]any)[0].(map[string]any)["src"].(map[string]any)["original"].(string)
 					data := trx.Network.Request("GET", url, map[string]string{}, map[string]any{})
 					inp := model.UploadPointEntityInput{
 						EntityId: "background",
