@@ -58,6 +58,8 @@ func (wm *Wasm) Assign(machineId string) {
 				input := C.CString(data)
 				future.Async(func() {
 					C.wasmRunVm(astPath, input, machId)
+					C.free(astPath)
+					C.free(machId)
 				}, false)
 			}
 		},
@@ -73,11 +75,14 @@ func (wm *Wasm) ExecuteChainTrxsGroup(trxs []*worker.Trx) {
 	input := C.CString(string(b))
 	astStorePath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines")
 	C.wasmRunTrxs(astStorePath, input)
+	C.free(astStorePath)
+	C.free(input)
 }
 
 func (wm *Wasm) ExecuteChainEffects(effects string) {
 	effectsStr := C.CString(effects)
 	C.wasmRunEffects(effectsStr)
+	C.free(effectsStr)
 }
 
 type ChainDbOp struct {
@@ -103,6 +108,9 @@ func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
 	input := C.CString(string(b))
 	future.Async(func() {
 		C.wasmRunVm(astPath, input, machId)
+		C.free(input)
+		C.free(astPath)
+		C.free(machId)
 	}, false)
 }
 
