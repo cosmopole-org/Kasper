@@ -36,6 +36,12 @@ type Socket struct {
 	userId       string
 }
 
+var WsSocketPool = sync.Pool{
+	New: func() interface{} {
+		return &Socket{}
+	},
+}
+
 type Ws struct {
 	app     core.ICore
 	sockets *cmap.ConcurrentMap[string, *Socket]
@@ -52,8 +58,15 @@ type Handler struct {
 }
 
 func (c *Handler) OnOpen(conn *gws.Conn) {
-	log.Println("new ws client connect")
-	socket := &Socket{server: c.wsServer, Id: crypto.SecureUniqueString(), Buffer: [][]byte{}, Conn: conn, app: c.wsServer.app, Ack: true, Disconnected: false}
+	println("new ws client connect")
+	socket := WsSocketPool.Get().(*Socket)
+	socket.server = c.wsServer
+	socket.Id = crypto.SecureUniqueString()
+	socket.Buffer = [][]byte{}
+	socket.Conn = conn
+	socket.app = c.wsServer.app
+	socket.Ack = true
+	socket.Disconnected = false
 	conn.Session().Store("session", socket)
 }
 
@@ -68,7 +81,6 @@ func (c *Handler) OnPong(socket *gws.Conn, payload []byte) {}
 
 func (c *Handler) OnMessage(socket *gws.Conn, message *gws.Message) {
 	defer message.Close()
-	log.Println(string(message.Bytes()))
 	session, _ := socket.Session().Load("session")
 	session.(*Socket).processPacket(message.Bytes()[4:])
 }
@@ -100,9 +112,14 @@ func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
 							defer soc.Lock.Unlock()
 							currentSoc, found := soc.server.sockets.Get(soc.userId)
 							if found {
-								if currentSoc.Disconnected {
-									t.sockets.Remove(currentSoc.userId)
-									t.app.Tools().Signaler().Listeners().Remove(currentSoc.userId)
+								if soc == currentSoc {
+									if soc.Disconnected {
+										t.sockets.Remove(soc.userId)
+										t.app.Tools().Signaler().Listeners().Remove(soc.userId)
+										WsSocketPool.Put(soc)
+									}
+								} else {
+									WsSocketPool.Put(soc)
 								}
 							}
 						}, false)
@@ -117,13 +134,13 @@ func (t *Ws) Listen(port int, tlsConfig *tls.Config) {
 				log.Fatalf("failed to listen: %v", err)
 			}
 		}, false)
-		log.Println("Clients' Ws TLS server listening on port ", port)
+		println("Clients' Ws TLS server listening on port ", port)
 	}, false)
 }
 
 func (t *Socket) writeUpdate(key string, updatePack any, writeRaw bool) {
 
-	log.Println("preparing update...")
+	println("preparing update...")
 
 	keyBytes := []byte(key)
 	keyBytesLen := make([]byte, 4)
@@ -136,7 +153,7 @@ func (t *Socket) writeUpdate(key string, updatePack any, writeRaw bool) {
 		var err error
 		b3, err = json.Marshal(updatePack)
 		if err != nil {
-			log.Println(err)
+			println(err)
 			return
 		}
 	}
@@ -154,7 +171,7 @@ func (t *Socket) writeUpdate(key string, updatePack any, writeRaw bool) {
 	copy(packet[pointer:pointer+len(b3)], b3[:])
 	pointer += len(b3)
 
-	log.Println("appending to buffer...")
+	println("appending to buffer...")
 
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
@@ -165,7 +182,7 @@ func (t *Socket) writeUpdate(key string, updatePack any, writeRaw bool) {
 
 func (t *Socket) writeResponse(requestId string, resCode int, response any, writeRaw bool) {
 
-	log.Println("preparing response...")
+	println("preparing response...")
 
 	b1 := []byte(requestId)
 	b1Len := make([]byte, 4)
@@ -181,7 +198,7 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 		var err error
 		b3, err = json.Marshal(response)
 		if err != nil {
-			log.Println(err)
+			println(err)
 			return
 		}
 	}
@@ -202,7 +219,7 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 	copy(packet[pointer:pointer+len(b3)], b3[:])
 	pointer += len(b3)
 
-	log.Println("appending to buffer...")
+	println("appending to buffer...")
 
 	t.Lock.Lock()
 	defer t.Lock.Unlock()
@@ -212,7 +229,7 @@ func (t *Socket) writeResponse(requestId string, resCode int, response any, writ
 }
 
 func (t *Socket) pushBuffer() {
-	log.Println("pushing buffer to client...", t.Ack, len(t.Buffer))
+	println("pushing buffer to client...", t.Ack, len(t.Buffer))
 	if t.Ack {
 		if len(t.Buffer) > 0 {
 			t.Ack = false
@@ -221,13 +238,13 @@ func (t *Socket) pushBuffer() {
 			err := t.Conn.WriteMessage(gws.OpcodeBinary, packetLen)
 			if err != nil {
 				t.Ack = true
-				log.Println(err)
+				println(err)
 				return
 			}
 			err = t.Conn.WriteMessage(gws.OpcodeBinary, t.Buffer[0])
 			if err != nil {
 				t.Ack = true
-				log.Println(err)
+				println(err)
 				return
 			}
 		}
@@ -250,43 +267,43 @@ func (t *Socket) processPacket(packet []byte) {
 	}
 	pointer := 0
 	signatureLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
-	log.Println("signature length:", signatureLength)
+	println("signature length:", signatureLength)
 	if signatureLength > 20000000 {
 		return
 	}
 	pointer += 4
 	signature := string(packet[pointer : pointer+signatureLength])
 	pointer += signatureLength
-	log.Println("signature:", signature)
+	println("signature:", signature)
 	userIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
-	log.Println("userId length:", userIdLength)
+	println("userId length:", userIdLength)
 	if userIdLength > 20000000 {
 		return
 	}
 	userId := string(packet[pointer : pointer+userIdLength])
 	pointer += userIdLength
-	log.Println("userId:", userId)
+	println("userId:", userId)
 	pathLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
-	log.Println("path length:", pathLength)
+	println("path length:", pathLength)
 	if pathLength > 20000000 {
 		return
 	}
 	path := string(packet[pointer : pointer+pathLength])
 	pointer += pathLength
-	log.Println("path:", path)
+	println("path:", path)
 	packetIdLength := int(binary.BigEndian.Uint32(packet[pointer : pointer+4]))
 	pointer += 4
-	log.Println("packetId length:", packetIdLength)
+	println("packetId length:", packetIdLength)
 	if packetIdLength > 20000000 {
 		return
 	}
 	packetId := string(packet[pointer : pointer+packetIdLength])
 	pointer += packetIdLength
-	log.Println("packetId:", packetId)
+	println("packetId:", packetId)
 	payload := packet[pointer:]
-	log.Println(string(payload))
+	println(string(payload))
 
 	if path == "logout" {
 		success, _, _ := t.app.Tools().Security().AuthWithSignature(userId, payload, signature)
@@ -338,7 +355,7 @@ func (t *Socket) processPacket(packet []byte) {
 			t.app.ModifyState(true, func(trx trx.ITrx) error {
 				pIds, err := trx.GetLinksList(prefix, -1, -1)
 				if err != nil {
-					log.Println(err)
+					println(err)
 					pointIds = []string{}
 				} else {
 					pointIds = pIds
@@ -365,12 +382,12 @@ func (t *Socket) processPacket(packet []byte) {
 	var err error
 	input, err := action.(iaction.ISecureAction).ParseInput("tcp", payload)
 	if err != nil {
-		log.Println(err)
+		println(err)
 		t.writeResponse(packetId, 2, packetmodel.BuildErrorJson(err.Error()), false)
 		return
 	}
 	statusCode, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, packetId, payload, signature, input, strings.Split(t.Conn.RemoteAddr().String(), ":")[0])
-	log.Println(result)
+	println(result)
 	if err != nil {
 		httpStatusCode := 3
 		if statusCode == -1 {
