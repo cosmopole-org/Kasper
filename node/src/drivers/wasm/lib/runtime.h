@@ -48,7 +48,7 @@ void log(std::string text)
     j["input"] = j2;
     std::string packet = j.dump();
     auto dummyRes = wasmSend(&packet[0]);
-    delete dummyRes;
+    free(dummyRes);
 }
 
 Options options;
@@ -1054,8 +1054,9 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     j["input"] = j2;
     std::string packet = j.dump();
 
-    std::string val = rt->callback(&packet[0]);
+    char *valRaw = rt->callback(&packet[0]);
 
+    std::string val = valRaw;
     auto valL = val.size();
 
     WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
@@ -1071,7 +1072,7 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
         arr[i] = (unsigned char)rawArr[i];
     }
 
-    free(&val[0]);
+    free(valRaw);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1147,8 +1148,9 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     j["input"] = j2;
     std::string packet = j.dump();
 
-    auto dummyRes = rt->callback(&packet[0]);
-    free(dummyRes);
+    char *valRaw = rt->callback(&packet[0]);
+
+    free(valRaw);
 
     WasmEdge_StringDelete(memName);
     WasmEdge_StringDelete(mallocName);
@@ -1215,7 +1217,9 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
     j["input"] = j2;
     std::string packet = j.dump();
 
-    std::string val = rt->callback(&packet[0]);
+    char *valRaw = rt->callback(&packet[0]);
+
+    std::string val = valRaw;
     auto valL = val.size();
 
     WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
@@ -1231,7 +1235,7 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
         arr[i] = (unsigned char)rawArr[i];
     }
 
-    free(&val[0]);
+    free(valRaw);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1305,7 +1309,9 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     j["input"] = j2;
     std::string packet = j.dump();
 
-    std::string val = rt->callback(&packet[0]);
+    char *valRaw = rt->callback(&packet[0]);
+
+    std::string val = valRaw;
     auto valL = val.size();
 
     WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
@@ -1321,7 +1327,7 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
         arr[i] = (unsigned char)rawArr[i];
     }
 
-    free(&val[0]);
+    free(valRaw);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1394,8 +1400,9 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
     j["input"] = j2;
     std::string packet = j.dump();
 
-    std::string res = rt->callback(&packet[0]);
-    log(&res[0]);
+    char *valRaw = rt->callback(&packet[0]);
+
+    std::string res = valRaw;
 
     json jres;
     jres["data"] = res;
@@ -1415,7 +1422,7 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
         arr[i] = (unsigned char)rawArr[i];
     }
 
-    free(&val[0]);
+    free(valRaw);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1502,8 +1509,9 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     j["input"] = j2;
     std::string packet = j.dump();
 
-    std::string res = rt->callback(&packet[0]);
-    log(&res[0]);
+    char *valRaw = rt->callback(&packet[0]);
+
+    std::string res = valRaw;
 
     json jres;
     jres["data"] = res;
@@ -1523,7 +1531,7 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
         arr[i] = (unsigned char)rawArr[i];
     }
 
-    free(&val[0]);
+    free(valRaw);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1610,7 +1618,9 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     j["input"] = j2;
     std::string packet = j.dump();
 
-    std::string val = rt->callback(&packet[0]);
+    char *valRaw = rt->callback(&packet[0]);
+
+    std::string val = valRaw;
     auto valL = val.size();
 
     WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
@@ -1626,7 +1636,7 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
         arr[i] = (unsigned char)rawArr[i];
     }
 
-    free(&val[0]);
+    free(valRaw);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
