@@ -47,7 +47,8 @@ void log(std::string text)
     j2["text"] = text;
     j["input"] = j2;
     std::string packet = j.dump();
-    wasmSend(&packet[0]);
+    auto dummyRes = wasmSend(&packet[0]);
+    free(dummyRes);
 }
 
 Options options;
@@ -132,6 +133,7 @@ class WasmMac
 
 public:
     map<int64_t, unsigned char *> tempDataMap = {};
+    map<int64_t, const char *> tempDataMap2 = {};
     std::string executionResult;
     bool onchain;
     function<char *(char *)> callback;
@@ -635,8 +637,9 @@ vector<WasmDbOp> WasmMac::finalize()
     }
     WasmEdge_VMDelete(this->vm);
     WasmEdge_ConfigureDelete(this->configCxt);
-    delete this->trx->trx;
-    delete this->trx;
+    free(&this->executionResult[0]);
+    free(this->trx->trx);
+    free(this->trx);
     return ops;
 }
 
@@ -892,6 +895,8 @@ WasmEdge_Result newSyncTask(void *data, const WasmEdge_CallingFrameContext *, co
 
     rt->syncTasks.push_back({deps, name});
 
+    free(rawKey);
+
     WasmEdge_StringDelete(memName);
 
     return WasmEdge_Result_Success;
@@ -918,6 +923,8 @@ WasmEdge_Result output(void *data, const WasmEdge_CallingFrameContext *, const W
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto text = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    free(rawKey);
 
     log(text);
 
@@ -949,6 +956,8 @@ WasmEdge_Result consoleLog(void *data, const WasmEdge_CallingFrameContext *, con
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto text = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    free(rawKey);
 
     log(text);
 
@@ -984,6 +993,8 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
 
+    free(rawKey);
+
     unsigned char *rawInput = new unsigned char[inputL];
     vector<char> rawInputC{};
     WasmEdge_MemoryInstanceGetData(mem, rawInput, inputOffset, inputL);
@@ -993,6 +1004,8 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     }
     auto input = std::string(rawInputC.begin(), rawInputC.end());
 
+    free(rawInput);
+
     unsigned char *rawMeta = new unsigned char[metaL];
     vector<char> rawMetaC{};
     WasmEdge_MemoryInstanceGetData(mem, rawMeta, metaOffset, metaL);
@@ -1001,6 +1014,8 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
         rawMetaC.push_back((char)rawMeta[i]);
     }
     auto meta = std::string(rawMetaC.begin(), rawMetaC.end());
+
+    free(rawMeta);
 
     log("[" + meta + "]");
 
@@ -1040,6 +1055,7 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     std::string packet = j.dump();
 
     std::string val = rt->callback(&packet[0]);
+
     auto valL = val.size();
 
     WasmEdge_Value Params[1] = {WasmEdge_ValueGenI32(valL)};
@@ -1054,6 +1070,8 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     {
         arr[i] = (unsigned char)rawArr[i];
     }
+
+    free(&val[0]);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1094,6 +1112,8 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto text = std::string(rawKeyC.begin(), rawKeyC.end());
 
+    free(rawKey);
+
     unsigned char *rawIn = new unsigned char[inL];
     vector<char> rawInC{};
     WasmEdge_MemoryInstanceGetData(mem, rawIn, inOffset, inL);
@@ -1103,6 +1123,8 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto tag = std::string(rawInC.begin(), rawInC.end());
 
+    free(rawIn);
+
     unsigned char *rawPi = new unsigned char[piL];
     vector<char> rawPiC{};
     WasmEdge_MemoryInstanceGetData(mem, rawPi, piOffset, piL);
@@ -1111,6 +1133,8 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
         rawPiC.push_back((char)rawPi[i]);
     }
     auto pointId = std::string(rawPiC.begin(), rawPiC.end());
+
+    free(rawPi);
 
     json j;
     j["key"] = "plantTrigger";
@@ -1123,7 +1147,8 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     j["input"] = j2;
     std::string packet = j.dump();
 
-    rt->callback(&packet[0]);
+    auto dummyRes = rt->callback(&packet[0]);
+    free(dummyRes);
 
     WasmEdge_StringDelete(memName);
     WasmEdge_StringDelete(mallocName);
@@ -1156,6 +1181,8 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
     }
     auto url = std::string(rawKeyC.begin(), rawKeyC.end());
 
+    free(rawKey);
+
     unsigned char *rawIn = new unsigned char[headsL];
     vector<char> rawInC{};
     WasmEdge_MemoryInstanceGetData(mem, rawIn, headsOffset, headsL);
@@ -1165,6 +1192,8 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
     }
     auto headers = std::string(rawInC.begin(), rawInC.end());
 
+    free(rawIn);
+
     unsigned char *rawPi = new unsigned char[bodyL];
     vector<char> rawPiC{};
     WasmEdge_MemoryInstanceGetData(mem, rawPi, bodyOffset, bodyL);
@@ -1173,6 +1202,8 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
         rawPiC.push_back((char)rawPi[i]);
     }
     auto body = std::string(rawPiC.begin(), rawPiC.end());
+
+    free(rawPi);
 
     json j;
     j["key"] = "httpPost";
@@ -1199,6 +1230,8 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
     {
         arr[i] = (unsigned char)rawArr[i];
     }
+
+    free(&val[0]);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1237,6 +1270,8 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     }
     auto text = std::string(rawKeyC.begin(), rawKeyC.end());
 
+    free(rawKey);
+
     unsigned char *rawIn = new unsigned char[inL];
     vector<char> rawInC{};
     WasmEdge_MemoryInstanceGetData(mem, rawIn, inOffset, inL);
@@ -1246,6 +1281,8 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
 
+    free(rawIn);
+
     unsigned char *rawCn = new unsigned char[cnL];
     vector<char> rawCnC{};
     WasmEdge_MemoryInstanceGetData(mem, rawCn, cnOffset, cnL);
@@ -1254,6 +1291,8 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
         rawCnC.push_back((char)rawCn[i]);
     }
     auto containerName = std::string(rawCnC.begin(), rawCnC.end());
+
+    free(rawCn);
 
     json j;
     j["key"] = "runDocker";
@@ -1281,6 +1320,8 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     {
         arr[i] = (unsigned char)rawArr[i];
     }
+
+    free(&val[0]);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1319,6 +1360,8 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
 
+    free(rawIn);
+
     unsigned char *rawKey = new unsigned char[keyL];
     vector<char> rawKeyC{};
     WasmEdge_MemoryInstanceGetData(mem, rawKey, keyOffset, keyL);
@@ -1328,6 +1371,8 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
     }
     auto containerName = std::string(rawKeyC.begin(), rawKeyC.end());
 
+    free(rawKey);
+
     unsigned char *rawCo = new unsigned char[coL];
     vector<char> rawCoC{};
     WasmEdge_MemoryInstanceGetData(mem, rawCo, coOffset, coL);
@@ -1336,6 +1381,8 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
         rawCoC.push_back((char)rawCo[i]);
     }
     auto command = std::string(rawCoC.begin(), rawCoC.end());
+
+    free(rawCo);
 
     json j;
     j["key"] = "execDocker";
@@ -1367,6 +1414,8 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
     {
         arr[i] = (unsigned char)rawArr[i];
     }
+
+    free(&val[0]);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1407,6 +1456,8 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
 
+    free(rawIn);
+
     unsigned char *rawKey = new unsigned char[keyL];
     vector<char> rawKeyC{};
     WasmEdge_MemoryInstanceGetData(mem, rawKey, keyOffset, keyL);
@@ -1415,6 +1466,8 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto containerName = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    free(rawKey);
 
     unsigned char *rawCo = new unsigned char[coL];
     vector<char> rawCoC{};
@@ -1425,6 +1478,8 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto fileName = std::string(rawCoC.begin(), rawCoC.end());
 
+    free(rawCo);
+
     unsigned char *rawContent = new unsigned char[contentL];
     vector<char> rawContentC{};
     WasmEdge_MemoryInstanceGetData(mem, rawContent, contentOffset, contentL);
@@ -1433,6 +1488,8 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
         rawContentC.push_back((char)rawContent[i]);
     }
     auto content = std::string(rawContentC.begin(), rawContentC.end());
+
+    free(rawContent);
 
     json j;
     j["key"] = "copyToDocker";
@@ -1465,6 +1522,8 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     {
         arr[i] = (unsigned char)rawArr[i];
     }
+
+    free(&val[0]);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1505,6 +1564,8 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     }
     auto typ = std::string(rawTypC.begin(), rawTypC.end());
 
+    free(rawTyp);
+
     unsigned char *rawPointId = new unsigned char[pointIdL];
     vector<char> rawPointIdC{};
     WasmEdge_MemoryInstanceGetData(mem, rawPointId, pointIdOffset, pointIdL);
@@ -1513,6 +1574,8 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
         rawPointIdC.push_back((char)rawPointId[i]);
     }
     auto pointId = std::string(rawPointIdC.begin(), rawPointIdC.end());
+
+    free(rawPointId);
 
     unsigned char *rawUserId = new unsigned char[userIdL];
     vector<char> rawUserIdC{};
@@ -1523,6 +1586,8 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     }
     auto userId = std::string(rawUserIdC.begin(), rawUserIdC.end());
 
+    free(rawUserId);
+
     unsigned char *rawData = new unsigned char[dataL];
     vector<char> rawDataC{};
     WasmEdge_MemoryInstanceGetData(mem, rawData, dataOffset, dataL);
@@ -1531,6 +1596,8 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
         rawDataC.push_back((char)rawData[i]);
     }
     auto payload = std::string(rawDataC.begin(), rawDataC.end());
+
+    free(rawData);
 
     json j;
     j["key"] = "signalPoint";
@@ -1558,6 +1625,8 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     {
         arr[i] = (unsigned char)rawArr[i];
     }
+
+    free(&val[0]);
 
     WasmEdge_MemoryInstanceSetData(mem, arr, valOffset, valL);
     int64_t c = ((ino64_t)valOffset << 32) | valL;
@@ -1593,6 +1662,8 @@ WasmEdge_Result trx_put(void *data, const WasmEdge_CallingFrameContext *, const 
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
 
+    free(rawKey);
+
     unsigned char *rawVal = new unsigned char[valL];
     vector<char> rawValC{};
     WasmEdge_MemoryInstanceGetData(mem, rawVal, valOffset, valL);
@@ -1601,6 +1672,8 @@ WasmEdge_Result trx_put(void *data, const WasmEdge_CallingFrameContext *, const 
         rawValC.push_back((char)rawVal[i]);
     }
     auto val = std::string(rawValC.begin(), rawValC.end());
+
+    free(rawVal);
 
     WasmEdge_StringDelete(memName);
 
@@ -1628,6 +1701,8 @@ WasmEdge_Result trx_del(void *data, const WasmEdge_CallingFrameContext *, const 
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    free(rawKey);
 
     WasmEdge_StringDelete(memName);
 
@@ -1671,6 +1746,8 @@ WasmEdge_Result trx_get(void *data, const WasmEdge_CallingFrameContext *, const 
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    free(rawKey);
 
     std::string val = rt->trx->get(rt->machineId + "::" + key);
     int valL = val.size();
@@ -1722,6 +1799,8 @@ WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext
         rawKeyC.push_back((char)rawKey[i]);
     }
     auto prefix = std::string(rawKeyC.begin(), rawKeyC.end());
+
+    free(rawKey);
 
     vector<std::string> vals = rt->trx->getByPrefix(rt->machineId + "::" + prefix);
 
