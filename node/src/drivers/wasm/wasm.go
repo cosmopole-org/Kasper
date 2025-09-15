@@ -616,6 +616,9 @@ func checkField[T any](input map[string]any, fieldName string, defVal T) (T, err
 	if !ok {
 		return defVal, errors.New("{\"error\":2}}")
 	}
+	if newF, ok := fRaw.(string); ok {
+		return any(string([]byte(newF))).(T), nil
+	}
 	return f, nil
 }
 
