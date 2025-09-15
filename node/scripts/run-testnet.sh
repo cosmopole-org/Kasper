@@ -12,6 +12,7 @@ docker create -p 8080:8080 -p 3000:3000 -p 8074:8074 -p 8076:8076 -p 8077:8077 -
     --ulimit nofile=65535:65535 \
     --net=kasper \
     --ip=10.10.0.3 \
+    --memory=1500m
     -v /var/run/docker.sock:/var/run/docker.sock \
     --mount type=bind,source=/root/.babble,target=/root/.babble \
     --mount type=bind,source=/home/keyhan/certs,target=/app/certs \
