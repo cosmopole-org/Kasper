@@ -621,23 +621,31 @@ vector<WasmDbOp> WasmMac::finalize()
     std::vector<WasmDbOp> ops = this->trx->ops;
     for (auto cxt : this->fnContexts)
     {
+        log("removing fn context");
         WasmEdge_FunctionTypeDelete(cxt);
     }
     for (auto hostFn : this->hostFns)
     {
+        log("removing host fn");
         WasmEdge_FunctionInstanceDelete(hostFn);
     }
     for (auto str : this->vmStrs)
     {
+        log("removing vm str");
         WasmEdge_StringDelete(str);
     }
     for (auto dis : this->tempDataMap)
     {
+        log("removing temp data");
         delete[] dis.second;
     }
+    log("removing vm");
     WasmEdge_VMDelete(this->vm);
+    log("removing vm configure context");
     WasmEdge_ConfigureDelete(this->configCxt);
+    log("removing rocksdb trx");
     delete this->trx->trx;
+    log("removing vm trx");
     delete this->trx;
     return ops;
 }
