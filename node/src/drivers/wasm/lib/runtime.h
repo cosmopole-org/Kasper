@@ -48,7 +48,7 @@ void log(std::string text)
     j["input"] = j2;
     std::string packet = j.dump();
     auto dummyRes = wasmSend(&packet[0]);
-    free(dummyRes);
+    delete dummyRes;
 }
 
 Options options;
@@ -133,8 +133,8 @@ class WasmMac
 
 public:
     map<int64_t, unsigned char *> tempDataMap = {};
-    map<int64_t, const char *> tempDataMap2 = {};
     std::string executionResult;
+    bool hasOutput = false;
     bool onchain;
     function<char *(char *)> callback;
     std::string id;
@@ -633,13 +633,12 @@ vector<WasmDbOp> WasmMac::finalize()
     }
     for (auto dis : this->tempDataMap)
     {
-        free(dis.second);
+        delete dis.second;
     }
     WasmEdge_VMDelete(this->vm);
     WasmEdge_ConfigureDelete(this->configCxt);
-    free(&this->executionResult[0]);
-    free(this->trx->trx);
-    free(this->trx);
+    delete this->trx->trx;
+    delete this->trx;
     return ops;
 }
 
@@ -895,7 +894,7 @@ WasmEdge_Result newSyncTask(void *data, const WasmEdge_CallingFrameContext *, co
 
     rt->syncTasks.push_back({deps, name});
 
-    free(rawKey);
+    delete[] rawKey;
 
     WasmEdge_StringDelete(memName);
 
@@ -924,11 +923,12 @@ WasmEdge_Result output(void *data, const WasmEdge_CallingFrameContext *, const W
     }
     auto text = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     log(text);
 
     rt->executionResult = text;
+    rt->hasOutput = true;
 
     WasmEdge_StringDelete(memName);
 
@@ -957,7 +957,7 @@ WasmEdge_Result consoleLog(void *data, const WasmEdge_CallingFrameContext *, con
     }
     auto text = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     log(text);
 
@@ -993,7 +993,7 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     unsigned char *rawInput = new unsigned char[inputL];
     vector<char> rawInputC{};
@@ -1004,7 +1004,7 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     }
     auto input = std::string(rawInputC.begin(), rawInputC.end());
 
-    free(rawInput);
+    delete[] rawInput;
 
     unsigned char *rawMeta = new unsigned char[metaL];
     vector<char> rawMetaC{};
@@ -1015,7 +1015,7 @@ WasmEdge_Result submitOnchainTrx(void *data, const WasmEdge_CallingFrameContext 
     }
     auto meta = std::string(rawMetaC.begin(), rawMetaC.end());
 
-    free(rawMeta);
+    delete[] rawMeta;
 
     log("[" + meta + "]");
 
@@ -1112,7 +1112,7 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto text = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     unsigned char *rawIn = new unsigned char[inL];
     vector<char> rawInC{};
@@ -1123,7 +1123,7 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto tag = std::string(rawInC.begin(), rawInC.end());
 
-    free(rawIn);
+    delete[] rawIn;
 
     unsigned char *rawPi = new unsigned char[piL];
     vector<char> rawPiC{};
@@ -1134,7 +1134,7 @@ WasmEdge_Result plantTrigger(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto pointId = std::string(rawPiC.begin(), rawPiC.end());
 
-    free(rawPi);
+    delete[] rawPi;
 
     json j;
     j["key"] = "plantTrigger";
@@ -1181,7 +1181,7 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
     }
     auto url = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     unsigned char *rawIn = new unsigned char[headsL];
     vector<char> rawInC{};
@@ -1192,7 +1192,7 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
     }
     auto headers = std::string(rawInC.begin(), rawInC.end());
 
-    free(rawIn);
+    delete[] rawIn;
 
     unsigned char *rawPi = new unsigned char[bodyL];
     vector<char> rawPiC{};
@@ -1203,7 +1203,7 @@ WasmEdge_Result httpPost(void *data, const WasmEdge_CallingFrameContext *, const
     }
     auto body = std::string(rawPiC.begin(), rawPiC.end());
 
-    free(rawPi);
+    delete[] rawPi;
 
     json j;
     j["key"] = "httpPost";
@@ -1270,7 +1270,7 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     }
     auto text = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     unsigned char *rawIn = new unsigned char[inL];
     vector<char> rawInC{};
@@ -1281,7 +1281,7 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
 
-    free(rawIn);
+    delete[] rawIn;
 
     unsigned char *rawCn = new unsigned char[cnL];
     vector<char> rawCnC{};
@@ -1292,7 +1292,7 @@ WasmEdge_Result runDocker(void *data, const WasmEdge_CallingFrameContext *, cons
     }
     auto containerName = std::string(rawCnC.begin(), rawCnC.end());
 
-    free(rawCn);
+    delete[] rawCn;
 
     json j;
     j["key"] = "runDocker";
@@ -1360,7 +1360,7 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
 
-    free(rawIn);
+    delete[] rawIn;
 
     unsigned char *rawKey = new unsigned char[keyL];
     vector<char> rawKeyC{};
@@ -1371,7 +1371,7 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
     }
     auto containerName = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     unsigned char *rawCo = new unsigned char[coL];
     vector<char> rawCoC{};
@@ -1382,7 +1382,7 @@ WasmEdge_Result execDocker(void *data, const WasmEdge_CallingFrameContext *, con
     }
     auto command = std::string(rawCoC.begin(), rawCoC.end());
 
-    free(rawCo);
+    delete[] rawCo;
 
     json j;
     j["key"] = "execDocker";
@@ -1456,7 +1456,7 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto imageName = std::string(rawInC.begin(), rawInC.end());
 
-    free(rawIn);
+    delete[] rawIn;
 
     unsigned char *rawKey = new unsigned char[keyL];
     vector<char> rawKeyC{};
@@ -1467,7 +1467,7 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto containerName = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     unsigned char *rawCo = new unsigned char[coL];
     vector<char> rawCoC{};
@@ -1478,7 +1478,7 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto fileName = std::string(rawCoC.begin(), rawCoC.end());
 
-    free(rawCo);
+    delete[] rawCo;
 
     unsigned char *rawContent = new unsigned char[contentL];
     vector<char> rawContentC{};
@@ -1489,7 +1489,7 @@ WasmEdge_Result copyToDocker(void *data, const WasmEdge_CallingFrameContext *, c
     }
     auto content = std::string(rawContentC.begin(), rawContentC.end());
 
-    free(rawContent);
+    delete[] rawContent;
 
     json j;
     j["key"] = "copyToDocker";
@@ -1564,7 +1564,7 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     }
     auto typ = std::string(rawTypC.begin(), rawTypC.end());
 
-    free(rawTyp);
+    delete[] rawTyp;
 
     unsigned char *rawPointId = new unsigned char[pointIdL];
     vector<char> rawPointIdC{};
@@ -1575,7 +1575,7 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     }
     auto pointId = std::string(rawPointIdC.begin(), rawPointIdC.end());
 
-    free(rawPointId);
+    delete[] rawPointId;
 
     unsigned char *rawUserId = new unsigned char[userIdL];
     vector<char> rawUserIdC{};
@@ -1586,7 +1586,7 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     }
     auto userId = std::string(rawUserIdC.begin(), rawUserIdC.end());
 
-    free(rawUserId);
+    delete[] rawUserId;
 
     unsigned char *rawData = new unsigned char[dataL];
     vector<char> rawDataC{};
@@ -1597,7 +1597,7 @@ WasmEdge_Result signalPoint(void *data, const WasmEdge_CallingFrameContext *, co
     }
     auto payload = std::string(rawDataC.begin(), rawDataC.end());
 
-    free(rawData);
+    delete[] rawData;
 
     json j;
     j["key"] = "signalPoint";
@@ -1662,7 +1662,7 @@ WasmEdge_Result trx_put(void *data, const WasmEdge_CallingFrameContext *, const 
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     unsigned char *rawVal = new unsigned char[valL];
     vector<char> rawValC{};
@@ -1673,7 +1673,7 @@ WasmEdge_Result trx_put(void *data, const WasmEdge_CallingFrameContext *, const 
     }
     auto val = std::string(rawValC.begin(), rawValC.end());
 
-    free(rawVal);
+    delete[] rawVal;
 
     WasmEdge_StringDelete(memName);
 
@@ -1702,7 +1702,7 @@ WasmEdge_Result trx_del(void *data, const WasmEdge_CallingFrameContext *, const 
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     WasmEdge_StringDelete(memName);
 
@@ -1720,7 +1720,7 @@ WasmEdge_Result freeDisposable(void *data, const WasmEdge_CallingFrameContext *,
     if (disposable != rt->tempDataMap.end())
     {
         rt->tempDataMap.erase(disposableId);
-        free(disposable->second);
+        delete[] disposable->second;
     }
 
     return WasmEdge_Result_Success;
@@ -1747,7 +1747,7 @@ WasmEdge_Result trx_get(void *data, const WasmEdge_CallingFrameContext *, const 
     }
     auto key = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     std::string val = rt->trx->get(rt->machineId + "::" + key);
     int valL = val.size();
@@ -1800,7 +1800,7 @@ WasmEdge_Result trx_get_by_prefix(void *data, const WasmEdge_CallingFrameContext
     }
     auto prefix = std::string(rawKeyC.begin(), rawKeyC.end());
 
-    free(rawKey);
+    delete[] rawKey;
 
     vector<std::string> vals = rt->trx->getByPrefix(rt->machineId + "::" + prefix);
 
@@ -1868,8 +1868,9 @@ void ConcurrentRunner::run()
     {
         auto cost = WasmEdge_StatisticsGetTotalCost(WasmEdge_VMGetStatisticsContext(rt->vm));
 
+        std::string output = std::string(rt->executionResult);
+
         auto changes = rt->finalize();
-        auto output = rt->executionResult;
         json arr;
         for (auto op : changes)
         {
