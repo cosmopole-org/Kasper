@@ -47,6 +47,7 @@ void wasmRunVm(
     rt->executeOnUpdate(input);
     rt->finalize();
     delete rt;
+    log("recycled vm resources");
   }
   catch (int errCode)
   {
