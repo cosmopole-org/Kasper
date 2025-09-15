@@ -633,7 +633,7 @@ vector<WasmDbOp> WasmMac::finalize()
     }
     for (auto dis : this->tempDataMap)
     {
-        delete dis.second;
+        delete[] dis.second;
     }
     WasmEdge_VMDelete(this->vm);
     WasmEdge_ConfigureDelete(this->configCxt);
