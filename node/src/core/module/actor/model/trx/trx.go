@@ -69,7 +69,7 @@ func (tw *TrxWrapper) Commit() {
 
 func (tw *TrxWrapper) DelKey(key string) {
 	tw.dbTrx.Delete([]byte(key))
-	tw.Changes = append(tw.Changes, update.Update{Typ: "del", Key: key})
+	tw.Changes = append(tw.Changes, update.Update{Typ: "del", Key: string([]byte(key))})
 }
 
 func (tw *TrxWrapper) HasObj(typ string, key string) bool {
@@ -89,7 +89,7 @@ func (tw *TrxWrapper) GetIndex(typ string, fromColumn string, toColumn string, f
 
 func (tw *TrxWrapper) PutIndex(typ string, fromColumn string, toColumn string, fromColumnVal string, toColumnVal []byte) {
 	tw.dbTrx.Set([]byte("index::"+typ+"::"+fromColumn+"::"+toColumn+"::"+fromColumnVal), toColumnVal)
-	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "index::" + typ + "::" + fromColumn + "::" + toColumn + "::" + fromColumnVal, Val: toColumnVal})
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "index::" + string([]byte(typ)) + "::" + string([]byte(fromColumn)) + "::" + string([]byte(toColumn)) + "::" + string([]byte(fromColumnVal)), Val: []byte(string(toColumnVal))})
 }
 
 func (tw *TrxWrapper) DelIndex(typ string, fromColumn string, toColumn string, fromColumnVal string) {
@@ -113,12 +113,12 @@ func (tw *TrxWrapper) GetLink(key string) string {
 
 func (tw *TrxWrapper) PutLink(key string, value string) {
 	tw.dbTrx.Set([]byte("link::"+key), []byte(value))
-	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "link::" + key, Val: []byte(value)})
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: "link::" + string([]byte(key)), Val: []byte(value)})
 }
 
 func (tw *TrxWrapper) PutBytes(key string, value []byte) {
 	tw.dbTrx.Set([]byte(key), value)
-	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: key, Val: value})
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: string([]byte(key)), Val: []byte(string(value))})
 }
 
 func (tw *TrxWrapper) GetBytes(key string) []byte {
@@ -132,7 +132,7 @@ func (tw *TrxWrapper) GetBytes(key string) []byte {
 
 func (tw *TrxWrapper) PutString(key string, value string) {
 	tw.dbTrx.Set([]byte(key), []byte(value))
-	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: key, Val: []byte(value)})
+	tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: string([]byte(key)), Val: []byte(value)})
 }
 
 func (tw *TrxWrapper) GetString(key string) string {
@@ -183,7 +183,7 @@ func (tw *TrxWrapper) PutObj(typ string, key string, keys map[string][]byte) {
 	keys["|"] = []byte{0x01}
 	for k, v := range keys {
 		tw.dbTrx.Set([]byte(prefix+k), v)
-		tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: prefix + k, Val: v})
+		tw.Changes = append(tw.Changes, update.Update{Typ: "put", Key: string([]byte(prefix + k)), Val: []byte(string(v))})
 	}
 }
 
