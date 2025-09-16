@@ -38,6 +38,8 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/second-state/WasmEdge-go/wasmedge"
 )
 
 type Wasm struct {
@@ -114,6 +116,23 @@ func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
 		C.free(unsafe.Pointer(astPath))
 		C.free(unsafe.Pointer(machId))
 	}, false)
+
+
+	var conf = wasmedge.NewConfigure(wasmedge.REFERENCE_TYPES)
+	conf.AddConfig(wasmedge.WASI)
+	var vm = wasmedge.NewVMWithConfig(conf)
+	var wasi = vm.GetImportModule(wasmedge.WASI)
+	wasi.InitWasi(
+		os.Args[1:],     // The args
+		os.Environ(),    // The envs
+		[]string{".:."}, // The mapping directories
+	)
+
+	// Instantiate wasm. _start refers to the main() function
+	vm.RunWasmFile(os.Args[1], "_start")
+
+	vm.Release()
+	conf.Release()
 }
 
 func (wm *Wasm) WasmCallback(dataRaw string) string {
@@ -630,7 +649,7 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 		docker:      docker,
 		file:        file,
 	}
-	C.init(C.CString(kvDbPath))
+	wasmedge.SetLogErrorLevel()
 	return wm
 }
 

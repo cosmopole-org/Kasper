@@ -170,6 +170,7 @@ require (
 	github.com/lxzan/gws v1.8.9
 	github.com/pion/datachannel v1.5.10
 	github.com/pion/webrtc/v2 v2.2.26
+	github.com/second-state/WasmEdge-go v0.14.0
 	github.com/spf13/viper v1.4.0
 	github.com/ugorji/go/codec v1.2.11
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
