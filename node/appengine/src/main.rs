@@ -1,39 +1,42 @@
-use std::collections::{ HashMap, HashSet, VecDeque, BTreeMap };
+use core::task;
+use std::any::{ self, Any };
+use std::collections::{ HashMap, VecDeque, BTreeMap };
 use std::ops::{ Deref, DerefMut };
-use std::sync::{ Arc, Mutex, Condvar, RwLock };
-use std::thread;
+use std::os::linux::raw::stat;
+use std::process::Termination;
+use std::ptr::null;
+use std::sync::{ Arc, Mutex, Condvar };
+use std::{ clone, thread };
 use std::sync::atomic::{ AtomicBool, Ordering };
 use serde_json::{ json, Value as JsonValue };
-use wasmedge_sys::instance::function::AsFunc;
-use wasmedge_sys::instance::{ self, module };
-use wasmedge_sys::plugin::PluginModule;
 use wasmedge_sys::{
+    Executor,
+    Function,
+    ImportModule,
+    Instance,
+    Loader,
+    Statistics,
+    Store,
+    Validator,
     config::Config,
     AsInstance,
     CallingFrame,
-    Instance,
-    Module,
-    Statistics,
-    Store,
-    Executor,
     WasmValue,
-    WasiModule,
 };
-use wasmedge_types::error::CoreError;
-use wasmedge_types::ValType;
-use std::ptr;
 
-// RocksDB types
+use wasmedge_types::{ ValType, error::CoreError };
+
+use once_cell::sync::Lazy;
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use rocksdb::{
-    DB,
     Options,
     TransactionDB,
     TransactionDBOptions,
-    Transaction,
     ReadOptions,
     WriteOptions,
     TransactionOptions,
-    IteratorMode,
 };
 
 fn main() {
@@ -46,8 +49,8 @@ static mut TXN_DB_OPTIONS: Option<TransactionDBOptions> = None;
 static mut TXN_DB: Option<*mut TransactionDB> = None;
 static mut STEP: i32 = 0;
 
-fn wasmSend(data: std::string::String) -> &'static str {
-    return "";
+fn wasm_send(data: std::string::String) -> std::string::String {
+    return "".to_string();
 }
 
 fn log(text: String) {
@@ -58,7 +61,7 @@ fn log(text: String) {
         }
     });
     let packet = j.to_string();
-    wasmSend(packet);
+    wasm_send(packet);
 }
 
 pub struct WasmLock {
@@ -76,8 +79,8 @@ impl WasmLock {
 pub struct WasmTask {
     pub id: i32,
     pub name: String,
-    pub inputs: HashMap<i32, (bool, *mut WasmTask)>,
-    pub outputs: HashMap<i32, *mut WasmTask>,
+    pub inputs: HashMap<i32, (bool, WasmTask)>,
+    pub outputs: HashMap<i32, WasmTask>,
     pub vm_index: i32,
     pub started: bool,
 }
@@ -139,7 +142,7 @@ impl WasmDbOp {
 }
 
 pub struct Trx {
-    pub trx: Option<*mut rocksdb::Transaction<'static, TransactionDB>>,
+    pub trx: Option<Rc<RefCell<rocksdb::Transaction<'static, TransactionDB>>>>,
     pub write_options: WriteOptions,
     pub read_options: ReadOptions,
     pub txn_options: TransactionOptions,
@@ -154,7 +157,7 @@ impl Trx {
         unsafe {
             let trx = if let Some(txn_db_ptr) = TXN_DB {
                 let txn_db = &*txn_db_ptr;
-                Some(Box::into_raw(Box::new(txn_db.transaction())))
+                Some(Rc::new(RefCell::new(txn_db.transaction())))
             } else {
                 None
             };
@@ -191,24 +194,20 @@ impl Trx {
 
     pub fn get_by_prefix(&mut self, prefix: String) -> Vec<String> {
         let mut result = Vec::new();
-
-        // Check in-memory store first
         for (key, value) in &self.store {
             if WasmUtils::startswith(key, &prefix) {
                 result.push(value.clone());
             }
         }
-
-        // Check database
-        if let Some(trx_ptr) = self.trx {
-            unsafe {
-                let trx = &*trx_ptr;
-                // Note: This is a simplified implementation
-                // In a real implementation, you'd use the transaction's iterator
-                // For now, we'll just return what's in the store
+        let cloned_trx = Rc::clone(&self.trx.as_ref().unwrap());
+        for t in cloned_trx.borrow_mut().prefix_iterator(prefix.as_bytes().to_vec().as_slice()) {
+            let item = t.unwrap();
+            let key = str::from_utf8(item.0.to_vec().as_slice()).unwrap().to_string();
+            let val = str::from_utf8(item.1.to_vec().as_slice()).unwrap().to_string();
+            if !self.store.contains_key(&key) {
+                result.push(val);
             }
         }
-
         result
     }
 
@@ -216,62 +215,66 @@ impl Trx {
         if let Some(value) = self.store.get(&key) {
             value.clone()
         } else {
-            let value = if let Some(trx_ptr) = self.trx {
-                unsafe {
-                    let trx = &*trx_ptr;
-                    // In a real implementation, you'd use trx.get()
-                    // For now, return empty string if not found
-                    String::new()
-                }
-            } else {
-                String::new()
-            };
+            let cloned_trx = Rc::clone(&self.trx.as_ref().unwrap());
+            let value = str
+                ::from_utf8(
+                    cloned_trx
+                        .borrow_mut()
+                        .get(key.as_bytes().to_vec().as_slice())
+                        .unwrap()
+                        .unwrap()
+                        .as_slice()
+                )
+                .unwrap()
+                .to_string();
+
             self.store.insert(key.clone(), value.clone());
             value
         }
     }
 
     pub fn del(&mut self, key: String) {
+        let k = String::from(key);
         self.ops.push(WasmDbOp {
             type_: "del".to_string(),
-            key: key.clone(),
+            key: k.clone(),
             val: String::new(),
         });
-        self.store.remove(&key);
-        self.newly_created.remove(&key);
-        self.newly_deleted.insert(key, true);
+        self.store.remove(&k);
+        self.newly_created.remove(&k);
+        self.newly_deleted.insert(k, true);
     }
 
     pub fn commit_as_offchain(&mut self) {
-        if let Some(trx_ptr) = self.trx {
-            unsafe {
-                let trx = &mut *trx_ptr;
-                for op in &self.ops {
-                    if op.type_ == "put" {
-                        // In real implementation: trx.put(&op.key, &op.val);
-                    } else if op.type_ == "del" {
-                        // In real implementation: trx.delete(&op.key);
-                    }
-                }
-                // In real implementation: let status = trx.commit();
-                log("committed transaction successfully.".to_string());
+        let txn_db = unsafe { &*TXN_DB.unwrap() };
+        let trx: rocksdb::Transaction<'_, TransactionDB> = txn_db.transaction();
+        for op in &self.ops {
+            if op.type_ == "put" {
+                trx.put(&op.key, &op.val);
+            } else if op.type_ == "del" {
+                trx.delete(&op.key);
             }
         }
+        trx.commit();
+        log("committed transaction successfully.".to_string());
     }
 
     pub fn dummy_commit(&mut self) {
-        if let Some(trx_ptr) = self.trx {
-            unsafe {
-                let trx = &mut *trx_ptr;
-                // In real implementation: trx.commit();
-            }
-        }
+        let cloned_trx = Rc::clone(&self.trx.as_ref().unwrap());
+        cloned_trx.borrow_mut().rollback();
     }
+}
+
+struct Pair<T, U> {
+    pub first: T,
+    pub second: U,
 }
 
 pub struct WasmThreadPool {
     threads_: Vec<thread::JoinHandle<()>>,
-    tasks_: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send>>>>,
+    tasks_: Arc<
+        Mutex<VecDeque<Pair<Box<dyn FnOnce(Vec<Box<dyn Any>>) + Send>, Vec<Box<dyn Any>>>>>
+    >,
     queue_mutex_: Arc<Mutex<()>>,
     cv_: Arc<Condvar>,
     stop_: Arc<AtomicBool>,
@@ -285,9 +288,12 @@ impl WasmThreadPool {
                 .map(|n| n.get())
                 .unwrap_or(1)
         );
-        let tasks_: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send>>>> = Arc::new(
-            Mutex::new(VecDeque::new())
-        );
+        let vd: VecDeque<
+            Pair<Box<dyn FnOnce(Vec<Box<dyn Any>>) + Send>, Vec<Box<dyn Any>>>
+        > = VecDeque::new();
+        let tasks_: Arc<
+            Mutex<VecDeque<Pair<Box<dyn FnOnce(Vec<Box<dyn Any>>) + Send>, Vec<Box<dyn Any>>>>>
+        > = Arc::new(Mutex::new(vd));
         let queue_mutex_ = Arc::new(Mutex::new(()));
         let cv_ = Arc::new(Condvar::new());
         let stop_ = Arc::new(AtomicBool::new(false));
@@ -321,7 +327,6 @@ impl WasmThreadPool {
                     };
 
                     if let Some(task) = task {
-                        task();
                     }
                 }
             });
@@ -349,11 +354,13 @@ impl WasmThreadPool {
         self.cv_.notify_all();
     }
 
-    pub fn enqueue<F>(&self, task: F) where F: FnOnce() + Send + 'static {
+    pub fn enqueue<F>(&self, task: F, params: Vec<Box<dyn Any>>)
+        where F: FnOnce(Vec<Box<dyn Any>>) + Send + 'static
+    {
         {
             let _lock = self.queue_mutex_.lock().unwrap();
             let mut tasks = self.tasks_.lock().unwrap();
-            tasks.push_back(Box::new(task));
+            tasks.push_back(Pair { first: Box::new(task), second: params });
         }
         self.cv_.notify_one();
     }
@@ -411,11 +418,14 @@ fn int64_to_bytes(value: i64) -> Vec<u8> {
     ]
 }
 
-// ConcurrentRunner struct (referenced in WasmMac)
-pub struct ConcurrentRunner {
-    pub wasm_global_lock: Mutex<()>,
-    pub wasm_done_tasks: i32,
-    pub wasm_count: i32,
+static GLOBAL_HASHMAP: Lazy<HashMap<String, &mut VmKeeper>> = Lazy::new(|| {
+    let map = HashMap::new();
+    map
+});
+
+pub struct VmKeeper {
+    executor: Executor,
+    instance: Instance,
 }
 
 // WasmMac Implementation: -------------------------------------------------
@@ -435,9 +445,9 @@ pub struct WasmMac {
     pub queue_mutex_: Mutex<()>,
     pub cv_: Condvar,
     pub stop_: bool,
-    pub vm: Option<&'static mut Executor>,
-    pub vm_instance: Option<&'static mut Instance>,
     pub mod_path: String,
+    pub vm_executor: Option<Rc<RefCell<Executor>>>,
+    pub vm_instance: Option<Rc<RefCell<Instance>>>,
 
     execution_result: String,
     has_output: bool,
@@ -446,7 +456,7 @@ pub struct WasmMac {
 impl WasmMac {
     fn prepare_looper(&mut self) {
         // Create a channel for communication instead of directly accessing self
-        let (sender, receiver) = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send>>();
+        let (_, receiver) = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send>>();
 
         self.looper = Some(
             thread::spawn(move || {
@@ -489,11 +499,11 @@ impl WasmMac {
             queue_mutex_: Mutex::new(()),
             cv_: Condvar::new(),
             stop_: false,
-            vm: None,
-            vm_instance: None,
             mod_path,
             execution_result: "".to_string(),
             has_output: false,
+            vm_executor: None,
+            vm_instance: None,
         };
 
         if wasm_mac.onchain {
@@ -525,11 +535,11 @@ impl WasmMac {
             queue_mutex_: Mutex::new(()),
             cv_: Condvar::new(),
             stop_: false,
-            vm: None,
-            vm_instance: None,
             mod_path,
             execution_result: "".to_string(),
             has_output: false,
+            vm_executor: None,
+            vm_instance: None,
         };
 
         if wasm_mac.onchain {
@@ -538,11 +548,8 @@ impl WasmMac {
         wasm_mac
     }
 
-    fn register_host(
-        &mut self,
-        mut extern_mod: ImportModule<&mut WasmMac>
-    ) -> ImportObjectBuilder<()> {
-        extern_mod.add_func("host_add", unsafe {
+    fn register_host(&mut self, extern_mod: &mut ImportModule<&mut i32>) {
+        extern_mod.add_func("newSyncTask", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I32]),
                 new_sync_task,
@@ -563,7 +570,7 @@ impl WasmMac {
                     ],
                     vec![ValType::I32]
                 ),
-                runDocker,
+                run_docker,
                 self,
                 1
             ).unwrap()
@@ -581,7 +588,7 @@ impl WasmMac {
                     ],
                     vec![ValType::I32]
                 ),
-                execDocker,
+                exec_docker,
                 self,
                 1
             ).unwrap()
@@ -601,7 +608,7 @@ impl WasmMac {
                     ],
                     vec![ValType::I32]
                 ),
-                copyToDocker,
+                copy_to_docker,
                 self,
                 1
             ).unwrap()
@@ -635,7 +642,7 @@ impl WasmMac {
                     ],
                     vec![ValType::I32]
                 ),
-                httpPost,
+                http_post,
                 self,
                 1
             ).unwrap()
@@ -654,7 +661,7 @@ impl WasmMac {
                     ],
                     vec![ValType::I32]
                 ),
-                plantTrigger,
+                plant_trigger,
                 self,
                 1
             ).unwrap()
@@ -674,7 +681,7 @@ impl WasmMac {
                     ],
                     vec![ValType::I32]
                 ),
-                signalPoint,
+                signal_point,
                 self,
                 1
             ).unwrap()
@@ -757,68 +764,74 @@ impl WasmMac {
     pub fn execute_on_update(&mut self, input: String) {
         let mut config = Config::create().unwrap();
         config.measure_cost(true);
-        let mut stats = Statistics::create().unwrap();
         let mut store = Store::create().unwrap();
+
         let loader = Loader::create(Some(&config)).unwrap();
-        let main_mod = loader.from_file(self.mod_path).unwrap().as_ref();
-        let mut extern_mod = ImportModule::create("extern", Box::new(self)).unwrap();
+        let main_mod_raw = loader.from_file(self.mod_path.clone()).unwrap();
+        let main_mod = main_mod_raw.as_ref();
+
+        let mut dummy: i32 = 1;
+        let extern_mod = &mut ImportModule::create("extern", Box::new(&mut dummy)).unwrap();
 
         self.register_host(extern_mod);
 
-        let validator = Validator::create(Some(&config)).unwrap();
-        validator.validate(main_mod);
-        self.vm = Some(&mut Executor::create(Some(&config), Some(stats)).unwrap());
-        let mut instance = self.vm.unwrap().register_active_module(&mut store, main_mod).unwrap();
-        self.vm_instance = Some(&mut instance);
-        self.vm.unwrap().register_import_module(&mut store, &extern_mod);
+        let mut config = Config::create().unwrap();
+        config.measure_cost(true);
+        let stats = Statistics::create().unwrap();
+        let mut exec = Executor::create(Some(&config), Some(stats)).unwrap();
+        let mut vm_instance = exec.register_active_module(&mut store, main_mod).unwrap();
+        exec.register_import_module(&mut store, extern_mod);
 
-        let mut start_fn = instance.get_func("_start").unwrap().deref();
-        self.vm.unwrap().call_func(&mut start_fn, []);
+        let mut binding = vm_instance.get_func_mut("_start").unwrap();
+        exec.call_func(&mut binding, []);
 
         let val_l = input.len() as i32;
-        let mut malloc_fn = instance.get_func("malloc").unwrap().deref();
-        let res2 = self.vm
-            .unwrap()
-            .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
-            .unwrap();
+        let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+        let res2 = exec.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
 
         let val_offset = res2[0].to_i32();
         let raw_arr = input.as_bytes();
         let arr: Vec<u8> = raw_arr.to_vec();
-        let mem = instance.get_memory_mut("memory");
+        let mem = vm_instance.get_memory_mut("memory");
         mem.unwrap().set_data(arr, val_offset.cast_unsigned());
         let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        let mut run_fn = instance.get_func("run").unwrap().deref();
-        let res2 = self.vm
-            .unwrap()
-            .call_func(&mut run_fn, [WasmValue::from_i64(c)])
-            .unwrap();
+        let mut run_fn = vm_instance.get_func_mut("run").unwrap();
+        exec.call_func(&mut run_fn, [WasmValue::from_i64(c)]).unwrap();
+
+        self.vm_executor = Some(Rc::new(RefCell::new(exec)));
+        self.vm_instance = Some(Rc::new(RefCell::new(vm_instance)));
     }
 
     pub fn run_task(&mut self, task_id: String) {
-        let instance = self.vm_instance.as_mut().unwrap();
         let val_l = task_id.len() as i32;
-        let mut malloc_fn = instance.get_func_mut("malloc").unwrap();
+        let inst_ref1 = Rc::clone(&self.vm_instance.as_ref().unwrap());
+        let mut inst_ref1_mut = inst_ref1.borrow_mut();
+        let mut malloc_fn = inst_ref1_mut.get_func_mut("malloc").unwrap();
         let mfn = malloc_fn.deref_mut();
-        let res2 = self.vm
-            .as_mut()
-            .unwrap()
+        let exec_ref1 = Rc::clone(&self.vm_executor.as_ref().unwrap());
+        let res2 = exec_ref1
+            .borrow_mut()
             .call_func(mfn, [WasmValue::from_i32(val_l)])
             .unwrap();
 
         let val_offset = res2[0].to_i32();
         let raw_arr = task_id.as_bytes();
         let arr: Vec<u8> = raw_arr.to_vec();
-        let mem = instance.get_memory_mut("memory");
+        let inst_ref2 = Rc::clone(&self.vm_instance.as_ref().unwrap());
+        let mut inst_ref2_mut = inst_ref2.borrow_mut();
+        let mem = inst_ref2_mut.get_memory_mut("memory");
         mem.unwrap().set_data(arr, val_offset.cast_unsigned());
         let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        let mut run_fn = instance.get_func_mut("runTask").unwrap();
+        let inst_ref3 = Rc::clone(&self.vm_instance.as_ref().unwrap());
+        let mut inst_ref3_mut = inst_ref3.borrow_mut();
+        let mut run_fn = inst_ref3_mut.get_func_mut("runTask").unwrap();
         let rfn = run_fn.deref_mut();
-        self.vm
-            .as_mut()
-            .unwrap()
+
+        let exec_ref2 = Rc::clone(&self.vm_executor.as_ref().unwrap());
+        exec_ref2
+            .borrow_mut()
             .call_func(rfn, [WasmValue::from_i64(c)])
             .unwrap();
     }
@@ -850,47 +863,44 @@ impl WasmMac {
 
             let mut config = Config::create().unwrap();
             config.measure_cost(true);
-            let mut stats = Statistics::create().unwrap();
-            stats.set_cost_limit(gas_limit);
             let mut store = Store::create().unwrap();
+
             let loader = Loader::create(Some(&config)).unwrap();
-            let main_mod = loader.from_file(self.mod_path).unwrap().as_ref();
-            let mut extern_mod = ImportModule::create("extern", Box::new(self)).unwrap();
+            let main_mod_raw = loader.from_file(self.mod_path.clone()).unwrap();
+            let main_mod = main_mod_raw.as_ref();
+
+            let mut dummy: i32 = 1;
+            let extern_mod = &mut ImportModule::create("extern", Box::new(&mut dummy)).unwrap();
 
             self.register_host(extern_mod);
 
-            let validator = Validator::create(Some(&config)).unwrap();
-            validator.validate(main_mod);
-            self.vm = Some(&mut Executor::create(Some(&config), Some(stats)).unwrap());
-            let mut instance = self.vm
-                .unwrap()
-                .register_active_module(&mut store, main_mod)
-                .unwrap();
-            self.vm_instance = Some(&mut instance);
-            self.vm.unwrap().register_import_module(&mut store, &extern_mod);
+            let mut config = Config::create().unwrap();
+            config.measure_cost(true);
+            let mut stats = Statistics::create().unwrap();
+            stats.set_cost_limit(gas_limit);
+            let mut exec = Executor::create(Some(&config), Some(stats)).unwrap();
+            let mut vm_instance = exec.register_active_module(&mut store, main_mod).unwrap();
+            exec.register_import_module(&mut store, extern_mod);
 
-            let mut start_fn = instance.get_func("_start").unwrap().deref();
-            self.vm.unwrap().call_func(&mut start_fn, []);
+            let mut binding = vm_instance.get_func_mut("_start").unwrap();
+            exec.call_func(&mut binding, []);
 
             let val_l = input.len() as i32;
-            let mut malloc_fn = instance.get_func("malloc").unwrap().deref();
-            let res2 = self.vm
-                .unwrap()
-                .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
-                .unwrap();
+            let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+            let res2 = exec.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
 
             let val_offset = res2[0].to_i32();
             let raw_arr = input.as_bytes();
             let arr: Vec<u8> = raw_arr.to_vec();
-            let mem = instance.get_memory_mut("memory");
+            let mem = vm_instance.get_memory_mut("memory");
             mem.unwrap().set_data(arr, val_offset.cast_unsigned());
             let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-            let mut run_fn = instance.get_func("run").unwrap().deref();
-            let res2 = self.vm
-                .unwrap()
-                .call_func(&mut run_fn, [WasmValue::from_i64(c)])
-                .unwrap();
+            let mut run_fn = vm_instance.get_func_mut("run").unwrap();
+            exec.call_func(&mut run_fn, [WasmValue::from_i64(c)]).unwrap();
+
+            self.vm_executor = Some(Rc::new(RefCell::new(exec)));
+            self.vm_instance = Some(Rc::new(RefCell::new(vm_instance)));
         }
 
         if self.onchain {
@@ -929,7 +939,9 @@ pub fn new_sync_task(
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let mem = rt.vm_instance.as_mut().unwrap().get_memory_mut("memory").unwrap();
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
     let key_offset = _input[0].to_i32();
     let key_l = _input[1].to_i32();
@@ -961,8 +973,10 @@ pub fn output(
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let instance = rt.vm_instance.as_mut().unwrap();
-    let mem = instance.get_memory_mut("memory").unwrap();
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
+
     let key_offset = _input[0].to_i32();
     let key_l = _input[1].to_i32();
     let text_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
@@ -981,8 +995,10 @@ pub fn console_log(
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let instance = rt.vm_instance.as_mut().unwrap();
-    let mem = instance.get_memory_mut("memory").unwrap();
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
+
     let key_offset = _input[0].to_i32();
     let key_l = _input[1].to_i32();
     let text_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
@@ -1000,8 +1016,14 @@ pub fn submit_onchain_trx(
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let instance = rt.vm_instance.as_mut().unwrap();
-    let mut mem = instance.get_memory_mut("memory").unwrap();
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
+
+    let inst_exec1 = Rc::clone(&rt.vm_executor.as_ref().unwrap());
+    let mut exec_ref_mut = inst_exec1.borrow_mut();
+
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
+
     let tm_offset = _input[0].to_i32();
     let tm_l = _input[1].to_i32();
 
@@ -1057,53 +1079,54 @@ pub fn submit_onchain_trx(
     let val = (rt.callback)(packet);
     let val_l = val.len();
 
-    let mut malloc_fn = instance.get_func_mut("malloc").unwrap();
+    let mut malloc_fn = inst_ref_mut.get_func_mut("malloc").unwrap();
     let mfn = malloc_fn.deref_mut();
-    let res = rt.vm
-        .as_mut()
-        .unwrap()
-        .call_func(mfn, [WasmValue::from_i32(val_l as i32)])
-        .unwrap();
+    let res = exec_ref_mut.call_func(mfn, [WasmValue::from_i32(val_l as i32)]).unwrap();
     let val_offset = res[0].to_i32();
 
     let arr = val.as_bytes().to_vec();
 
-    let mut mem2 = instance.get_memory_mut("memory").unwrap();
-    
+    let mut mem2 = inst_ref_mut.get_memory_mut("memory").unwrap();
+
     mem2.set_data(arr, val_offset.cast_unsigned());
     let c = ((val_offset as i64) << 32) | (val_l as i64);
 
     Ok(vec![WasmValue::from_i64(c)])
 }
 
-pub fn plantTrigger(
-    data: &mut WasmMac,
+pub fn plant_trigger(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
-        let malloc_name = WasmEdge_StringCreateByCString(CString::new("malloc").unwrap().as_ptr());
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let in_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let in_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
-        let key_offset = WasmEdge_ValueGetI32(*in_params.offset(2));
-        let key_l = WasmEdge_ValueGetI32(*in_params.offset(3)) as i32;
-        let pi_offset = WasmEdge_ValueGetI32(*in_params.offset(4));
-        let pi_l = WasmEdge_ValueGetI32(*in_params.offset(5)) as i32;
-        let count = WasmEdge_ValueGetI32(*in_params.offset(6)) as i32;
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let tag = str::from_utf8(&in_bytes_next).unwrap();
 
-        let text = extract_string_from_memory(mem, key_offset, key_l, false);
-        let tag = extract_string_from_memory(mem, in_offset, in_l, false);
-        let point_id = extract_string_from_memory(mem, pi_offset, pi_l, false);
+    let key_offset = _input[2].to_i32();
+    let key_l = _input[3].to_i32();
+    let key_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
+    let key_bytes_next = key_bytes.unwrap();
+    let text = str::from_utf8(&key_bytes_next).unwrap();
 
-        let j =
-            json!({
+    let pi_offset = _input[4].to_i32();
+    let pi_l = _input[5].to_i32();
+    let pi_bytes = mem.get_data(pi_offset.cast_unsigned(), pi_l.cast_unsigned());
+    let pi_bytes_next = pi_bytes.unwrap();
+    let point_id = str::from_utf8(&pi_bytes_next).unwrap();
+
+    let count = _input[6].to_i32();
+
+    let j =
+        json!({
             "key": "plantTrigger",
             "input": {
                 "machineId": rt.machine_id,
@@ -1114,53 +1137,47 @@ pub fn plantTrigger(
             }
         });
 
-        let packet = j.to_string();
-        let packet_cstr = CString::new(packet).unwrap();
+    let packet = j.to_string();
 
-        let val_raw = if let Some(callback) = rt.callback {
-            callback(packet_cstr.as_ptr())
-        } else {
-            ptr::null_mut()
-        };
+    (rt.callback)(packet);
 
-        if !val_raw.is_null() {
-            libc::free(val_raw as *mut c_void);
-        }
-
-        WasmEdge_StringDelete(mem_name);
-        WasmEdge_StringDelete(malloc_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(0)])
 }
 
-pub fn httpPost(
-    data: &mut WasmMac,
+pub fn http_post(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
-        let malloc_name = WasmEdge_StringCreateByCString(CString::new("malloc").unwrap().as_ptr());
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let url_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let url_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
-        let heads_offset = WasmEdge_ValueGetI32(*in_params.offset(2));
-        let heads_l = WasmEdge_ValueGetI32(*in_params.offset(3)) as i32;
-        let body_offset = WasmEdge_ValueGetI32(*in_params.offset(4));
-        let body_l = WasmEdge_ValueGetI32(*in_params.offset(5)) as i32;
+    let inst_exec1 = Rc::clone(&rt.vm_executor.as_ref().unwrap());
+    let mut exec_ref_mut = inst_exec1.borrow_mut();
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        let url = extract_string_from_memory(mem, url_offset, url_l, false);
-        let headers = extract_string_from_memory(mem, heads_offset, heads_l, false);
-        let body = extract_string_from_memory(mem, body_offset, body_l, false);
+    let url_offset = _input[0].to_i32();
+    let url_l = _input[1].to_i32();
+    let url_bytes = mem.get_data(url_offset.cast_unsigned(), url_l.cast_unsigned());
+    let url_bytes_next = url_bytes.unwrap();
+    let url = str::from_utf8(&url_bytes_next).unwrap();
 
-        let j =
-            json!({
+    let heads_offset = _input[2].to_i32();
+    let heads_l = _input[3].to_i32();
+    let heads_bytes = mem.get_data(heads_offset.cast_unsigned(), heads_l.cast_unsigned());
+    let heads_bytes_next = heads_bytes.unwrap();
+    let headers = str::from_utf8(&heads_bytes_next).unwrap();
+
+    let body_offset = _input[4].to_i32();
+    let body_l = _input[5].to_i32();
+    let body_bytes = mem.get_data(body_offset.cast_unsigned(), body_l.cast_unsigned());
+    let body_bytes_next = body_bytes.unwrap();
+    let body = str::from_utf8(&body_bytes_next).unwrap();
+
+    let j =
+        json!({
             "key": "httpPost",
             "input": {
                 "machineId": rt.machine_id,
@@ -1170,75 +1187,59 @@ pub fn httpPost(
             }
         });
 
-        let packet = j.to_string();
-        let packet_cstr = CString::new(packet).unwrap();
+    let packet = j.to_string();
+    let val = (rt.callback)(packet);
+    let val_l = val.len();
 
-        let val_raw = if let Some(callback) = rt.callback {
-            callback(packet_cstr.as_ptr())
-        } else {
-            ptr::null_mut()
-        };
+    let mut malloc_fn = inst_ref_mut.get_func_mut("malloc").unwrap();
+    let mfn = malloc_fn.deref_mut();
+    let res = exec_ref_mut.call_func(mfn, [WasmValue::from_i32(val_l as i32)]).unwrap();
+    let val_offset = res[0].to_i32();
 
-        let val = if !val_raw.is_null() {
-            CStr::from_ptr(val_raw).to_string_lossy().to_string()
-        } else {
-            String::new()
-        };
+    let arr = val.as_bytes().to_vec();
 
-        let val_l = val.len();
+    let mut mem2 = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        let params = [WasmEdge_ValueGenI32(val_l as u32)];
-        let mut returns = [WasmEdge_ValueGenI32(0)];
+    mem2.set_data(arr, val_offset.cast_unsigned());
+    let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        WasmEdge_VMExecute(rt.vm, malloc_name, params.as_ptr(), 1, returns.as_mut_ptr(), 1);
-        let val_offset = WasmEdge_ValueGetI32(returns[0]) as i32;
-
-        let arr = val.as_bytes().to_vec();
-
-        if !val_raw.is_null() {
-            libc::free(val_raw as *mut c_void);
-        }
-
-        WasmEdge_MemoryInstanceSetData(mem, arr.as_ptr(), val_offset as u32, val_l as u32);
-        let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-        *out.offset(0) = WasmEdge_ValueGenI64(c);
-        rt.temp_data_map.insert(c, arr);
-
-        WasmEdge_StringDelete(mem_name);
-        WasmEdge_StringDelete(malloc_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(c)])
 }
 
-pub fn runDocker(
-    data: &mut WasmMac,
+pub fn run_docker(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
-        let malloc_name = WasmEdge_StringCreateByCString(CString::new("malloc").unwrap().as_ptr());
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let in_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let in_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
-        let key_offset = WasmEdge_ValueGetI32(*in_params.offset(2));
-        let key_l = WasmEdge_ValueGetI32(*in_params.offset(3)) as i32;
-        let cn_offset = WasmEdge_ValueGetI32(*in_params.offset(4));
-        let cn_l = WasmEdge_ValueGetI32(*in_params.offset(5)) as i32;
+    let inst_exec1 = Rc::clone(&rt.vm_executor.as_ref().unwrap());
+    let mut exec_ref_mut = inst_exec1.borrow_mut();
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        let text = extract_string_from_memory(mem, key_offset, key_l, false);
-        let image_name = extract_string_from_memory(mem, in_offset, in_l, false);
-        let container_name = extract_string_from_memory(mem, cn_offset, cn_l, false);
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let image_name = str::from_utf8(&in_bytes_next).unwrap();
 
-        let j =
-            json!({
+    let key_offset = _input[2].to_i32();
+    let key_l = _input[3].to_i32();
+    let key_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
+    let key_bytes_next = key_bytes.unwrap();
+    let text = str::from_utf8(&key_bytes_next).unwrap();
+
+    let cn_offset = _input[4].to_i32();
+    let cn_l = _input[5].to_i32();
+    let cn_bytes = mem.get_data(cn_offset.cast_unsigned(), cn_l.cast_unsigned());
+    let cn_bytes_next = cn_bytes.unwrap();
+    let container_name = str::from_utf8(&cn_bytes_next).unwrap();
+
+    let j =
+        json!({
             "key": "runDocker",
             "input": {
                 "machineId": rt.machine_id,
@@ -1249,75 +1250,61 @@ pub fn runDocker(
             }
         });
 
-        let packet = j.to_string();
-        let packet_cstr = CString::new(packet).unwrap();
+    let packet = j.to_string();
 
-        let val_raw = if let Some(callback) = rt.callback {
-            callback(packet_cstr.as_ptr())
-        } else {
-            ptr::null_mut()
-        };
+    let val = (rt.callback)(packet);
 
-        let val = if !val_raw.is_null() {
-            CStr::from_ptr(val_raw).to_string_lossy().to_string()
-        } else {
-            String::new()
-        };
+    let val_l = val.len();
 
-        let val_l = val.len();
+    let mut malloc_fn = inst_ref_mut.get_func_mut("malloc").unwrap();
+    let mfn = malloc_fn.deref_mut();
+    let res = exec_ref_mut.call_func(mfn, [WasmValue::from_i32(val_l as i32)]).unwrap();
+    let val_offset = res[0].to_i32();
 
-        let params = [WasmEdge_ValueGenI32(val_l as u32)];
-        let mut returns = [WasmEdge_ValueGenI32(0)];
+    let arr = val.as_bytes().to_vec();
 
-        WasmEdge_VMExecute(rt.vm, malloc_name, params.as_ptr(), 1, returns.as_mut_ptr(), 1);
-        let val_offset = WasmEdge_ValueGetI32(returns[0]) as i32;
+    let mut mem2 = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        let arr = val.as_bytes().to_vec();
+    mem2.set_data(arr, val_offset.cast_unsigned());
+    let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        if !val_raw.is_null() {
-            libc::free(val_raw as *mut c_void);
-        }
-
-        WasmEdge_MemoryInstanceSetData(mem, arr.as_ptr(), val_offset as u32, val_l as u32);
-        let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-        *out.offset(0) = WasmEdge_ValueGenI64(c);
-        rt.temp_data_map.insert(c, arr);
-
-        WasmEdge_StringDelete(mem_name);
-        WasmEdge_StringDelete(malloc_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(c)])
 }
 
-pub fn execDocker(
-    data: &mut WasmMac,
+pub fn exec_docker(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
-        let malloc_name = WasmEdge_StringCreateByCString(CString::new("malloc").unwrap().as_ptr());
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let in_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let in_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
-        let key_offset = WasmEdge_ValueGetI32(*in_params.offset(2));
-        let key_l = WasmEdge_ValueGetI32(*in_params.offset(3)) as i32;
-        let co_offset = WasmEdge_ValueGetI32(*in_params.offset(4));
-        let co_l = WasmEdge_ValueGetI32(*in_params.offset(5)) as i32;
+    let inst_exec1 = Rc::clone(&rt.vm_executor.as_ref().unwrap());
+    let mut exec_ref_mut = inst_exec1.borrow_mut();
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        let image_name = extract_string_from_memory(mem, in_offset, in_l, false);
-        let container_name = extract_string_from_memory(mem, key_offset, key_l, false);
-        let command = extract_string_from_memory(mem, co_offset, co_l, false);
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let image_name = str::from_utf8(&in_bytes_next).unwrap();
 
-        let j =
-            json!({
+    let key_offset = _input[2].to_i32();
+    let key_l = _input[3].to_i32();
+    let key_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
+    let key_bytes_next = key_bytes.unwrap();
+    let container_name = str::from_utf8(&key_bytes_next).unwrap();
+
+    let cn_offset = _input[4].to_i32();
+    let cn_l = _input[5].to_i32();
+    let cn_bytes = mem.get_data(cn_offset.cast_unsigned(), cn_l.cast_unsigned());
+    let cn_bytes_next = cn_bytes.unwrap();
+    let command = str::from_utf8(&cn_bytes_next).unwrap();
+
+    let j =
+        json!({
             "key": "execDocker",
             "input": {
                 "machineId": rt.machine_id,
@@ -1327,83 +1314,72 @@ pub fn execDocker(
             }
         });
 
-        let packet = j.to_string();
-        let packet_cstr = CString::new(packet).unwrap();
+    let packet = j.to_string();
 
-        let val_raw = if let Some(callback) = rt.callback {
-            callback(packet_cstr.as_ptr())
-        } else {
-            ptr::null_mut()
-        };
+    let res = (rt.callback)(packet);
 
-        let res = if !val_raw.is_null() {
-            CStr::from_ptr(val_raw).to_string_lossy().to_string()
-        } else {
-            String::new()
-        };
-
-        let jres = json!({
+    let jres = json!({
             "data": res
         });
 
-        let val = jres.to_string();
-        let val_l = val.len();
+    let val = jres.to_string();
+    let val_l = val.len();
 
-        let params = [WasmEdge_ValueGenI32(val_l as u32)];
-        let mut returns = [WasmEdge_ValueGenI32(0)];
+    let mut malloc_fn = inst_ref_mut.get_func_mut("malloc").unwrap();
+    let mfn = malloc_fn.deref_mut();
+    let res = exec_ref_mut.call_func(mfn, [WasmValue::from_i32(val_l as i32)]).unwrap();
+    let val_offset = res[0].to_i32();
 
-        WasmEdge_VMExecute(rt.vm, malloc_name, params.as_ptr(), 1, returns.as_mut_ptr(), 1);
-        let val_offset = WasmEdge_ValueGetI32(returns[0]) as i32;
+    let arr = val.as_bytes().to_vec();
 
-        let arr = val.as_bytes().to_vec();
+    let mut mem2 = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        if !val_raw.is_null() {
-            libc::free(val_raw as *mut c_void);
-        }
+    mem2.set_data(arr, val_offset.cast_unsigned());
+    let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        WasmEdge_MemoryInstanceSetData(mem, arr.as_ptr(), val_offset as u32, val_l as u32);
-        let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-        *out.offset(0) = WasmEdge_ValueGenI64(c);
-        rt.temp_data_map.insert(c, arr);
-
-        WasmEdge_StringDelete(mem_name);
-        WasmEdge_StringDelete(malloc_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(c)])
 }
 
-pub fn copyToDocker(
-    data: &mut WasmMac,
+pub fn copy_to_docker(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
-        let malloc_name = WasmEdge_StringCreateByCString(CString::new("malloc").unwrap().as_ptr());
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let in_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let in_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
-        let key_offset = WasmEdge_ValueGetI32(*in_params.offset(2));
-        let key_l = WasmEdge_ValueGetI32(*in_params.offset(3)) as i32;
-        let co_offset = WasmEdge_ValueGetI32(*in_params.offset(4));
-        let co_l = WasmEdge_ValueGetI32(*in_params.offset(5)) as i32;
-        let content_offset = WasmEdge_ValueGetI32(*in_params.offset(6));
-        let content_l = WasmEdge_ValueGetI32(*in_params.offset(7)) as i32;
+    let inst_exec1 = Rc::clone(&rt.vm_executor.as_ref().unwrap());
+    let mut exec_ref_mut = inst_exec1.borrow_mut();
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        let image_name = extract_string_from_memory(mem, in_offset, in_l, false);
-        let container_name = extract_string_from_memory(mem, key_offset, key_l, false);
-        let file_name = extract_string_from_memory(mem, co_offset, co_l, false);
-        let content = extract_string_from_memory(mem, content_offset, content_l, false);
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let image_name = str::from_utf8(&in_bytes_next).unwrap();
 
-        let j =
-            json!({
+    let key_offset = _input[2].to_i32();
+    let key_l = _input[3].to_i32();
+    let key_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
+    let key_bytes_next = key_bytes.unwrap();
+    let container_name = str::from_utf8(&key_bytes_next).unwrap();
+
+    let co_offset = _input[4].to_i32();
+    let co_l = _input[5].to_i32();
+    let co_bytes = mem.get_data(co_offset.cast_unsigned(), co_l.cast_unsigned());
+    let co_bytes_next = co_bytes.unwrap();
+    let file_name = str::from_utf8(&co_bytes_next).unwrap();
+
+    let cn_offset = _input[6].to_i32();
+    let cn_l = _input[7].to_i32();
+    let cn_bytes = mem.get_data(cn_offset.cast_unsigned(), cn_l.cast_unsigned());
+    let cn_bytes_next = cn_bytes.unwrap();
+    let content = str::from_utf8(&cn_bytes_next).unwrap();
+
+    let j =
+        json!({
             "key": "copyToDocker",
             "input": {
                 "machineId": rt.machine_id,
@@ -1414,83 +1390,72 @@ pub fn copyToDocker(
             }
         });
 
-        let packet = j.to_string();
-        let packet_cstr = CString::new(packet).unwrap();
+    let packet = j.to_string();
 
-        let val_raw = if let Some(callback) = rt.callback {
-            callback(packet_cstr.as_ptr())
-        } else {
-            ptr::null_mut()
-        };
+    let res = (rt.callback)(packet);
 
-        let res = if !val_raw.is_null() {
-            CStr::from_ptr(val_raw).to_string_lossy().to_string()
-        } else {
-            String::new()
-        };
-
-        let jres = json!({
+    let jres = json!({
             "data": res
         });
 
-        let val = jres.to_string();
-        let val_l = val.len();
+    let val = jres.to_string();
+    let val_l = val.len();
 
-        let params = [WasmEdge_ValueGenI32(val_l as u32)];
-        let mut returns = [WasmEdge_ValueGenI32(0)];
+    let mut malloc_fn = inst_ref_mut.get_func_mut("malloc").unwrap();
+    let mfn = malloc_fn.deref_mut();
+    let res = exec_ref_mut.call_func(mfn, [WasmValue::from_i32(val_l as i32)]).unwrap();
+    let val_offset = res[0].to_i32();
 
-        WasmEdge_VMExecute(rt.vm, malloc_name, params.as_ptr(), 1, returns.as_mut_ptr(), 1);
-        let val_offset = WasmEdge_ValueGetI32(returns[0]) as i32;
+    let arr = val.as_bytes().to_vec();
 
-        let arr = val.as_bytes().to_vec();
+    let mut mem2 = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        if !val_raw.is_null() {
-            libc::free(val_raw as *mut c_void);
-        }
+    mem2.set_data(arr, val_offset.cast_unsigned());
+    let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        WasmEdge_MemoryInstanceSetData(mem, arr.as_ptr(), val_offset as u32, val_l as u32);
-        let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-        *out.offset(0) = WasmEdge_ValueGenI64(c);
-        rt.temp_data_map.insert(c, arr);
-
-        WasmEdge_StringDelete(mem_name);
-        WasmEdge_StringDelete(malloc_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(c)])
 }
 
-pub fn signalPoint(
-    data: &mut WasmMac,
+pub fn signal_point(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
-        let malloc_name = WasmEdge_StringCreateByCString(CString::new("malloc").unwrap().as_ptr());
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let typ_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let typ_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
-        let point_id_offset = WasmEdge_ValueGetI32(*in_params.offset(2));
-        let point_id_l = WasmEdge_ValueGetI32(*in_params.offset(3)) as i32;
-        let user_id_offset = WasmEdge_ValueGetI32(*in_params.offset(4));
-        let user_id_l = WasmEdge_ValueGetI32(*in_params.offset(5)) as i32;
-        let data_offset = WasmEdge_ValueGetI32(*in_params.offset(6));
-        let data_l = WasmEdge_ValueGetI32(*in_params.offset(7)) as i32;
+    let inst_exec1 = Rc::clone(&rt.vm_executor.as_ref().unwrap());
+    let mut exec_ref_mut = inst_exec1.borrow_mut();
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        let typ = extract_string_from_memory(mem, typ_offset, typ_l, false);
-        let point_id = extract_string_from_memory(mem, point_id_offset, point_id_l, false);
-        let user_id = extract_string_from_memory(mem, user_id_offset, user_id_l, false);
-        let payload = extract_string_from_memory(mem, data_offset, data_l, false);
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let typ = str::from_utf8(&in_bytes_next).unwrap();
 
-        let j =
-            json!({
+    let key_offset = _input[2].to_i32();
+    let key_l = _input[3].to_i32();
+    let key_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
+    let key_bytes_next = key_bytes.unwrap();
+    let point_id = str::from_utf8(&key_bytes_next).unwrap();
+
+    let co_offset = _input[4].to_i32();
+    let co_l = _input[5].to_i32();
+    let co_bytes = mem.get_data(co_offset.cast_unsigned(), co_l.cast_unsigned());
+    let co_bytes_next = co_bytes.unwrap();
+    let user_id = str::from_utf8(&co_bytes_next).unwrap();
+
+    let cn_offset = _input[6].to_i32();
+    let cn_l = _input[7].to_i32();
+    let cn_bytes = mem.get_data(cn_offset.cast_unsigned(), cn_l.cast_unsigned());
+    let cn_bytes_next = cn_bytes.unwrap();
+    let payload = str::from_utf8(&cn_bytes_next).unwrap();
+
+    let j =
+        json!({
             "key": "signalPoint",
             "input": {
                 "machineId": rt.machine_id,
@@ -1501,330 +1466,171 @@ pub fn signalPoint(
             }
         });
 
-        let packet = j.to_string();
-        let packet_cstr = CString::new(packet).unwrap();
+    let packet = j.to_string();
 
-        let val_raw = if let Some(callback) = rt.callback {
-            callback(packet_cstr.as_ptr())
-        } else {
-            ptr::null_mut()
-        };
+    let val = (rt.callback)(packet);
+    let val_l = val.len();
 
-        let val = if !val_raw.is_null() {
-            CStr::from_ptr(val_raw).to_string_lossy().to_string()
-        } else {
-            String::new()
-        };
+    let mut malloc_fn = inst_ref_mut.get_func_mut("malloc").unwrap();
+    let mfn = malloc_fn.deref_mut();
+    let res = exec_ref_mut.call_func(mfn, [WasmValue::from_i32(val_l as i32)]).unwrap();
+    let val_offset = res[0].to_i32();
 
-        let val_l = val.len();
+    let arr = val.as_bytes().to_vec();
 
-        let params = [WasmEdge_ValueGenI32(val_l as u32)];
-        let mut returns = [WasmEdge_ValueGenI32(0)];
+    let mut mem2 = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-        WasmEdge_VMExecute(rt.vm, malloc_name, params.as_ptr(), 1, returns.as_mut_ptr(), 1);
-        let val_offset = WasmEdge_ValueGetI32(returns[0]) as i32;
+    mem2.set_data(arr, val_offset.cast_unsigned());
+    let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        let arr = val.as_bytes().to_vec();
-
-        if !val_raw.is_null() {
-            libc::free(val_raw as *mut c_void);
-        }
-
-        WasmEdge_MemoryInstanceSetData(mem, arr.as_ptr(), val_offset as u32, val_l as u32);
-        let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-        *out.offset(0) = WasmEdge_ValueGenI64(c);
-        rt.temp_data_map.insert(c, arr);
-
-        WasmEdge_StringDelete(mem_name);
-        WasmEdge_StringDelete(malloc_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(c)])
 }
 
-use std::collections::{ HashMap, HashSet };
-use std::sync::{ Arc, Mutex, atomic::{ AtomicI32, Ordering } };
-use std::thread;
+use std::sync::{ atomic::{ AtomicI32 } };
 use std::time::Instant;
-use serde_json::{ json, Value };
-use wasmedge_sys::{
-    CallingFrameContext,
-    Executor,
-    FuncType,
-    Function,
-    HostFunc,
-    ImportModule,
-    ImportObjectBuilder,
-    Instance,
-    Loader,
-    MemoryInstance,
-    Module,
-    Statistics,
-    Store,
-    Validator,
-    Value as WasmValue,
-    WasmEdgeResult,
-    WasmEdgeString,
-};
 
-// Define the types that are referenced in the original code
-#[derive(Debug)]
-pub struct WasmMac {
-    pub machine_id: String,
-    pub id: String,
-    pub index: usize,
-    pub vm: Arc<Mutex<Executor>>,
-    pub trx: Arc<dyn Transaction>,
-    pub temp_data_map: HashMap<i64, Vec<u8>>,
-    pub sync_tasks: Vec<(Vec<String>, String)>,
-    pub execution_result: String,
-    pub chain_token_id: String,
-}
-
-pub trait Transaction {
-    fn put(&self, key: &str, value: &str);
-    fn del(&self, key: &str);
-    fn get(&self, key: &str) -> String;
-    fn get_by_prefix(&self, prefix: &str) -> Vec<String>;
-}
-
-#[derive(Debug)]
-pub struct ChainTrx {
-    pub machine_id: String,
-    pub callback_id: String,
-    pub input: String,
-    pub user_id: String,
-}
-
-#[derive(Debug)]
-pub struct WasmTask {
-    pub id: i32,
-    pub name: String,
-    pub inputs: HashMap<i32, (bool, Arc<WasmTask>)>,
-    pub outputs: HashMap<i32, Arc<WasmTask>>,
-    pub vm_index: usize,
-    pub started: bool,
-}
-
-pub struct WasmLock {
-    pub mutex: Mutex<()>,
-}
-
-impl WasmLock {
-    pub fn new() -> Self {
-        WasmLock {
-            mutex: Mutex::new(()),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct OpChange {
-    pub op_type: String,
-    pub key: String,
-    pub val: String,
-}
-
-// Dummy implementation for demonstration
-pub struct DummyTransaction;
-
-impl Transaction for DummyTransaction {
-    fn put(&self, key: &str, value: &str) {
-        println!("PUT: {} = {}", key, value);
-    }
-
-    fn del(&self, key: &str) {
-        println!("DEL: {}", key);
-    }
-
-    fn get(&self, key: &str) -> String {
-        format!("value_for_{}", key)
-    }
-
-    fn get_by_prefix(&self, prefix: &str) -> Vec<String> {
-        vec![format!("result1_for_{}", prefix), format!("result2_for_{}", prefix)]
-    }
-}
-
-// Host function implementations
 pub fn trx_put(
-    data: &mut WasmMac,
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let mem_name = WasmEdgeString::create("memory");
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-    let rt = unsafe { &mut *(_data as *mut WasmMac) };
-    let vm = rt.vm.lock().unwrap();
-    let key_offset = inputs[0].to_i32() as u32;
-    let key_l = inputs[1].to_i32();
-    let val_offset = inputs[2].to_i32() as u32;
-    let val_l = inputs[3].to_i32();
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-    // Get active module and memory instance
-    // Note: This is a simplified version - actual implementation would need proper WasmEdge integration
-    let mut raw_key = vec![0u8; key_l as usize];
-    let mut raw_key_c = Vec::new();
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let key = str::from_utf8(&in_bytes_next).unwrap();
 
-    // Simulate memory data retrieval
-    for i in 0..key_l {
-        raw_key_c.push(raw_key[i as usize] as i8);
-    }
-    let key = String::from_utf8_lossy(&raw_key).to_string();
+    let val_offset = _input[2].to_i32();
+    let val_l = _input[3].to_i32();
+    let val_bytes = mem.get_data(val_offset.cast_unsigned(), val_l.cast_unsigned());
+    let val_bytes_next = val_bytes.unwrap();
+    let val = str::from_utf8(&val_bytes_next).unwrap();
 
-    let mut raw_val = vec![0u8; val_l as usize];
-    let mut raw_val_c = Vec::new();
+    rt.trx.put(format!("{}::{}", rt.machine_id, key), val.to_string());
 
-    for i in 0..val_l {
-        raw_val_c.push(raw_val[i as usize] as i8);
-    }
-    let val = String::from_utf8_lossy(&raw_val).to_string();
-
-    rt.trx.put(&format!("{}::{}", rt.machine_id, key), &val);
-
-    Ok(())
+    Ok(vec![WasmValue::from_i64(0)])
 }
 
 pub fn trx_del(
-    data: &mut WasmMac,
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let mem_name = WasmEdgeString::create("memory");
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-    let rt = unsafe { &mut *(_data as *mut WasmMac) };
-    let vm = rt.vm.lock().unwrap();
-    let key_offset = inputs[0].to_i32() as u32;
-    let key_l = inputs[1].to_i32();
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-    // Get memory instance and extract key
-    let mut raw_key = vec![0u8; key_l as usize];
-    let mut raw_key_c = Vec::new();
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let key = str::from_utf8(&in_bytes_next).unwrap();
 
-    for i in 0..key_l {
-        raw_key_c.push(raw_key[i as usize] as i8);
-    }
-    let key = String::from_utf8_lossy(&raw_key).to_string();
+    rt.trx.del(format!("{}::{}", rt.machine_id, key));
 
-    rt.trx.del(&format!("{}::{}", rt.machine_id, key));
-
-    Ok(())
+    Ok(vec![WasmValue::from_i64(0)])
 }
 
 pub fn trx_get(
-    data: &mut WasmMac,
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let mem_name = WasmEdgeString::create("memory");
-    let malloc_name = WasmEdgeString::create("malloc");
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-    let rt = unsafe { &mut *(_data as *mut WasmMac) };
-    let vm = rt.vm.lock().unwrap();
-    let key_offset = inputs[0].to_i32() as u32;
-    let key_l = inputs[1].to_i32();
+    let inst_exec1 = Rc::clone(&rt.vm_executor.as_ref().unwrap());
+    let mut exec_ref_mut = inst_exec1.borrow_mut();
 
-    // Extract key from memory
-    let mut raw_key = vec![0u8; key_l as usize];
-    let mut raw_key_c = Vec::new();
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-    for i in 0..key_l {
-        raw_key_c.push(raw_key[i as usize] as i8);
-    }
-    let key = String::from_utf8_lossy(&raw_key).to_string();
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let key = str::from_utf8(&in_bytes_next).unwrap();
 
-    let val = rt.trx.get(&format!("{}::{}", rt.machine_id, key));
-    let val_l = val.len() as i32;
+    let val = rt.trx.get(format!("{}::{}", rt.machine_id, key));
+    let val_l = val.len();
 
-    // Simulate malloc call
-    let val_offset = 1000i32; // Simplified - would need actual malloc implementation
+    let mut malloc_fn = inst_ref_mut.get_func_mut("malloc").unwrap();
+    let mfn = malloc_fn.deref_mut();
+    let res = exec_ref_mut.call_func(mfn, [WasmValue::from_i32(val_l as i32)]).unwrap();
+    let val_offset = res[0].to_i32();
 
-    let raw_arr = val.as_bytes();
-    let mut arr = vec![0u8; val_l as usize];
-    for i in 0..val_l {
-        arr[i as usize] = raw_arr[i as usize];
-    }
+    let arr = val.as_bytes().to_vec();
 
-    // Simulate memory write
+    let mut mem2 = inst_ref_mut.get_memory_mut("memory").unwrap();
+
+    mem2.set_data(arr, val_offset.cast_unsigned());
     let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-    outputs[0] = WasmValue::from_i64(c);
-    rt.temp_data_map.insert(c, arr);
-
-    Ok(())
+    Ok(vec![WasmValue::from_i64(c)])
 }
 
 pub fn trx_get_by_prefix(
-    data: &mut WasmMac,
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let mem_name = WasmEdgeString::create("memory");
-    let malloc_name = WasmEdgeString::create("malloc");
+    let inst_ref1 = Rc::clone(&rt.vm_instance.as_ref().unwrap());
+    let mut inst_ref_mut = inst_ref1.borrow_mut();
 
-    let rt = unsafe { &mut *(_data as *mut WasmMac) };
-    let vm = rt.vm.lock().unwrap();
-    let key_offset = inputs[0].to_i32() as u32;
-    let key_l = inputs[1].to_i32();
+    let inst_exec1 = Rc::clone(&rt.vm_executor.as_ref().unwrap());
+    let mut exec_ref_mut = inst_exec1.borrow_mut();
 
-    // Extract key from memory
-    let mut raw_key = vec![0u8; key_l as usize];
-    let mut raw_key_c = Vec::new();
+    let mem = inst_ref_mut.get_memory_mut("memory").unwrap();
 
-    for i in 0..key_l {
-        if raw_key[i as usize] == 0 {
-            break;
-        }
-        raw_key_c.push(raw_key[i as usize] as i8);
-    }
-    let prefix = String::from_utf8_lossy(&raw_key_c).to_string();
+    let in_offset = _input[0].to_i32();
+    let in_l = _input[1].to_i32();
+    let in_bytes = mem.get_data(in_offset.cast_unsigned(), in_l.cast_unsigned());
+    let in_bytes_next = in_bytes.unwrap();
+    let prefix = str::from_utf8(&in_bytes_next).unwrap();
 
-    let vals = rt.trx.get_by_prefix(&format!("{}::{}", rt.machine_id, prefix));
-
-    let mut arr_of_s = Vec::new();
-    for val in vals {
-        arr_of_s.push(val);
-    }
-
+    let vals = rt.trx.get_by_prefix(format!("{}::{}", rt.machine_id, prefix));
     let j = json!({
-        "data": arr_of_s
+        "data": vals
     });
 
     let val = j.to_string();
-    let val_l = val.len() as i32;
+    let val_l = vals.len();
 
-    // Simulate malloc call
-    let val_offset = 1000i32; // Simplified - would need actual malloc implementation
+    let mut malloc_fn = inst_ref_mut.get_func_mut("malloc").unwrap();
+    let mfn = malloc_fn.deref_mut();
+    let res = exec_ref_mut.call_func(mfn, [WasmValue::from_i32(val_l as i32)]).unwrap();
+    let val_offset = res[0].to_i32();
 
-    let raw_arr = val.as_bytes();
-    let mut arr = vec![0u8; val_l as usize];
-    for i in 0..val_l {
-        arr[i as usize] = raw_arr[i as usize];
-    }
+    let arr = val.as_bytes().to_vec();
 
-    // Simulate memory write
+    let mut mem2 = inst_ref_mut.get_memory_mut("memory").unwrap();
+
+    mem2.set_data(arr, val_offset.cast_unsigned());
     let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-    outputs[0] = WasmValue::from_i64(c);
-    rt.temp_data_map.insert(c, arr);
-
-    Ok(())
+    Ok(vec![WasmValue::from_i64(c)])
 }
 
-// ConcurrentRunner Implementation
 pub struct ConcurrentRunner {
+    pub wasm_global_lock: Mutex<()>,
+    pub wasm_done_tasks: i32,
+    pub wasm_count: i32,
     pub trxs: Vec<ChainTrx>,
     pub ast_store_path: String,
     pub wasm_vms: Vec<Option<Arc<Mutex<WasmMac>>>>,
     pub wasm_vm_map: HashMap<String, (usize, Arc<Mutex<WasmMac>>)>,
     pub exec_wasm_locks: Vec<Arc<Mutex<()>>>,
     pub main_wasm_lock: Arc<Mutex<()>>,
-    pub wasm_count: usize,
+    pub exec_wasm_task: Option<Box<dyn FnOnce(Arc<WasmTask>)>>,
 }
 
 impl ConcurrentRunner {
@@ -1837,12 +1643,15 @@ impl ConcurrentRunner {
             exec_wasm_locks: Vec::new(),
             main_wasm_lock: Arc::new(Mutex::new(())),
             wasm_count: 0,
+            wasm_done_tasks: 0,
+            wasm_global_lock: Mutex::new(()),
+            exec_wasm_task: None,
         }
     }
 
     pub fn run(&mut self) {
         let start_time = Instant::now();
-        let wasm_thread_pool = WasmThreadPool::new(8);
+        let mut wasm_thread_pool = WasmThreadPool::generate(Some(8));
         self.prepare_context(self.trxs.len());
 
         let mut handles = Vec::new();
@@ -1851,12 +1660,12 @@ impl ConcurrentRunner {
             let trx = self.trxs[i].clone();
             let ast_store_path = self.ast_store_path.clone();
             let handle = thread::spawn(move || {
-                let rt = WasmMac::new(
+                let rt = WasmMac::new_onchain(
                     trx.machine_id.clone(),
                     i.to_string(),
-                    i,
+                    i as i32,
                     format!("{}/{}/module", ast_store_path, trx.machine_id),
-                    wasm_send
+                    Box::new(wasm_send)
                 );
                 // Register and execute
                 // rt.execute_on_chain(&trx.input, &trx.user_id, self);
@@ -1875,7 +1684,7 @@ impl ConcurrentRunner {
         // Process results
         for rt_opt in &self.wasm_vms {
             if let Some(rt_arc) = rt_opt {
-                let rt = rt_arc.lock().unwrap();
+                let mut rt = rt_arc.lock().unwrap();
                 let cost = 0u64; // Simplified - would get from WasmEdge statistics
 
                 let output = rt.execution_result.clone();
@@ -1885,7 +1694,7 @@ impl ConcurrentRunner {
                 for op in changes {
                     let item =
                         json!({
-                        "opType": op.op_type,
+                        "opType": op.type_,
                         "key": op.key,
                         "val": op.val
                     });
@@ -1897,7 +1706,7 @@ impl ConcurrentRunner {
                     json!({
                     "key": "submitOnchainResponse",
                     "input": {
-                        "callbackId": self.trxs[rt.index].callback_id,
+                        "callbackId": self.trxs.get(rt.index as usize).unwrap().callback_id,
                         "packet": output,
                         "resCode": 1,
                         "error": "",
@@ -1908,18 +1717,16 @@ impl ConcurrentRunner {
                 });
                 let packet = j.to_string();
 
-                wasm_send(&packet);
+                wasm_send(packet);
             }
         }
 
         let elapsed = start_time.elapsed();
-        log(
-            &format!("executed chain applet transactions in {} microseconds.", elapsed.as_micros())
-        );
+        log(format!("executed chain applet transactions in {} microseconds.", elapsed.as_micros()));
     }
 
     pub fn prepare_context(&mut self, vm_count: usize) {
-        self.wasm_count = vm_count;
+        self.wasm_count = vm_count as i32;
         self.wasm_vms = vec![None; vm_count];
         self.exec_wasm_locks = (0..vm_count).map(|_| Arc::new(Mutex::new(()))).collect();
     }
@@ -1930,14 +1737,14 @@ impl ConcurrentRunner {
         let index = rt_guard.index;
         drop(rt_guard);
 
-        self.wasm_vm_map.insert(id, (index, rt.clone()));
-        self.wasm_vms[index] = Some(rt);
+        self.wasm_vm_map.insert(id, (index as usize, rt.clone()));
+        self.wasm_vms[index as usize] = Some(rt);
     }
 
-    pub fn wasm_run_task<F>(&self, task: F, index: usize) where F: FnOnce(&WasmMac) {
+    pub fn wasm_run_task<F>(&self, task: F, index: usize) where F: Fn(&mut WasmMac) {
         if let Some(rt_arc) = &self.wasm_vms[index] {
-            let rt = rt_arc.lock().unwrap();
-            task(&*rt);
+            let mut rt = rt_arc.lock().unwrap();
+            task(&mut rt);
         }
     }
 
@@ -1955,21 +1762,24 @@ impl ConcurrentRunner {
 
         // Collect all sync tasks from VMs
         for index in 0..self.wasm_count {
-            if let Some(vm_arc) = &self.wasm_vms[index] {
+            if let Some(vm_arc) = &self.wasm_vms[index as usize] {
                 let vm = vm_arc.lock().unwrap();
                 for t in &vm.sync_tasks {
-                    let res_nums = t.0.clone();
-                    let name = t.1.clone();
+                    let res_nums = t.deps.clone();
+                    let name = t.name.clone();
                     let mut res_count = 0;
 
                     for r in &res_nums {
                         if !res_wasm_locks.contains_key(r) {
-                            res_wasm_locks.insert(r.clone(), (None, Arc::new(WasmLock::new())));
+                            res_wasm_locks.insert(r.clone(), (
+                                None,
+                                Arc::new(WasmLock::generate()),
+                            ));
                             res_counter += 1;
                         }
                         res_count += 1;
                     }
-                    all_wasm_tasks.insert(key_counter, (res_nums, index, name));
+                    all_wasm_tasks.insert(key_counter, (res_nums, index as usize, name));
                     key_counter += 1;
                     c += 1;
                 }
@@ -1986,7 +1796,7 @@ impl ConcurrentRunner {
                     name: name.clone(),
                     inputs: HashMap::new(),
                     outputs: HashMap::new(),
-                    vm_index: *vm_index,
+                    vm_index: *vm_index as i32,
                     started: false,
                 });
 
@@ -2014,36 +1824,68 @@ impl ConcurrentRunner {
         }
 
         // Execute tasks
-        let wasm_thread_pool = WasmThreadPool::new(res_counter);
+        let mut wasm_thread_pool = WasmThreadPool::generate(Some(res_counter));
         let wasm_done_wasm_tasks_count = Arc::new(AtomicI32::new(1));
 
-        let exec_wasm_task = |task: Arc<WasmTask>| {
-            let ready_to_exec = {
-                let _lock = self.main_wasm_lock.lock().unwrap();
-                // Check if task is ready to execute - simplified version
-                true
-            };
-
-            if ready_to_exec {
-                let task_clone = task.clone();
-                let wasm_done_count_clone = wasm_done_wasm_tasks_count.clone();
-                let key_counter_copy = key_counter;
-
-                thread::spawn(move || {
-                    log(&format!("task {}", task_clone.id));
-                    // Execute task - simplified version
-
-                    let count = wasm_done_count_clone.fetch_add(1, Ordering::SeqCst);
-                    if count == key_counter_copy {
-                        wasm_thread_pool.stop_pool();
+        self.exec_wasm_task = Some(
+            Box::new(|mut task: Arc<WasmTask>| {
+                let mut ready_to_exec = false;
+                {
+                    let locker = self.wasm_global_lock.lock().unwrap();
+                    if task.started == false {
+                        let mut passed = true;
+                        for (key, val) in task.inputs.iter() {
+                            if !val.0 {
+                                passed = false;
+                                break;
+                            }
+                        }
+                        if passed {
+                            task.started = true;
+                            ready_to_exec = true;
+                        }
                     }
-                });
-            }
-        };
+                }
+                if ready_to_exec {
+                    wasm_thread_pool.enqueue(move |params: Vec<Box<dyn Any>>| {
+                        let task: WasmTask = params.get(0) as WasmTask;
+                        let key_counter: i32 = params.get(1) as i32;
+                        let cr: ConcurrentRunner = params.get(2) as ConcurrentRunner;
+                        log(format!("task {id}", id = task.id.to_string()));
+                        {
+                            let locker = cr.exec_wasm_locks
+                                .get(task.vm_index as usize)
+                                .unwrap()
+                                .lock();
+                            cr.wasm_run_task(move |vm: &mut WasmMac| {
+                                vm.run_task(task.name);
+                            }, task.vm_index as usize);
+                        }
+                        let mut next_wasm_tasks: Vec<WasmTask> = Vec::new();
+                        {
+                            let locker2 = cr.wasm_global_lock.lock();
+                            wasm_done_wasm_tasks_count.fetch_add(1, Ordering::Acquire);
+                            if wasm_done_wasm_tasks_count.load(Ordering::Acquire) == key_counter {
+                                wasm_thread_pool.stop_pool();
+                            }
+                            for (key, val) in task.outputs.iter() {
+                                if !val.started {
+                                    val.inputs.get_mut(&task.id).unwrap().0 = true;
+                                    next_wasm_tasks.push(*val);
+                                }
+                            }
+                        }
+                        for t in next_wasm_tasks {
+                            cr.exec_wasm_task.unwrap()(Arc::new(t));
+                        }
+                    }, vec![Box::new(task), Box::new(key_counter)]);
+                }
+            })
+        );
 
         // Start execution with initial tasks
         for (_r, task) in start_points {
-            exec_wasm_task(task);
+            self.exec_wasm_task.unwrap()(task);
         }
 
         wasm_thread_pool.stick();
@@ -2058,6 +1900,7 @@ impl Clone for ChainTrx {
             callback_id: self.callback_id.clone(),
             input: self.input.clone(),
             user_id: self.user_id.clone(),
+            key: self.key.clone(),
         }
     }
 }

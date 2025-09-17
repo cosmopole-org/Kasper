@@ -30,6 +30,7 @@ dependencies = [
 name = "appengine"
 version = "0.1.0"
 dependencies = [
+ "once_cell",
  "rocksdb",
  "serde_json",
  "wasmedge-sys",
