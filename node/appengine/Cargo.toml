@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+rocksdb = "0.24.0"
 serde_json = "1.0.145"
 wasmedge-sys = "0.19.4"
 wasmedge-types = "0.6.0"

@@ -1,9 +1,10 @@
 use std::collections::{ HashMap, HashSet, VecDeque, BTreeMap };
-use std::ops::Deref;
+use std::ops::{ Deref, DerefMut };
 use std::sync::{ Arc, Mutex, Condvar, RwLock };
 use std::thread;
 use std::sync::atomic::{ AtomicBool, Ordering };
 use serde_json::{ json, Value as JsonValue };
+use wasmedge_sys::instance::function::AsFunc;
 use wasmedge_sys::instance::{ self, module };
 use wasmedge_sys::plugin::PluginModule;
 use wasmedge_sys::{
@@ -430,12 +431,16 @@ pub struct WasmMac {
     pub trx: Box<Trx>,
     pub looper: Option<thread::JoinHandle<()>>,
     pub tasks: VecDeque<Box<dyn FnOnce() + Send>>,
+    pub sync_tasks: Vec<SyncTask>,
     pub queue_mutex_: Mutex<()>,
     pub cv_: Condvar,
     pub stop_: bool,
-    pub vm: Option<Executor>,
-    pub vm_instance: Option<Instance>,
+    pub vm: Option<&'static mut Executor>,
+    pub vm_instance: Option<&'static mut Instance>,
     pub mod_path: String,
+
+    execution_result: String,
+    has_output: bool,
 }
 
 impl WasmMac {
@@ -480,12 +485,15 @@ impl WasmMac {
             trx: Box::new(Trx::new()),
             looper: None,
             tasks: VecDeque::new(),
+            sync_tasks: Vec::new(),
             queue_mutex_: Mutex::new(()),
             cv_: Condvar::new(),
             stop_: false,
             vm: None,
             vm_instance: None,
             mod_path,
+            execution_result: "".to_string(),
+            has_output: false,
         };
 
         if wasm_mac.onchain {
@@ -513,12 +521,15 @@ impl WasmMac {
             trx: Box::new(Trx::new()),
             looper: None,
             tasks: VecDeque::new(),
+            sync_tasks: Vec::new(),
             queue_mutex_: Mutex::new(()),
             cv_: Condvar::new(),
             stop_: false,
             vm: None,
             vm_instance: None,
             mod_path,
+            execution_result: "".to_string(),
+            has_output: false,
         };
 
         if wasm_mac.onchain {
@@ -527,18 +538,19 @@ impl WasmMac {
         wasm_mac
     }
 
-    fn register_host(&mut self, extern_mod: ImportModule<&mut WasmMac>) -> ImportObjectBuilder<()> {
-        extern_mod.add_func(
-            "host_add",
+    fn register_host(
+        &mut self,
+        mut extern_mod: ImportModule<&mut WasmMac>
+    ) -> ImportObjectBuilder<()> {
+        extern_mod.add_func("host_add", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I32]),
-                newSyncTask,
+                new_sync_task,
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "runDocker",
+        });
+        extern_mod.add_func("runDocker", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(
                     vec![
@@ -555,9 +567,8 @@ impl WasmMac {
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "execDocker",
+        });
+        extern_mod.add_func("execDocker", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(
                     vec![
@@ -574,9 +585,8 @@ impl WasmMac {
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "copyToDocker",
+        });
+        extern_mod.add_func("copyToDocker", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(
                     vec![
@@ -595,27 +605,24 @@ impl WasmMac {
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "consoleLog",
+        });
+        extern_mod.add_func("consoleLog", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I32]),
-                consoleLog,
+                console_log,
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "output",
+        });
+        extern_mod.add_func("output", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I32]),
                 output,
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "httpPost",
+        });
+        extern_mod.add_func("httpPost", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(
                     vec![
@@ -632,9 +639,8 @@ impl WasmMac {
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "plantTrigger",
+        });
+        extern_mod.add_func("plantTrigger", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(
                     vec![
@@ -652,9 +658,8 @@ impl WasmMac {
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "signalPoint",
+        });
+        extern_mod.add_func("signalPoint", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(
                     vec![
@@ -673,9 +678,8 @@ impl WasmMac {
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "submitOnchainTrx",
+        });
+        extern_mod.add_func("submitOnchainTrx", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(
                     vec![
@@ -690,13 +694,12 @@ impl WasmMac {
                     ],
                     vec![ValType::I32]
                 ),
-                submitOnchainTrx,
+                submit_onchain_trx,
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "put",
+        });
+        extern_mod.add_func("put", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(
                     vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32],
@@ -706,34 +709,31 @@ impl WasmMac {
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "del",
+        });
+        extern_mod.add_func("del", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I32]),
                 trx_del,
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "get",
+        });
+        extern_mod.add_func("get", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I32]),
                 trx_get,
                 self,
                 1
             ).unwrap()
-        );
-        extern_mod.add_func(
-            "getByPrefix",
+        });
+        extern_mod.add_func("getByPrefix", unsafe {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I32]),
                 trx_get_by_prefix,
                 self,
                 1
             ).unwrap()
-        );
+        });
     }
 
     pub fn finalize(&mut self) -> Vec<WasmDbOp> {
@@ -758,7 +758,7 @@ impl WasmMac {
         let mut config = Config::create().unwrap();
         config.measure_cost(true);
         let mut stats = Statistics::create().unwrap();
-        let store = Store::create().unwrap();
+        let mut store = Store::create().unwrap();
         let loader = Loader::create(Some(&config)).unwrap();
         let main_mod = loader.from_file(self.mod_path).unwrap().as_ref();
         let mut extern_mod = ImportModule::create("extern", Box::new(self)).unwrap();
@@ -767,16 +767,16 @@ impl WasmMac {
 
         let validator = Validator::create(Some(&config)).unwrap();
         validator.validate(main_mod);
-        self.vm = Some(Executor::create(Some(&config), Some(stats)).unwrap());
-        let instance = self.vm.unwrap().register_active_module(&mut store, main_mod).unwrap();
-        self.vm_instance = Some(instance);
+        self.vm = Some(&mut Executor::create(Some(&config), Some(stats)).unwrap());
+        let mut instance = self.vm.unwrap().register_active_module(&mut store, main_mod).unwrap();
+        self.vm_instance = Some(&mut instance);
         self.vm.unwrap().register_import_module(&mut store, &extern_mod);
 
-        let start_fn = instance.get_func("_start").unwrap().deref();
+        let mut start_fn = instance.get_func("_start").unwrap().deref();
         self.vm.unwrap().call_func(&mut start_fn, []);
 
         let val_l = input.len() as i32;
-        let malloc_fn = instance.get_func("malloc").unwrap().deref();
+        let mut malloc_fn = instance.get_func("malloc").unwrap().deref();
         let res2 = self.vm
             .unwrap()
             .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
@@ -789,7 +789,7 @@ impl WasmMac {
         mem.unwrap().set_data(arr, val_offset.cast_unsigned());
         let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        let run_fn = instance.get_func("run").unwrap().deref();
+        let mut run_fn = instance.get_func("run").unwrap().deref();
         let res2 = self.vm
             .unwrap()
             .call_func(&mut run_fn, [WasmValue::from_i64(c)])
@@ -797,24 +797,29 @@ impl WasmMac {
     }
 
     pub fn run_task(&mut self, task_id: String) {
+        let instance = self.vm_instance.as_mut().unwrap();
         let val_l = task_id.len() as i32;
-        let malloc_fn = self.vm_instance.unwrap().get_func("malloc").unwrap().deref();
+        let mut malloc_fn = instance.get_func_mut("malloc").unwrap();
+        let mfn = malloc_fn.deref_mut();
         let res2 = self.vm
+            .as_mut()
             .unwrap()
-            .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
+            .call_func(mfn, [WasmValue::from_i32(val_l)])
             .unwrap();
 
         let val_offset = res2[0].to_i32();
         let raw_arr = task_id.as_bytes();
         let arr: Vec<u8> = raw_arr.to_vec();
-        let mem = self.vm_instance.unwrap().get_memory_mut("memory");
+        let mem = instance.get_memory_mut("memory");
         mem.unwrap().set_data(arr, val_offset.cast_unsigned());
         let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        let run_fn = self.vm_instance.unwrap().get_func("runTask").unwrap().deref();
-        let res2 = self.vm
+        let mut run_fn = instance.get_func_mut("runTask").unwrap();
+        let rfn = run_fn.deref_mut();
+        self.vm
+            .as_mut()
             .unwrap()
-            .call_func(&mut run_fn, [WasmValue::from_i64(c)])
+            .call_func(rfn, [WasmValue::from_i64(c)])
             .unwrap();
     }
 
@@ -847,7 +852,7 @@ impl WasmMac {
             config.measure_cost(true);
             let mut stats = Statistics::create().unwrap();
             stats.set_cost_limit(gas_limit);
-            let store = Store::create().unwrap();
+            let mut store = Store::create().unwrap();
             let loader = Loader::create(Some(&config)).unwrap();
             let main_mod = loader.from_file(self.mod_path).unwrap().as_ref();
             let mut extern_mod = ImportModule::create("extern", Box::new(self)).unwrap();
@@ -856,16 +861,19 @@ impl WasmMac {
 
             let validator = Validator::create(Some(&config)).unwrap();
             validator.validate(main_mod);
-            self.vm = Some(Executor::create(Some(&config), Some(stats)).unwrap());
-            let instance = self.vm.unwrap().register_active_module(&mut store, main_mod).unwrap();
-            self.vm_instance = Some(instance);
+            self.vm = Some(&mut Executor::create(Some(&config), Some(stats)).unwrap());
+            let mut instance = self.vm
+                .unwrap()
+                .register_active_module(&mut store, main_mod)
+                .unwrap();
+            self.vm_instance = Some(&mut instance);
             self.vm.unwrap().register_import_module(&mut store, &extern_mod);
 
-            let start_fn = instance.get_func("_start").unwrap().deref();
+            let mut start_fn = instance.get_func("_start").unwrap().deref();
             self.vm.unwrap().call_func(&mut start_fn, []);
 
             let val_l = input.len() as i32;
-            let malloc_fn = instance.get_func("malloc").unwrap().deref();
+            let mut malloc_fn = instance.get_func("malloc").unwrap().deref();
             let res2 = self.vm
                 .unwrap()
                 .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
@@ -878,7 +886,7 @@ impl WasmMac {
             mem.unwrap().set_data(arr, val_offset.cast_unsigned());
             let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-            let run_fn = instance.get_func("run").unwrap().deref();
+            let mut run_fn = instance.get_func("run").unwrap().deref();
             let res2 = self.vm
                 .unwrap()
                 .call_func(&mut run_fn, [WasmValue::from_i64(c)])
@@ -915,147 +923,121 @@ pub struct SyncTask {
     pub name: String,
 }
 
-pub fn newSyncTask(
-    data: &mut WasmMac,
+pub fn new_sync_task(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
+    let mem = rt.vm_instance.as_mut().unwrap().get_memory_mut("memory").unwrap();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let key_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let key_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
+    let key_offset = _input[0].to_i32();
+    let key_l = _input[1].to_i32();
+    let text_bytes_vec = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned()).unwrap();
+    let text_bytes = text_bytes_vec.as_slice();
+    let text = str::from_utf8(&text_bytes).unwrap();
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
+    let j: JsonValue = serde_json::from_str(&text).unwrap_or_default();
 
-        let text = extract_string_from_memory(mem, key_offset, key_l, true);
+    let name = j["name"].as_str().unwrap_or("").to_string();
 
-        log_string(&text);
-
-        let j: JsonValue = serde_json::from_str(&text).unwrap_or_default();
-
-        let name = j["name"].as_str().unwrap_or("").to_string();
-
-        let mut deps = Vec::<String>::new();
-        if let Some(deps_array) = j["deps"].as_array() {
-            for item in deps_array {
-                if let Some(dep_str) = item.as_str() {
-                    deps.push(dep_str.to_string());
-                }
+    let mut deps = Vec::<String>::new();
+    if let Some(deps_array) = j["deps"].as_array() {
+        for item in deps_array {
+            if let Some(dep_str) = item.as_str() {
+                deps.push(dep_str.to_string());
             }
         }
-
-        rt.sync_tasks.push(SyncTask { deps, name });
-
-        WasmEdge_StringDelete(mem_name);
-
-        WASMEDGE_RESULT_SUCCESS
     }
+
+    rt.sync_tasks.push(SyncTask { deps, name });
+
+    Ok(vec![WasmValue::from_i64(0)])
 }
 
 pub fn output(
-    data: &mut WasmMac,
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
+    let instance = rt.vm_instance.as_mut().unwrap();
+    let mem = instance.get_memory_mut("memory").unwrap();
+    let key_offset = _input[0].to_i32();
+    let key_l = _input[1].to_i32();
+    let text_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
+    let text_bytes_next = text_bytes.unwrap();
+    let text = str::from_utf8(&text_bytes_next).unwrap();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let key_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let key_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
+    rt.execution_result = text.to_string();
+    rt.has_output = true;
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
-
-        let text = extract_string_from_memory(mem, key_offset, key_l, true);
-
-        log_string(&text);
-
-        rt.execution_result = text;
-        rt.has_output = true;
-
-        WasmEdge_StringDelete(mem_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(0)])
 }
 
-#[no_mangle]
-pub fn consoleLog(
-    data: &mut WasmMac,
+pub fn console_log(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
+    let instance = rt.vm_instance.as_mut().unwrap();
+    let mem = instance.get_memory_mut("memory").unwrap();
+    let key_offset = _input[0].to_i32();
+    let key_l = _input[1].to_i32();
+    let text_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
+    let text_bytes_next = text_bytes.unwrap();
+    let text = str::from_utf8(&text_bytes_next).unwrap();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let key_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let key_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
+    println!("{text}");
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
-
-        let text = extract_string_from_memory(mem, key_offset, key_l, true);
-
-        log_string(&text);
-
-        WasmEdge_StringDelete(mem_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(0)])
 }
 
-pub fn submitOnchainTrx(
-    data: &mut WasmMac,
+pub fn submit_onchain_trx(
+    rt: &mut WasmMac,
     _inst: &mut Instance,
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    unsafe {
-        let mem_name = WasmEdge_StringCreateByCString(CString::new("memory").unwrap().as_ptr());
-        let malloc_name = WasmEdge_StringCreateByCString(CString::new("malloc").unwrap().as_ptr());
+    let instance = rt.vm_instance.as_mut().unwrap();
+    let mut mem = instance.get_memory_mut("memory").unwrap();
+    let tm_offset = _input[0].to_i32();
+    let tm_l = _input[1].to_i32();
 
-        let rt = &mut *(data as *mut WasmMac);
-        let module = WasmEdge_VMGetActiveModule(rt.vm);
-        let tm_offset = WasmEdge_ValueGetI32(*in_params.offset(0));
-        let tm_l = WasmEdge_ValueGetI32(*in_params.offset(1)) as i32;
-        let key_offset = WasmEdge_ValueGetI32(*in_params.offset(2));
-        let key_l = WasmEdge_ValueGetI32(*in_params.offset(3)) as i32;
-        let input_offset = WasmEdge_ValueGetI32(*in_params.offset(4));
-        let input_l = WasmEdge_ValueGetI32(*in_params.offset(5)) as i32;
-        let meta_offset = WasmEdge_ValueGetI32(*in_params.offset(6));
-        let meta_l = WasmEdge_ValueGetI32(*in_params.offset(7)) as i32;
+    let key_offset = _input[2].to_i32();
+    let key_l = _input[3].to_i32();
+    let key_bytes = mem.get_data(key_offset.cast_unsigned(), key_l.cast_unsigned());
+    let key_bytes_next = key_bytes.unwrap();
+    let key = str::from_utf8(&key_bytes_next).unwrap();
 
-        let mem = WasmEdge_ModuleInstanceFindMemory(module, mem_name);
+    let input_offset = _input[4].to_i32();
+    let input_l = _input[5].to_i32();
+    let input_bytes = mem.get_data(input_offset.cast_unsigned(), input_l.cast_unsigned());
+    let input_bytes_next = input_bytes.unwrap();
+    let input = str::from_utf8(&input_bytes_next).unwrap();
 
-        let key = extract_string_from_memory(mem, key_offset, key_l, false);
-        let input = extract_string_from_memory(mem, input_offset, input_l, false);
-        let meta = extract_string_from_memory(mem, meta_offset, meta_l, false);
+    let meta_offset = _input[6].to_i32();
+    let meta_l = _input[7].to_i32();
+    let meta_bytes = mem.get_data(meta_offset.cast_unsigned(), meta_l.cast_unsigned());
+    let meta_bytes_next = meta_bytes.unwrap();
+    let meta = str::from_utf8(&meta_bytes_next).unwrap();
 
-        log_string(&format!("[{}]", meta));
+    let is_base = meta.chars().nth(0).unwrap_or('0') == '1';
+    let is_file = meta.chars().nth(1).unwrap_or('0') == '1';
 
-        let is_base = meta.chars().nth(0).unwrap_or('0') == '1';
-        let is_file = meta.chars().nth(1).unwrap_or('0') == '1';
+    let tag = meta.chars().skip(2).collect::<String>();
 
-        let tag = meta.chars().skip(2).collect::<String>();
+    let target_machine_id = if !is_base {
+        str::from_utf8(
+            &mem.get_data(tm_offset.cast_unsigned(), tm_l.cast_unsigned()).unwrap()
+        ).unwrap();
+    } else {
+        "".to_string();
+    };
 
-        let target_machine_id = if !is_base {
-            extract_string_from_memory(mem, tm_offset, tm_l, false)
-        } else {
-            String::new()
-        };
-
-        log_string(&format!("{} || {} || {} || {}", target_machine_id, key, input, tag));
-
-        let j =
-            json!({
+    let j =
+        json!({
             "key": "submitOnchainTrx",
             "input": {
                 "pointId": rt.point_id,
@@ -1070,47 +1052,28 @@ pub fn submitOnchainTrx(
             }
         });
 
-        let packet = j.to_string();
-        let packet_cstr = CString::new(packet).unwrap();
+    let packet = j.to_string();
 
-        let val_raw = if let Some(callback) = rt.callback {
-            callback(packet_cstr.as_ptr())
-        } else {
-            ptr::null_mut()
-        };
+    let val = (rt.callback)(packet);
+    let val_l = val.len();
 
-        let val = if !val_raw.is_null() {
-            CStr::from_ptr(val_raw).to_string_lossy().to_string()
-        } else {
-            String::new()
-        };
+    let mut malloc_fn = instance.get_func_mut("malloc").unwrap();
+    let mfn = malloc_fn.deref_mut();
+    let res = rt.vm
+        .as_mut()
+        .unwrap()
+        .call_func(mfn, [WasmValue::from_i32(val_l as i32)])
+        .unwrap();
+    let val_offset = res[0].to_i32();
 
-        let val_l = val.len();
+    let arr = val.as_bytes().to_vec();
 
-        let params = [WasmEdge_ValueGenI32(val_l as u32)];
-        let mut returns = [WasmEdge_ValueGenI32(0)];
+    let mut mem2 = instance.get_memory_mut("memory").unwrap();
+    
+    mem2.set_data(arr, val_offset.cast_unsigned());
+    let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        WasmEdge_VMExecute(rt.vm, malloc_name, params.as_ptr(), 1, returns.as_mut_ptr(), 1);
-        let val_offset = WasmEdge_ValueGetI32(returns[0]) as i32;
-
-        let arr = val.as_bytes().to_vec();
-
-        if !val_raw.is_null() {
-            libc::free(val_raw as *mut c_void);
-        }
-
-        WasmEdge_MemoryInstanceSetData(mem, arr.as_ptr(), val_offset as u32, val_l as u32);
-        let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-        rt.temp_data_map.insert(c, arr);
-
-        *out.offset(0) = WasmEdge_ValueGenI64(c);
-
-        WasmEdge_StringDelete(mem_name);
-        WasmEdge_StringDelete(malloc_name);
-
-        WASMEDGE_RESULT_SUCCESS
-    }
+    Ok(vec![WasmValue::from_i64(c)])
 }
 
 pub fn plantTrigger(
