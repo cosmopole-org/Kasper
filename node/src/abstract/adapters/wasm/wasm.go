@@ -8,5 +8,5 @@ type IWasm interface {
 	ExecuteChainTrxsGroup(trxs []*worker.Trx)
 	ExecuteChainEffects(effects string)
 	CloseKVDB()
-	WasmCallback(dataRaw string) string
+	WasmCallback(dataRaw string) (string, int64)
 }

@@ -33,13 +33,14 @@ import (
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/future"
+	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 	"unsafe"
 
-	"github.com/second-state/WasmEdge-go/wasmedge"
+	zmq "github.com/pebbe/zmq4"
 )
 
 type Wasm struct {
@@ -48,23 +49,23 @@ type Wasm struct {
 	storage     storage.IStorage
 	docker      docker.IDocker
 	file        file.IFile
+	aeSocket    *zmq.Socket
 }
 
 func (wm *Wasm) Assign(machineId string) {
 	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: machineId,
 		Signal: func(key string, a any) {
-			machId := C.CString(machineId)
-			astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
+			astPath := wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module"
 			data := string(a.([]byte))
 			if key == "points/signal" {
-				input := C.CString(data)
-				future.Async(func() {
-					C.wasmRunVm(astPath, input, machId)
-					C.free(unsafe.Pointer(input))
-					C.free(unsafe.Pointer(astPath))
-					C.free(unsafe.Pointer(machId))
-				}, false)
+				str, _ := json.Marshal(map[string]any{
+					"type":      "runOffChain",
+					"machineId": machineId,
+					"input":     data,
+					"astPath":   astPath,
+				})
+				wm.aeSocket.Send(string(str), 0)
 			}
 		},
 	})
@@ -106,63 +107,53 @@ func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
 	if !isMemberOfPoint {
 		return
 	}
-	machId := C.CString(machineId)
-	astPath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module")
+	astPath := wm.app.Tools().Storage().StorageRoot() + "/machines/" + machineId + "/module"
 	b, _ := json.Marshal(updates_points.Send{User: model.User{}, Point: point, Action: "single", Data: data})
-	input := C.CString(string(b))
-	future.Async(func() {
-		C.wasmRunVm(astPath, input, machId)
-		C.free(unsafe.Pointer(input))
-		C.free(unsafe.Pointer(astPath))
-		C.free(unsafe.Pointer(machId))
-	}, false)
+	input := string(b)
+	str, _ := json.Marshal(map[string]any{
+		"type":      "runOffChain",
+		"machineId": machineId,
+		"input":     input,
+		"astPath":   astPath,
+	})
+	wm.aeSocket.Send(string(str), 0)
 
-
-	var conf = wasmedge.NewConfigure(wasmedge.REFERENCE_TYPES)
-	conf.AddConfig(wasmedge.WASI)
-	var vm = wasmedge.NewVMWithConfig(conf)
-	var wasi = vm.GetImportModule(wasmedge.WASI)
-	wasi.InitWasi(
-		os.Args[1:],     // The args
-		os.Environ(),    // The envs
-		[]string{".:."}, // The mapping directories
-	)
-
-	// Instantiate wasm. _start refers to the main() function
-	vm.RunWasmFile(os.Args[1], "_start")
-
-	vm.Release()
-	conf.Release()
 }
 
-func (wm *Wasm) WasmCallback(dataRaw string) string {
+func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 	println(dataRaw)
 	data := map[string]any{}
 	err := json.Unmarshal([]byte(dataRaw), &data)
 	if err != nil {
 		println(err)
-		return err.Error()
+		return err.Error(), 0
 	}
+	reqIdRaw, err := checkField(data, "requestId", float64(0))
+	if err != nil {
+		println(err)
+		return err.Error(), 0
+	}
+	reqId := int64(reqIdRaw)
 	key, err := checkField(data, "key", "")
 	if err != nil {
 		println(err)
-		return err.Error()
+		return err.Error(), reqId
 	}
 	input, err := checkField[map[string]any](data, "input", nil)
 	if err != nil {
 		println(err)
-		return err.Error()
+		return err.Error(), reqId
 	}
 	if key == "runDocker" {
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		pointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		found := false
 		wm.app.ModifyState(true, func(trx trx.ITrx) error {
@@ -174,25 +165,25 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		if !found {
 			err := errors.New("access denied")
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		inputFilesStr, err := checkField(input, "inputFiles", "{}")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		inputFiles := map[string]string{}
 		err = json.Unmarshal([]byte(inputFilesStr), &inputFiles)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		finalInputFiles := map[string]string{}
 		for k, v := range inputFiles {
 			if !wm.file.CheckFileFromStorage(wm.storageRoot, pointId, k) {
 				err := errors.New("input file does not exist")
 				println(err)
-				return err.Error()
+				return err.Error(), reqId
 			}
 			path := fmt.Sprintf("%s/files/%s/%s", wm.storageRoot, pointId, k)
 			finalInputFiles[path] = v
@@ -200,121 +191,121 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		imageName, err := checkField(input, "imageName", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		containerName, err := checkField(input, "containerName", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		wm.docker.SaRContainer(machineId, imageName, containerName)
 		outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles, false)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		if outputFile != nil {
 			str, err := json.Marshal(outputFile)
 			if err != nil {
 				println(err)
-				return err.Error()
+				return err.Error(), reqId
 			}
-			return string(str)
+			return string(str), reqId
 		}
 	} else if key == "execDocker" {
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		imageName, err := checkField(input, "imageName", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		containerName, err := checkField(input, "containerName", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		command, err := checkField(input, "command", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		output, err := wm.docker.ExecContainer(machineId, imageName, containerName, command)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
-		return output
+		return output, reqId
 	} else if key == "copyToDocker" {
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		imageName, err := checkField(input, "imageName", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		containerName, err := checkField(input, "containerName", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		fileName, err := checkField(input, "fileName", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		content, err := checkField(input, "content", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		err = wm.docker.CopyToContainer(machineId, imageName, containerName, fileName, content)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
-		return ""
+		return "", reqId
 	} else if key == "log" {
 		_, err := checkField(input, "text", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		// println("elpis vm:", text)
 	} else if key == "httpPost" {
 		url, err := checkField(input, "url", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		method := strings.Split(url, "|")[0]
 		url = url[len(method)+1:]
 		headers, err := checkField(input, "headers", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		body, err := checkField(input, "body", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		req, err := http.NewRequest(method, url, bytes.NewBuffer([]byte(body)))
 		if err != nil {
 			println("Error creating request:" + err.Error())
-			return err.Error()
+			return err.Error(), reqId
 		}
 		heads := map[string]string{}
 		err = json.Unmarshal([]byte(headers), &heads)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		for k, v := range heads {
 			req.Header.Set(k, v)
@@ -323,26 +314,26 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		resp, err := client.Do(req)
 		if err != nil {
 			println("Request failed:" + err.Error())
-			return err.Error()
+			return err.Error(), reqId
 		}
 		defer resp.Body.Close()
 		println("Response status:" + resp.Status)
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			println("Error reading response body:" + err.Error())
-			return err.Error()
+			return err.Error(), reqId
 		}
-		return base64.StdEncoding.EncodeToString(bodyBytes)
+		return base64.StdEncoding.EncodeToString(bodyBytes), reqId
 	} else if key == "checkTokenValidity" {
 		tokenOwnerId, err := checkField(input, "tokenOwnerId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		tokenId, err := checkField(input, "tokenId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		gasLimit := int64(0)
 		wm.app.ModifyState(true, func(trx trx.ITrx) error {
@@ -355,47 +346,47 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			return nil
 		})
 		jsn, _ := json.Marshal(map[string]any{"gasLimit": gasLimit})
-		return string(jsn)
+		return string(jsn), reqId
 	} else if key == "submitOnchainResponse" {
 		callbackId, err := checkField(input, "callbackId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		cost, err := checkField[float64](input, "cost", 0)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		tokenOwnerId, err := checkField(input, "tokenOwnerId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		tokenId, err := checkField(input, "tokenId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		pack, err := checkField(input, "packet", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		changes, err := checkField(input, "changes", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		resCode, err := checkField[float64](input, "resCode", 0)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		e, err := checkField(input, "error", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		trxInp := packet.ConsumeTokenInput{TokenId: tokenId, Amount: int64(cost), TokenOwnerId: tokenOwnerId}
 		i, _ := json.Marshal(trxInp)
@@ -408,29 +399,29 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		targetMachineId, err := checkField(input, "targetMachineId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		isRequesterOnchain, err := checkField(input, "isRequesterOnchain", false)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		kRaw, err := checkField(input, "key", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		kParts := strings.Split(kRaw, "|")
 		dstPointId := kParts[0]
 		srcPointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		k := kParts[1]
 		userId := kParts[2]
@@ -440,22 +431,22 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		isFile, err := checkField(input, "isFile", false)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		isBase, err := checkField(input, "isBase", false)
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		tag, err := checkField(input, "tag", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		pack, err := checkField(input, "packet", "{}")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		var data []byte
 		if isFile {
@@ -463,7 +454,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 				b, err := wm.file.ReadFileFromStorage(wm.storageRoot, srcPointId, pack)
 				if err != nil {
 					println(err)
-					return err.Error()
+					return err.Error(), reqId
 				}
 				data = b
 			}
@@ -500,21 +491,21 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			} else {
 				action := wm.app.Actor().FetchAction(k)
 				if action == nil {
-					return "action not found"
+					return "action not found", reqId
 				}
 				var err error
 				inp, err := action.(iaction.ISecureAction).ParseInput("tcp", data)
 				if err != nil {
 					println(err)
-					return err.Error()
+					return err.Error(), reqId
 				}
 				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "")
 				println(result)
 				if err != nil {
-					return err.Error()
+					return err.Error(), reqId
 				}
 				str, _ := json.Marshal(result)
-				return string(str)
+				return string(str), reqId
 			}
 		} else {
 			if onchainReq {
@@ -534,35 +525,35 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 			<-outputCnan
 		}
 		if isRequesterOnchain {
-			return string(result)
+			return string(result), reqId
 		} else {
-			return "{}"
+			return "{}", reqId
 		}
 	} else if key == "plantTrigger" {
 		count, err := checkField(input, "count", float64(0))
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		tag, err := checkField(input, "tag", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		pointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		data, err := checkField(input, "input", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		if tag == "alarm" {
 			future.Async(func() {
@@ -578,12 +569,12 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		machineId, err := checkField(input, "machineId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		typAndTemp, err := checkField(input, "type", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		parts := strings.Split(typAndTemp, "|")
 		typ := parts[0]
@@ -598,17 +589,17 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		pointId, err := checkField(input, "pointId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		userId, err := checkField(input, "userId", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		data, err := checkField(input, "data", "")
 		if err != nil {
 			println(err)
-			return err.Error()
+			return err.Error(), reqId
 		}
 		wm.app.ModifyStateSecurly(false, base.NewInfo(machineId, pointId), func(s state.IState) error {
 			_, _, err := wm.app.Actor().FetchAction("/points/signal").Act(s, inputs_points.SignalInput{
@@ -622,7 +613,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) string {
 		})
 	}
 
-	return "{}"
+	return "{}", reqId
 }
 
 func checkField[T any](input map[string]any, fieldName string, defVal T) (T, error) {
@@ -648,8 +639,34 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 		storage:     storage,
 		docker:      docker,
 		file:        file,
+		aeSocket:    nil,
 	}
-	wasmedge.SetLogErrorLevel()
+	future.Async(func() {
+		zctx, _ := zmq.NewContext()
+		s, _ := zctx.NewSocket(zmq.REP)
+		s.Bind("tcp://*:5555")
+
+		zctx2, _ := zmq.NewContext()
+		fmt.Printf("Connecting to the server...\n")
+		s2, _ := zctx2.NewSocket(zmq.REQ)
+		s2.Connect("tcp://localhost:5556")
+
+		wm.aeSocket = s2
+
+		for {
+			msg, _ := s.Recv(0)
+			log.Printf("Received %s\n", msg)
+			future.Async(func() {
+				res, reqId := wm.WasmCallback(msg)
+				result, _ := json.Marshal(map[string]any{
+					"type":      "apiResponse",
+					"requestId": reqId,
+					"data":      res,
+				})
+				s.Send(string(result), 0)
+			}, false)
+		}
+	}, true)
 	return wm
 }
 

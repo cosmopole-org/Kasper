@@ -1,13 +1,12 @@
-use std::cell::{ RefCell, RefMut };
+use std::cell::{ RefCell };
 use std::collections::{ HashMap, VecDeque, BTreeMap };
-use std::ops::{ Deref, DerefMut };
-use std::ptr::null;
+use std::ops::{ DerefMut };
 use std::rc::Rc;
-use std::sync::{ Arc, Condvar, Mutex, MutexGuard };
-use std::{ rc, thread };
-use std::sync::atomic::{ AtomicBool, Ordering };
+use std::sync::{ Arc, Condvar, Mutex };
+use std::{ thread };
+use std::sync::atomic::{ AtomicBool, AtomicI64, Ordering };
 use serde_json::{ json, Value as JsonValue };
-use wasmedge_sys::{ instance, FuncType, Validator };
+use wasmedge_sys::{ Validator };
 use wasmedge_sys::{
     Executor,
     Function,
@@ -27,30 +26,75 @@ use wasmedge_types::{ ValType, error::CoreError };
 use once_cell::sync::Lazy;
 
 use rocksdb::{
-    statistics,
     Options,
     ReadOptions,
     TransactionDB,
     TransactionDBOptions,
     TransactionOptions,
     WriteOptions,
-    DB,
 };
 
+use blockingqueue::BlockingQueue;
+
+static RESP_MAP: Lazy<Arc<Mutex<HashMap<i64, String>>>> = Lazy::new(|| {
+    Arc::new(Mutex::new(HashMap::new()))
+});
+static TRIGGER_MAP: Lazy<Arc<Mutex<HashMap<i64, Arc<Condvar>>>>> = Lazy::new(|| {
+    Arc::new(Mutex::new(HashMap::new()))
+});
+static REQ_ID_COUNTER: Lazy<AtomicI64> = Lazy::new(|| { AtomicI64::new(0) });
+static GLOBAL_REQ_CHAN: Lazy<BlockingQueue<String>> = Lazy::new(|| { BlockingQueue::new() });
+
 fn main() {
-    for i in 1..10 {
-        wasm_run_vm(
-            "main.wasm".to_string(),
-            json!({ "point": { "id": "2@global" }}).to_string(),
-            "1@global".to_string()
-        );
-    }
+    let receiver_handler = thread::spawn(|| {
+        let context = zmq::Context::new();
+        let responder = Arc::new(Mutex::new(context.socket(zmq::REP).unwrap()));
+        {
+            assert!(responder.lock().unwrap().bind("tcp://*:5556").is_ok());
+        }
+        let mut msg = zmq::Message::new();
+        crossbeam
+            ::scope(|s| {
+                loop {
+                    {
+                        responder.lock().unwrap().recv(&mut msg, 0).unwrap();
+                    }
+                    let data = msg.as_str().unwrap();
+                    println!("recevied {data}");
+                    let packet: JsonValue = serde_json::from_str(data).unwrap();
+                    if packet["type"] == "runOffChain" {
+                        s.spawn(move |_| {
+                            let ast_path = packet["astPath"].as_str().unwrap().to_string();
+                            let input = packet["input"].as_str().unwrap().to_string();
+                            let machine_id = packet["machineId"].as_str().unwrap().to_string();
+                            wasm_run_vm(ast_path, input, machine_id);
+                        });
+                    } else if packet["type"] == "apiResponse" {
+                        let request_id = packet["requestId"].as_i64().unwrap();
+                        RESP_MAP.lock().unwrap().insert(request_id, packet["data"].as_str().unwrap().to_string());
+                        TRIGGER_MAP.lock().unwrap().get(&request_id).unwrap().notify_one();
+                    }
+                }
+            })
+            .unwrap();
+    });
+    let chan = GLOBAL_REQ_CHAN.clone();
+    let sender_handler = thread::spawn(move || {
+        println!("Connecting to hello world server...\n");
+        let context = zmq::Context::new();
+        let requester = context.socket(zmq::REQ).unwrap();
+        assert!(requester.connect("tcp://localhost:5555").is_ok());
+        loop {
+            let packet = chan.pop();
+            requester.send(&packet, 0).unwrap();
+        }
+    });
+    receiver_handler.join().unwrap();
+    sender_handler.join().unwrap();
 }
 
 pub fn wasm_run_vm(ast_path: String, input: String, machine_id: String) {
     let inp1 = input.clone();
-    let inp2 = input.clone();
-
     let input_json: JsonValue = serde_json::from_str(&inp1).unwrap();
     let point_id = input_json["point"].as_object().unwrap()["id"].as_str().unwrap().to_string();
     let mut rt = WasmMac::new_offchain(
@@ -60,8 +104,6 @@ pub fn wasm_run_vm(ast_path: String, input: String, machine_id: String) {
         Box::new(wasm_send)
     );
     rt.execute_on_update(inp1);
-
-    println!("end");
 }
 
 static GLOBAL_DB: Lazy<Arc<Mutex<TransactionDB>>> = Lazy::new(|| {
@@ -79,8 +121,28 @@ static GLOBAL_DB: Lazy<Arc<Mutex<TransactionDB>>> = Lazy::new(|| {
 
 static mut STEP: i32 = 0;
 
-fn wasm_send(data: std::string::String) -> std::string::String {
-    return data;
+fn wasm_send(mut data: JsonValue) -> std::string::String {
+    let req_id = REQ_ID_COUNTER.fetch_add(1, Ordering::Acquire);
+    data["requestId"] = JsonValue::from(req_id);
+    let cv_ = Arc::new(Condvar::new());
+    {
+        let cv_clone = Arc::clone(&cv_);
+        TRIGGER_MAP.lock().unwrap().insert(req_id, cv_clone);
+    }
+    {
+        GLOBAL_REQ_CHAN.clone().push(data.to_string());
+    }
+    let triggers = Arc::clone(&RESP_MAP);
+    let res = {
+        {
+            let triggers_ref = triggers.lock().unwrap();
+            let _mg: std::sync::MutexGuard<'_, HashMap<i64, String>> = cv_
+                .wait_while(triggers_ref, |tr| { tr.is_empty() && !tr.contains_key(&req_id) })
+                .unwrap();
+        }
+        triggers.lock().unwrap().get(&req_id).unwrap().clone()
+    };
+    res.to_string()
 }
 
 fn log(text: String) {
@@ -90,8 +152,7 @@ fn log(text: String) {
             "text": text
         }
     });
-    let packet = j.to_string();
-    wasm_send(packet);
+    wasm_send(j);
 }
 
 pub struct WasmLock {
@@ -407,7 +468,7 @@ pub struct WasmMac {
     pub onchain: bool,
     pub chain_token_id: String,
     pub is_token_valid: bool,
-    pub callback: Box<dyn (Fn(String) -> String) + Send + Sync>,
+    pub callback: Box<dyn (Fn(JsonValue) -> String) + Send + Sync>,
     pub machine_id: String,
     pub point_id: String,
     pub id: String,
@@ -461,7 +522,7 @@ impl WasmMac {
         machine_id: String,
         point_id: String,
         mod_path: String,
-        cb: Box<dyn (Fn(String) -> String) + Send + Sync>
+        cb: Box<dyn (Fn(JsonValue) -> String) + Send + Sync>
     ) -> Self {
         let mut wasm_mac = WasmMac {
             onchain: false,
@@ -498,7 +559,7 @@ impl WasmMac {
         vm_id: String,
         index: i32,
         mod_path: String,
-        cb: Box<dyn (Fn(String) -> String) + Send + Sync>
+        cb: Box<dyn (Fn(JsonValue) -> String) + Send + Sync>
     ) -> Self {
         let mut wasm_mac = WasmMac {
             onchain: true,
@@ -529,8 +590,6 @@ impl WasmMac {
         }
         wasm_mac
     }
-
-    fn register_host(&mut self, exec: &mut Executor, extern_mod: &mut ImportModule<&mut i32>) {}
 
     pub fn finalize(&mut self) -> Vec<WasmDbOp> {
         if self.onchain {
@@ -847,9 +906,8 @@ impl WasmMac {
                 "tokenId": token_id
             }
         });
-        let packet = j.to_string();
 
-        let val = (self.callback)(packet);
+        let val = (self.callback)(j);
 
         let jsn: JsonValue = serde_json::from_str(&val).unwrap();
         let gas_limit = jsn["gasLimit"].as_u64().unwrap_or(0);
@@ -1091,7 +1149,6 @@ impl WasmMac {
             v.validate(&main_mod_raw).unwrap();
 
             let vm_instance = exec.register_active_module(&mut store, &main_mod_raw).unwrap();
-            println!("hello");
 
             self.vm_executor = Some(Rc::new(RefCell::new(exec)));
             self.vm_instance = Some(Rc::new(RefCell::new(vm_instance)));
@@ -1112,7 +1169,7 @@ impl WasmMac {
                 .unwrap();
 
             let val_offset = res2[0].to_i32();
-            let raw_arr = input.as_bytes();
+            let raw_arr = params.as_bytes();
             let arr: Vec<u8> = raw_arr.to_vec();
             let mem = instance_item_ref.get_memory_mut("memory");
             mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
@@ -1162,8 +1219,6 @@ pub fn new_sync_task(
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
     let mem = _caller.memory_ref(0).unwrap();
-    let rt: &mut WasmMac = unsafe { &mut *host_data.runtime };
-    let exec: &mut Executor = unsafe { &mut *host_data.exec };
 
     let key_offset = _input[0].to_i32();
     let key_l = _input[1].to_i32();
@@ -1198,7 +1253,6 @@ pub fn output(
 ) -> Result<Vec<WasmValue>, CoreError> {
     let mem = _caller.memory_ref(0).unwrap();
     let rt: &mut WasmMac = unsafe { &mut *host_data.runtime };
-    let exec: &mut Executor = unsafe { &mut *host_data.exec };
 
     let key_offset = _input[0].to_i32();
     let key_l = _input[1].to_i32();
@@ -1219,8 +1273,6 @@ pub fn console_log(
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
     let mem = _caller.memory_ref(0).unwrap();
-    let rt: &mut WasmMac = unsafe { &mut *host_data.runtime };
-    let exec: &mut Executor = unsafe { &mut *host_data.exec };
 
     let key_offset = _input[0].to_i32();
     let key_l = _input[1].to_i32();
@@ -1281,21 +1333,19 @@ pub fn submit_onchain_trx(
         json!({
             "key": "submitOnchainTrx",
             "input": {
-                // "pointId": rt.point_id,
-                // "machineId": rt.machine_id,
+                "pointId": rt.point_id,
+                "machineId": rt.machine_id,
                 "targetMachineId": target_machine_id,
                 "key": key,
                 "tag": tag,
                 "packet": input,
                 "isFile": is_file,
                 "isBase": is_base,
-                // "isRequesterOnchain": rt.onchain
+                "isRequesterOnchain": rt.onchain
             }
         });
 
-    let packet = j.to_string();
-
-    let val = wasm_send(packet);
+    let val = wasm_send(j);
     let val_l = val.len();
 
     let mut malloc_fn = _inst.get_func_mut("malloc").unwrap();
@@ -1321,7 +1371,6 @@ pub fn plant_trigger(
 ) -> Result<Vec<WasmValue>, CoreError> {
     let mem = _caller.memory_mut(0).unwrap();
     let rt: &mut WasmMac = unsafe { &mut *host_data.runtime };
-    let exec: &mut Executor = unsafe { &mut *host_data.exec };
 
     let in_offset = _input[0].to_i32();
     let in_l = _input[1].to_i32();
@@ -1355,9 +1404,7 @@ pub fn plant_trigger(
             }
         });
 
-    let packet = j.to_string();
-
-    (rt.callback)(packet);
+    (rt.callback)(j);
 
     Ok(vec![WasmValue::from_i64(0)])
 }
@@ -1401,8 +1448,7 @@ pub fn http_post(
             }
         });
 
-    let packet = j.to_string();
-    let val = (rt.callback)(packet);
+    let val = (rt.callback)(j);
     let val_l = val.len();
 
     let mut malloc_fn = _inst.get_func_mut("malloc").unwrap();
@@ -1426,7 +1472,6 @@ pub fn run_docker(
     _caller: &mut CallingFrame,
     _input: Vec<WasmValue>
 ) -> Result<Vec<WasmValue>, CoreError> {
-    let mem = _caller.memory_mut(0).unwrap();
     let rt: &mut WasmMac = unsafe { &mut *host_data.runtime };
     let exec: &mut Executor = unsafe { &mut *host_data.exec };
 
@@ -1462,9 +1507,7 @@ pub fn run_docker(
             }
         });
 
-    let packet = j.to_string();
-
-    let val = (rt.callback)(packet);
+    let val = (rt.callback)(j);
 
     let val_l = val.len();
 
@@ -1522,9 +1565,7 @@ pub fn exec_docker(
             }
         });
 
-    let packet = j.to_string();
-
-    let res = (rt.callback)(packet);
+    let res = (rt.callback)(j);
 
     let jres = json!({
             "data": res
@@ -1594,9 +1635,7 @@ pub fn copy_to_docker(
             }
         });
 
-    let packet = j.to_string();
-
-    let res = (rt.callback)(packet);
+    let res = (rt.callback)(j);
 
     let jres = json!({
             "data": res
@@ -1666,9 +1705,7 @@ pub fn signal_point(
             }
         });
 
-    let packet = j.to_string();
-
-    let val = (rt.callback)(packet);
+    let val = (rt.callback)(j);
     let val_l = val.len();
 
     let mut malloc_fn = _inst.get_func_mut("malloc").unwrap();
@@ -1697,7 +1734,6 @@ pub fn trx_put(
 ) -> Result<Vec<WasmValue>, CoreError> {
     let mem = _caller.memory_mut(0).unwrap();
     let rt: &mut WasmMac = unsafe { &mut *host_data.runtime };
-    let exec: &mut Executor = unsafe { &mut *host_data.exec };
 
     let in_offset = _input[0].to_i32();
     let in_l = _input[1].to_i32();
@@ -1724,7 +1760,6 @@ pub fn trx_del(
 ) -> Result<Vec<WasmValue>, CoreError> {
     let mem = _caller.memory_mut(0).unwrap();
     let rt: &mut WasmMac = unsafe { &mut *host_data.runtime };
-    let exec: &mut Executor = unsafe { &mut *host_data.exec };
 
     let in_offset = _input[0].to_i32();
     let in_l = _input[1].to_i32();
@@ -1926,9 +1961,8 @@ impl ConcurrentRunner {
                         "tokenId": rt.chain_token_id
                     }
                 });
-                let packet = j.to_string();
 
-                wasm_send(packet);
+                wasm_send(j);
             }
         }
 
@@ -1980,7 +2014,6 @@ impl ConcurrentRunner {
                 for t in &vm.sync_tasks {
                     let res_nums = t.deps.clone();
                     let name = t.name.clone();
-                    let mut res_count = 0;
 
                     for r in &res_nums {
                         if !res_wasm_locks.contains_key(r) {
@@ -1990,7 +2023,6 @@ impl ConcurrentRunner {
                             ));
                             res_counter += 1;
                         }
-                        res_count += 1;
                     }
                     all_wasm_tasks.insert(key_counter, (res_nums, index as usize, name));
                     key_counter += 1;

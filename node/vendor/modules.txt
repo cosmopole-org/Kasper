@@ -522,6 +522,9 @@ github.com/opentracing/opentracing-go/log
 # github.com/orcaman/concurrent-map/v2 v2.0.1
 ## explicit; go 1.18
 github.com/orcaman/concurrent-map/v2
+# github.com/pebbe/zmq4 v1.4.0
+## explicit; go 1.16
+github.com/pebbe/zmq4
 # github.com/pelletier/go-toml v1.8.1
 ## explicit; go 1.12
 github.com/pelletier/go-toml
@@ -610,9 +613,6 @@ github.com/planetscale/vtprotobuf/types/known/emptypb
 github.com/planetscale/vtprotobuf/types/known/structpb
 github.com/planetscale/vtprotobuf/types/known/timestamppb
 github.com/planetscale/vtprotobuf/types/known/wrapperspb
-# github.com/second-state/WasmEdge-go v0.14.0
-## explicit; go 1.16
-github.com/second-state/WasmEdge-go/wasmedge
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus

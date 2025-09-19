@@ -20,6 +20,8 @@ thiserror = "1.0.30"
 wasmedge-macro.workspace = true
 wasmedge-sys = { path = "crates/wasmedge-sys", version = "0.19.4", default-features = false }
 wasmedge-types.workspace = true
+zmq = "0.10.0"
+blockingqueue = "0.1.1"
 
 [workspace.dependencies]
 async-wasi = { path = "crates/async-wasi", version = "0.2.0" }
