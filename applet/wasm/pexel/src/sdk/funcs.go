@@ -26,11 +26,11 @@ func CopyToDocker(k int32, kl int32, v int32, lv int32, c int32, cv int32, con i
 
 //go:module env
 //export put
-func Put(k int32, kl int32, v int32, lv int32) int32
+func Put(k int32, kl int32, v int32, lv int32) int64
 
 //go:module env
 //export del
-func Del(k int32, kl int32) int32
+func Del(k int32, kl int32) int64
 
 //go:module env
 //export get
@@ -42,7 +42,7 @@ func GetByPrefix(k int32, kl int32) int64
 
 //go:module env
 //export consoleLog
-func ConsoleLog(k int32, kl int32) int32
+func ConsoleLog(k int32, kl int32) int64
 
 //go:module env
 //export submitOnchainTrx
@@ -50,8 +50,8 @@ func SubmitOnchainTrx(tmO int32, tmL int32, keyO int32, keyL int32, inputO int32
 
 //go:module env
 //export output
-func Output(k int32, kl int32) int32
+func Output(k int32, kl int32) int64
 
 //go:module env
 //export newSyncTask
-func NewSyncTask(k int32, kl int32) int32
+func NewSyncTask(k int32, kl int32) int64

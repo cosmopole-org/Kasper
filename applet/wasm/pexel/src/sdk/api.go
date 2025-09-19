@@ -4,6 +4,7 @@ import (
 	model "applet/src/models"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
@@ -731,10 +732,10 @@ type Trx[T any] struct {
 func ParseArgs(a int64) model.Send {
 	input := model.Send{}
 	str := pointerToBytes(a)
-	Console.Log(string(str))
+	fmt.Println(string(str))
 	e := json.Unmarshal(str, &input)
 	if e != nil {
-		Console.Log("unable to parse args as send.")
+		fmt.Println("unable to parse args as send.")
 		return model.Send{}
 	}
 	return input
