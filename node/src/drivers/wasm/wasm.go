@@ -638,7 +638,7 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 		storage:     storage,
 		docker:      docker,
 		file:        file,
-		aeSocket:    nil,
+		aeSocket:    make(chan string, 1000),
 	}
 	future.Async(func() {
 		zctx, _ := zmq.NewContext()
@@ -649,8 +649,6 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 		fmt.Printf("Connecting to the app engine server...\n")
 		s2, _ := zctx2.NewSocket(zmq.REQ)
 		s2.Connect("tcp://localhost:5556")
-
-		wm.aeSocket = make(chan string, 1000)
 
 		future.Async(func() {
 			for {
