@@ -650,12 +650,14 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 		s2, _ := zctx2.NewSocket(zmq.REQ)
 		s2.Connect("tcp://localhost:5556")
 
-		wm.aeSocket = make(chan string)
+		wm.aeSocket = make(chan string, 1000)
 
 		future.Async(func() {
-			msg := <-wm.aeSocket
-			s2.Send(msg, 0)
-			s2.Recv(0)
+			for {
+				msg := <-wm.aeSocket
+				s2.Send(msg, 0)
+				s2.Recv(0)
+			}
 		}, true)
 
 		for {
