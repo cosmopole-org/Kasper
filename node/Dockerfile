@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update -y && apt-get upgrade -y && \
     apt-get install -y curl dpkg-dev g++ gcc git ninja-build \
-    software-properties-common wget zlib1g-dev && \
+    software-properties-common wget zlib1g-dev imagemagick valgrind && \
     apt-get install -y cmake && \
     apt-get install -y clang-17 liblld-17-dev libpolly-17-dev llvm-17-dev && \
     apt-get clean && \
@@ -36,13 +36,9 @@ RUN make install
 
 WORKDIR /app
 
-RUN apt install -y imagemagick
-
 RUN apt install -y golang
 ENV GOPROXY=https://goproxy.io,direct
 ENV DOCKER_API_VERSION=1.39
-
-RUN apt install -y valgrind
 
 COPY . .
 
