@@ -498,7 +498,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 					println(err)
 					return err.Error(), reqId
 				}
-				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "")
+				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "", true)
 				println(result)
 				if err != nil {
 					return err.Error(), reqId

@@ -52,7 +52,7 @@ func (a *SecureAction) SecurlyActChain(userId string, packetId string, packetBin
 	}
 }
 
-func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, dummy string) (int, any, error) {
+func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary []byte, packetSignature string, input input.IInput, dummy string, insider ...bool) (int, any, error) {
 	origin := input.Origin()
 	if origin == "" {
 		origin = a.core.Id()
@@ -74,7 +74,7 @@ func (a *SecureAction) SecurelyAct(userId string, packetId string, packetBinary 
 		return sc, res, e
 	}
 	if a.core.Id() == origin {
-		success, info := a.Guard.CheckValidity(a.core, packetBinary, packetSignature, userId, input.GetPointId())
+		success, info := a.Guard.CheckValidity(a.core, packetBinary, packetSignature, userId, input.GetPointId(), insider...)
 		if !success {
 			return -1, nil, errors.New("authorization failed")
 		} else {
