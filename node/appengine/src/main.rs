@@ -148,11 +148,7 @@ fn wasm_send(mut data: JsonValue) -> std::string::String {
                 .unwrap();
         }
         let t = triggers.lock().unwrap().remove(&req_id);
-        let t_final = if t.is_none() {
-            "".to_string()
-        } else {
-            t.unwrap().clone()
-        };
+        let t_final = if t.is_none() { "".to_string() } else { t.unwrap().clone() };
         t_final
     };
     res.to_string()
@@ -309,18 +305,17 @@ impl Trx {
         } else if self.newly_deleted.contains_key(&key) {
             return "".to_string();
         } else {
-            let value = str
-                ::from_utf8(
-                    GLOBAL_DB.lock()
-                        .unwrap()
-                        .get(key.as_bytes().to_vec().as_slice())
-                        .unwrap()
-                        .unwrap()
-                        .as_slice()
-                )
-                .unwrap()
-                .to_string();
-
+            let raw_val = GLOBAL_DB.lock().unwrap().get(key.as_bytes().to_vec().as_slice());
+            let value: String;
+            if raw_val.is_ok() {
+                value = if let Some(val) = raw_val.unwrap() {
+                    str::from_utf8(val.as_slice()).unwrap().to_string()
+                } else {
+                    "".to_string()
+                };
+            } else {
+                value = "".to_string()
+            }
             self.store.insert(key.clone(), value.clone());
             value
         }
@@ -625,7 +620,7 @@ impl WasmMac {
     pub fn execute_on_update(&mut self, input: String) {
         let mut config = Config::create().unwrap();
         config.measure_cost(true);
-        let mut stats = Statistics::create().unwrap();
+        let stats = Statistics::create().unwrap();
         let mut store = Store::create().unwrap();
 
         let wasi_mod = wasmedge_sys::WasiModule::create(None, None, None).unwrap();
@@ -827,8 +822,6 @@ impl WasmMac {
                 1
             ).unwrap()
         });
-
-        stats.set_cost_limit(5_000_000);
 
         exec.register_import_module(&mut store, &wasi_mod).unwrap();
         exec.register_import_module(&mut store, extern_mod).unwrap();
