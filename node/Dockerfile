@@ -43,12 +43,16 @@ ENV DOCKER_API_VERSION=1.39
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:$PATH"
 
+RUN apt install -y libzmq3-dev
+RUN pkg-config --modversion libzmq
+
 COPY . .
 
 RUN mkdir /app/storage
 
 RUN bash scripts/install-fcvmm.sh
 RUN bash scripts/install-questdb.sh
+ENV PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig"
 
 WORKDIR /app/appengine
 
