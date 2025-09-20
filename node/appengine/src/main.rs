@@ -85,7 +85,7 @@ fn main() {
     });
     let chan = GLOBAL_REQ_CHAN.clone();
     let sender_handler = thread::spawn(move || {
-        println!("Connecting to hello world server...\n");
+        println!("Connecting to host platform server...\n");
         let context = zmq::Context::new();
         let requester = context.socket(zmq::REQ).unwrap();
         assert!(requester.connect("tcp://localhost:5555").is_ok());

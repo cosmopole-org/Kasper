@@ -646,7 +646,7 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 		s.Bind("tcp://*:5555")
 
 		zctx2, _ := zmq.NewContext()
-		fmt.Printf("Connecting to the server...\n")
+		fmt.Printf("Connecting to the app engine server...\n")
 		s2, _ := zctx2.NewSocket(zmq.REQ)
 		s2.Connect("tcp://localhost:5556")
 
@@ -655,6 +655,7 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 		future.Async(func() {
 			msg := <-wm.aeSocket
 			s2.Send(msg, 0)
+			s2.Recv(0)
 		}, true)
 
 		for {
