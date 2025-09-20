@@ -3,9 +3,10 @@ use std::collections::{ HashMap, VecDeque, BTreeMap };
 use std::ops::{ DerefMut };
 use std::rc::Rc;
 use std::sync::{ Arc, Condvar, Mutex };
+use std::thread::JoinHandle;
 use std::{ thread };
 use std::sync::atomic::{ AtomicBool, AtomicI64, Ordering };
-use serde_json::{ json, Value as JsonValue };
+use serde_json::{ json, value, Value as JsonValue };
 use wasmedge_sys::{ Validator };
 use wasmedge_sys::{
     Executor,
@@ -68,6 +69,62 @@ fn main() {
                             let input = packet["input"].as_str().unwrap().to_string();
                             let machine_id = packet["machineId"].as_str().unwrap().to_string();
                             wasm_run_vm(ast_path, input, machine_id);
+                        });
+                    } else if packet["type"] == "applyTrxEffects" {
+                        let j: JsonValue = serde_json
+                            ::from_str(packet["effects"].as_str().unwrap())
+                            .unwrap();
+                        let global_db = GLOBAL_DB.lock().unwrap();
+                        let trx = global_db.transaction();
+                        for op in j.as_array().unwrap().iter() {
+                            if op["opType"] == "put" {
+                                trx.put(
+                                    op["key"].as_str().unwrap(),
+                                    op["val"].as_str().unwrap()
+                                ).unwrap();
+                            } else if op["opType"] == "del" {
+                                trx.delete(op["key"].as_str().unwrap()).unwrap();
+                            }
+                        }
+                        trx.commit().unwrap();
+                        log("applied transactions effects successfully.".to_string());
+                    } else if packet["type"] == "runOnChain" {
+                        let packet: JsonValue = serde_json
+                            ::from_str(packet["input"].as_str().unwrap())
+                            .unwrap();
+                        let mut trxs: Vec<ChainTrx> = vec![];
+                        for item in packet.as_array().unwrap().iter() {
+                            trxs.push(
+                                ChainTrx::new(
+                                    item["machineId"].as_str().unwrap().to_string(),
+                                    item["key"].as_str().unwrap().to_string(),
+                                    item["payload"].as_str().unwrap().to_string(),
+                                    item["userId"].as_str().unwrap().to_string(),
+                                    item["callbackId"].as_str().unwrap().to_string()
+                                )
+                            );
+                        }
+                        ConcurrentRunner::init(
+                            packet["astStorePath"].as_str().unwrap().to_string(),
+                            trxs
+                        );
+                        let mut hs: Vec<JoinHandle<()>> = vec![];
+                        let mut wasm_thread_pool: WasmThreadPool;
+                        {
+                            unsafe {
+                                let (hs_i, wasm_thread_pool_i) = GLOBAL_CR.lock().unwrap().run();
+                                hs = hs_i;
+                                wasm_thread_pool = wasm_thread_pool_i;
+                            }
+                        }
+                        thread::spawn(move || {
+                            for handle in hs {
+                                handle.join().unwrap();
+                            }
+                            wasm_thread_pool.stop_pool();
+                            wasm_thread_pool.stick();
+                            let mut gcr = unsafe { GLOBAL_CR.lock().unwrap() };
+                            gcr.collect_results();
                         });
                     } else if packet["type"] == "apiResponse" {
                         let request_id = packet["requestId"].as_i64().unwrap();
@@ -1902,9 +1959,8 @@ impl ConcurrentRunner {
         }
     }
 
-    pub fn run(&mut self) {
-        let start_time = Instant::now();
-        let mut wasm_thread_pool = WasmThreadPool::generate(Some(8));
+    pub fn run(&mut self) -> (Vec<JoinHandle<()>>, WasmThreadPool) {
+        let wasm_thread_pool: WasmThreadPool = WasmThreadPool::generate(Some(8));
         self.prepare_context(self.trxs.len());
 
         let mut handles = Vec::new();
@@ -1924,14 +1980,10 @@ impl ConcurrentRunner {
             });
             handles.push(handle);
         }
+        (handles, wasm_thread_pool)
+    }
 
-        for handle in handles {
-            handle.join().unwrap();
-        }
-
-        wasm_thread_pool.stop_pool();
-        wasm_thread_pool.stick();
-
+    pub fn collect_results(&mut self) {
         for rt_opt in &self.wasm_vms {
             if let Some(rt_arc) = rt_opt {
                 let mut rt = rt_arc.lock().unwrap();
@@ -1971,9 +2023,6 @@ impl ConcurrentRunner {
                 wasm_send(j);
             }
         }
-
-        let elapsed = start_time.elapsed();
-        log(format!("executed chain applet transactions in {} microseconds.", elapsed.as_micros()));
     }
 
     pub fn prepare_context(&mut self, vm_count: usize) {

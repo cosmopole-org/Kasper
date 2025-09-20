@@ -38,7 +38,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unsafe"
 
 	zmq "github.com/pebbe/zmq4"
 )
@@ -77,17 +76,22 @@ func (wm *Wasm) ExecuteChainTrxsGroup(trxs []*worker.Trx) {
 		println(e)
 		return
 	}
-	input := C.CString(string(b))
-	astStorePath := C.CString(wm.app.Tools().Storage().StorageRoot() + "/machines")
-	C.wasmRunTrxs(astStorePath, input)
-	C.free(unsafe.Pointer(astStorePath))
-	C.free(unsafe.Pointer(input))
+	input := string(b)
+	astStorePath := wm.app.Tools().Storage().StorageRoot() + "/machines"
+	str, _ := json.Marshal(map[string]any{
+		"type":         "runOnChain",
+		"astStorePath": astStorePath,
+		"input":        input,
+	})
+	wm.aeSocket <- string(str)
 }
 
 func (wm *Wasm) ExecuteChainEffects(effects string) {
-	effectsStr := C.CString(effects)
-	C.wasmRunEffects(effectsStr)
-	C.free(unsafe.Pointer(effectsStr))
+	str, _ := json.Marshal(map[string]any{
+		"type":    "applyTrxEffects",
+		"effects": effects,
+	})
+	wm.aeSocket <- string(str)
 }
 
 type ChainDbOp struct {
