@@ -1330,9 +1330,9 @@ pub fn submit_onchain_trx(
     let target_machine_id = if !is_base {
         str::from_utf8(
             &mem.get_data(tm_offset.cast_unsigned(), tm_l.cast_unsigned()).unwrap()
-        ).unwrap();
+        ).unwrap().to_string()
     } else {
-        "".to_string();
+        "".to_string()
     };
 
     let j =
