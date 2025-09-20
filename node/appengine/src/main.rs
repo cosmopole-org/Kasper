@@ -89,9 +89,11 @@ fn main() {
         let context = zmq::Context::new();
         let requester = context.socket(zmq::REQ).unwrap();
         assert!(requester.connect("tcp://localhost:5555").is_ok());
+        let mut msg = zmq::Message::new();
         loop {
             let packet = chan.pop();
             requester.send(&packet, 0).unwrap();
+            requester.recv(&mut msg, 0).unwrap();
         }
     });
     receiver_handler.join().unwrap();
@@ -145,7 +147,13 @@ fn wasm_send(mut data: JsonValue) -> std::string::String {
                 .wait_while(triggers_ref, |tr| { tr.is_empty() && !tr.contains_key(&req_id) })
                 .unwrap();
         }
-        triggers.lock().unwrap().remove(&req_id).unwrap().clone()
+        let t = triggers.lock().unwrap().remove(&req_id);
+        let t_final = if t.is_none() {
+            "".to_string()
+        } else {
+            t.unwrap().clone()
+        };
+        t_final
     };
     res.to_string()
 }

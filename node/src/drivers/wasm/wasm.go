@@ -668,9 +668,9 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 					"requestId": reqId,
 					"data":      res,
 				})
-				s.Send("", 0)
 				wm.aeSocket <- string(result)
 			}, false)
+			s.Send("", 0)
 		}
 	}, true)
 	return wm
