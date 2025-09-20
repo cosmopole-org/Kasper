@@ -42,16 +42,16 @@ ENV DOCKER_API_VERSION=1.39
 
 COPY . .
 
+RUN mkdir /app/storage
+
+RUN bash scripts/install-fcvmm.sh
+RUN bash scripts/install-questdb.sh
+
 WORKDIR /app/appengine
 
 RUN cargo build
 
 WORKDIR /app
-
-RUN bash scripts/install-fcvmm.sh
-RUN bash scripts/install-questdb.sh
-
-RUN mkdir /app/storage
 
 RUN CGO_ENABLED=1 go build -o kasper .
 
