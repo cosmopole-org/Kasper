@@ -145,7 +145,7 @@ fn wasm_send(mut data: JsonValue) -> std::string::String {
                 .wait_while(triggers_ref, |tr| { tr.is_empty() && !tr.contains_key(&req_id) })
                 .unwrap();
         }
-        triggers.lock().unwrap().get(&req_id).unwrap().clone()
+        triggers.lock().unwrap().remove(&req_id).unwrap().clone()
     };
     res.to_string()
 }
