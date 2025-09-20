@@ -41,7 +41,7 @@ ENV GOPROXY=https://goproxy.io,direct
 ENV DOCKER_API_VERSION=1.39
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-RUN . "$HOME/.cargo/env"
+ENV PATH="$HOME/.cargo/bin:$PATH"
 
 COPY . .
 
