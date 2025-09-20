@@ -32,7 +32,8 @@ func elpisCallback(dataRaw *C.char) *C.char {
 
 //export wasmCallback
 func wasmCallback(dataRaw *C.char) *C.char {
-	return C.CString(KasperApp.Tools().Wasm().WasmCallback(C.GoString(dataRaw)))
+	result, _ := KasperApp.Tools().Wasm().WasmCallback(C.GoString(dataRaw))
+	return C.CString(result)
 }
 
 var exit = make(chan int, 1)
