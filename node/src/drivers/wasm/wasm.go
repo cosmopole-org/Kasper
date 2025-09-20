@@ -49,7 +49,7 @@ type Wasm struct {
 	storage     storage.IStorage
 	docker      docker.IDocker
 	file        file.IFile
-	aeSocket    *zmq.Socket
+	aeSocket    chan string
 }
 
 func (wm *Wasm) Assign(machineId string) {
@@ -65,7 +65,7 @@ func (wm *Wasm) Assign(machineId string) {
 					"input":     data,
 					"astPath":   astPath,
 				})
-				wm.aeSocket.Send(string(str), 0)
+				wm.aeSocket <- string(str)
 			}
 		},
 	})
@@ -116,8 +116,7 @@ func (wm *Wasm) RunVm(machineId string, pointId string, data string) {
 		"input":     input,
 		"astPath":   astPath,
 	})
-	wm.aeSocket.Send(string(str), 0)
-
+	wm.aeSocket <- string(str)
 }
 
 func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
@@ -651,7 +650,12 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 		s2, _ := zctx2.NewSocket(zmq.REQ)
 		s2.Connect("tcp://localhost:5556")
 
-		wm.aeSocket = s2
+		wm.aeSocket = make(chan string)
+
+		future.Async(func() {
+			msg := <-wm.aeSocket
+			s2.Send(msg, 0)
+		}, true)
 
 		for {
 			msg, _ := s.Recv(0)
@@ -663,7 +667,8 @@ func NewWasm(core core.ICore, storageRoot string, storage storage.IStorage, kvDb
 					"requestId": reqId,
 					"data":      res,
 				})
-				s.Send(string(result), 0)
+				s.Send("", 0)
+				wm.aeSocket <- string(result)
 			}, false)
 		}
 	}, true)

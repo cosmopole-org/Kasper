@@ -71,8 +71,13 @@ fn main() {
                         });
                     } else if packet["type"] == "apiResponse" {
                         let request_id = packet["requestId"].as_i64().unwrap();
-                        RESP_MAP.lock().unwrap().insert(request_id, packet["data"].as_str().unwrap().to_string());
+                        RESP_MAP.lock()
+                            .unwrap()
+                            .insert(request_id, packet["data"].as_str().unwrap().to_string());
                         TRIGGER_MAP.lock().unwrap().get(&request_id).unwrap().notify_one();
+                    }
+                    {
+                        responder.lock().unwrap().send("", 0).unwrap();
                     }
                 }
             })
