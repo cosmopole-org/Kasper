@@ -46,6 +46,12 @@ RUN apt install -y valgrind
 
 COPY . .
 
+WORKDIR /app/appengine
+
+RUN cargo build
+
+WORKDIR /app
+
 RUN bash scripts/install-fcvmm.sh
 RUN bash scripts/install-questdb.sh
 
