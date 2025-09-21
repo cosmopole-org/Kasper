@@ -2182,30 +2182,18 @@ impl ConcurrentRunner {
             }
         }
 
-        {
-            log("generating thread pool...".to_string());
+        log("generating thread pool...".to_string());
 
-            let cloned_cr0 = Arc::clone(unsafe { &GLOBAL_CR });
-            let mut cloned_cr_ref0 = cloned_cr0.lock().unwrap();
-            cloned_cr_ref0.thread_pool = Arc::new(
-                Mutex::new(WasmThreadPool::generate(Some(res_counter)))
-            );
-            cloned_cr_ref0.saved_key_counter = key_counter;
-        }
+        self.thread_pool = Arc::new(Mutex::new(WasmThreadPool::generate(Some(res_counter))));
+        self.saved_key_counter = key_counter;
 
-        {
-            for (_r, task) in start_points {
-                let cloned_cr5 = Arc::clone(unsafe { &GLOBAL_CR });
-                let mut cloned_cr_ref5 = cloned_cr5.lock().unwrap();
-                cloned_cr_ref5.exec_wasm_task(task);
-            }
+        for (_r, task) in start_points {
+            self.exec_wasm_task(task);
         }
 
         log("checking...".to_string());
 
-        let cloned_cr_t3 = Arc::clone(unsafe { &GLOBAL_CR });
-        let cloned_cr_ref_t3 = cloned_cr_t3.lock().unwrap();
-        cloned_cr_ref_t3.thread_pool.lock().unwrap().stick();
+        self.thread_pool.lock().unwrap().stick();
         log("parallel transactions execution finished.".to_string());
     }
 
