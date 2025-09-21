@@ -1244,20 +1244,22 @@ impl WasmMac {
         log("finished a trx !".to_string());
 
         if self.onchain {
-            let cr_cloned = Arc::clone(unsafe { &GLOBAL_CR });
-            let mut cr = cr_cloned.lock().unwrap();
-            cr.wasm_done_tasks += 1;
-            if cr.wasm_done_tasks == cr.wasm_count {
-                log("all transactions completed !".to_string());
-                unsafe {
-                    if STEP == 0 {
-                        cr.wasm_done_tasks = 0;
-                        STEP += 1;
-                        log("ready to execute critical scope...".to_string());
-                        cr.wasm_do_critical();
+            thread::spawn(|| {
+                let cr_cloned = Arc::clone(unsafe { &GLOBAL_CR });
+                let mut cr = cr_cloned.lock().unwrap();
+                cr.wasm_done_tasks += 1;
+                if cr.wasm_done_tasks == cr.wasm_count {
+                    log("all transactions completed !".to_string());
+                    unsafe {
+                        if STEP == 0 {
+                            cr.wasm_done_tasks = 0;
+                            STEP += 1;
+                            log("ready to execute critical scope...".to_string());
+                            cr.wasm_do_critical();
+                        }
                     }
                 }
-            }
+            });
         }
     }
 
@@ -1965,7 +1967,7 @@ impl ConcurrentRunner {
             let trx = self.trxs[i].clone();
             let ast_store_path = self.ast_store_path.clone();
             thread::spawn(move || {
-                let mut rt = WasmMac::new_onchain(
+                let rt = WasmMac::new_onchain(
                     trx.machine_id.clone(),
                     i.to_string(),
                     i as i32,
