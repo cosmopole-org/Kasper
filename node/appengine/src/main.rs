@@ -1914,8 +1914,8 @@ pub struct ConcurrentRunner {
     pub wasm_count: i32,
     pub trxs: Vec<ChainTrx>,
     pub ast_store_path: String,
-    pub wasm_vms: Vec<Option<Arc<Mutex<WasmMac>>>>,
-    pub wasm_vm_map: HashMap<String, (usize, Arc<Mutex<WasmMac>>)>,
+    pub wasm_vms: Vec<Option<Arc<Mutex<Rc<RefCell<WasmMac>>>>>>,
+    pub wasm_vm_map: HashMap<String, (usize, Arc<Mutex<Rc<RefCell<WasmMac>>>>)>,
     pub exec_wasm_locks: Vec<Arc<Mutex<()>>>,
     pub main_wasm_lock: Arc<Mutex<()>>,
     pub thread_pool: Arc<Mutex<WasmThreadPool>>,
@@ -1961,7 +1961,6 @@ impl ConcurrentRunner {
 
     pub fn run(&mut self) {
         self.prepare_context(self.trxs.len());
-
         for i in 0..self.trxs.len() {
             let trx = self.trxs[i].clone();
             let ast_store_path = self.ast_store_path.clone();
@@ -1973,7 +1972,15 @@ impl ConcurrentRunner {
                     format!("{}/{}/module", ast_store_path, trx.machine_id),
                     Box::new(wasm_send)
                 );
-                rt.execute_on_chain(trx.input, trx.user_id);
+                let rt_arc = Arc::new(Mutex::new(Rc::new(RefCell::new(rt))));
+                unsafe {
+                    let mut gcr = GLOBAL_CR.lock().unwrap();
+                    let rt_cloned = Arc::clone(&rt_arc);
+                    gcr.register_wasm_mac(rt_cloned);
+                }
+                let rt_cloned2 = Arc::clone(&rt_arc);
+                let rt_ref = rt_cloned2.lock().unwrap();
+                rt_ref.borrow_mut().execute_on_chain(trx.input, trx.user_id);
             });
         }
     }
@@ -1981,7 +1988,8 @@ impl ConcurrentRunner {
     pub fn collect_results(&mut self) {
         for rt_opt in &self.wasm_vms {
             if let Some(rt_arc) = rt_opt {
-                let mut rt = rt_arc.lock().unwrap();
+                let rt_lock = rt_arc.lock().unwrap();
+                let mut rt = rt_lock.borrow_mut();
                 let stats = rt.vm_stats.clone().unwrap();
                 let cloned_stats = Arc::clone(&stats);
                 let cost = cloned_stats.lock().unwrap().cost_in_total();
@@ -2029,8 +2037,9 @@ impl ConcurrentRunner {
         self.exec_wasm_locks = (0..vm_count).map(|_| Arc::new(Mutex::new(()))).collect();
     }
 
-    pub fn register_wasm_mac(&mut self, rt: Arc<Mutex<WasmMac>>) {
-        let rt_guard = rt.lock().unwrap();
+    pub fn register_wasm_mac(&mut self, rt: Arc<Mutex<Rc<RefCell<WasmMac>>>>) {
+        let rt_guard_lock = rt.lock().unwrap();
+        let rt_guard = rt_guard_lock.borrow_mut();
         let id = rt_guard.id.clone();
         let index = rt_guard.index;
         drop(rt_guard);
@@ -2042,7 +2051,7 @@ impl ConcurrentRunner {
         self.wasm_vms[index as usize] = Some(cloned_rt2);
     }
 
-    pub fn wasm_run_task<F>(&self, task: F, index: usize) where F: Fn(&mut WasmMac) {
+    pub fn wasm_run_task<F>(&self, task: F, index: usize) where F: Fn(&mut Rc<RefCell<WasmMac>>) {
         if let Some(rt_arc) = &self.wasm_vms[index] {
             let mut rt = rt_arc.lock().unwrap();
             task(&mut rt);
@@ -2065,7 +2074,8 @@ impl ConcurrentRunner {
         for index in 0..self.wasm_count {
             if let Some(vm_arc) = &self.wasm_vms[index as usize] {
                 log(format!("checking vm {vm_arc_id}...", vm_arc_id = index));
-                let vm = vm_arc.lock().unwrap();
+                let vm_lock = vm_arc.lock().unwrap();
+                let vm = vm_lock.borrow_mut();
                 for t in &vm.sync_tasks {
                     log(format!("checking sync task {task_name}...", task_name = t.name));
                     let res_nums = t.deps.clone();
@@ -2264,14 +2274,14 @@ impl ConcurrentRunner {
                             log(format!("ok 15 ..."));
 
                             let cloned_task2 = Arc::clone(&task);
-                            cloned_cr_ref1.wasm_run_task(move |vm: &mut WasmMac| {
+                            cloned_cr_ref1.wasm_run_task(move |vm: &mut Rc<RefCell<WasmMac>>| {
                                 log(format!("ok 16 ..."));
 
                                 let cloned_task_ref2 = cloned_task2.lock().unwrap();
 
                                 log(format!("ok 17 ..."));
 
-                                vm.run_task(cloned_task_ref2.name.clone());
+                                vm.borrow_mut().run_task(cloned_task_ref2.name.clone());
                             }, cloned_task_ref_t.vm_index.clone() as usize);
                         }
                         let mut next_wasm_tasks: Vec<Arc<Mutex<WasmTask>>> = Vec::new();
