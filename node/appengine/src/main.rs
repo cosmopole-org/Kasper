@@ -105,21 +105,23 @@ fn main() {
                             );
                         }
                         thread::spawn(move || {
+                            println!();
+                            println!("generating concurrent runner...");
+                            println!();
                             ConcurrentRunner::init(
                                 packet["astStorePath"].as_str().unwrap().to_string(),
                                 trxs
                             );
                             unsafe {
+                                println!();
+                                println!("running paralell transactions...");
+                                println!();
                                 let mut gcr_lock = GLOBAL_CR.lock().unwrap();
-                                let wasm_thread_pool = gcr_lock.run();
+                                gcr_lock.run();
                                 drop(gcr_lock);
-                                let mut wtp = wasm_thread_pool.lock().unwrap();
-                                wtp.stop_pool();
-                                wtp.stick();
-                                drop(wtp);
-                                let mut gcr_lock2 = GLOBAL_CR.lock().unwrap();
-                                gcr_lock2.collect_results();
-                                drop(gcr_lock2);
+                                println!();
+                                println!("waiting for paralell transactions to be done...");
+                                println!();
                             }
                         });
                     } else if packet["type"] == "apiResponse" {
@@ -1961,8 +1963,7 @@ impl ConcurrentRunner {
         }
     }
 
-    pub fn run(&mut self) -> Arc<Mutex<WasmThreadPool>> {
-        let wasm_thread_pool: WasmThreadPool = WasmThreadPool::generate(Some(8));
+    pub fn run(&mut self) {
         self.prepare_context(self.trxs.len());
 
         let mut handles = Vec::new();
@@ -1982,12 +1983,6 @@ impl ConcurrentRunner {
             });
             handles.push(handle);
         }
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
-
-        Arc::new(Mutex::new(wasm_thread_pool))
     }
 
     pub fn collect_results(&mut self) {
@@ -2186,6 +2181,9 @@ impl ConcurrentRunner {
         let cloned_cr_t3 = Arc::clone(unsafe { &GLOBAL_CR });
         let cloned_cr_ref_t3 = cloned_cr_t3.lock().unwrap();
         cloned_cr_ref_t3.thread_pool.lock().unwrap().stick();
+        println!();
+        println!("parallel transactions execution finished.");
+        println!();
     }
 
     pub fn exec_wasm_task(&mut self, task: Arc<Mutex<WasmTask>>) {
@@ -2244,6 +2242,9 @@ impl ConcurrentRunner {
                                 wasm_done_wasm_tasks_count.load(Ordering::Acquire) ==
                                 cloned_cr_ref3.saved_key_counter
                             {
+                                println!();
+                                println!("finishing and stopping parallel transactions thread...");
+                                println!();
                                 cloned_cr_ref3.thread_pool.lock().unwrap().stop_pool();
                             }
                             let mut cloned_outputs: Option<
