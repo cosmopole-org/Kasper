@@ -1,5 +1,6 @@
 use std::cell::{ RefCell };
 use std::collections::{ HashMap, VecDeque, BTreeMap };
+use std::fmt::format;
 use std::ops::{ DerefMut };
 use std::rc::Rc;
 use std::sync::{ Arc, Condvar, Mutex };
@@ -1252,6 +1253,7 @@ impl WasmMac {
                     if STEP == 0 {
                         cr.wasm_done_tasks = 0;
                         STEP += 1;
+                        log("ready to execute critical scope...".to_string());
                         cr.wasm_do_critical();
                     }
                 }
@@ -2058,14 +2060,19 @@ impl ConcurrentRunner {
         let mut start_points: HashMap<String, Arc<Mutex<WasmTask>>> = HashMap::new();
         let mut res_counter = 0;
 
+        log("iterating over vms...".to_string());
+
         for index in 0..self.wasm_count {
             if let Some(vm_arc) = &self.wasm_vms[index as usize] {
+                log(format!("checking vm {vm_arc_id}...", vm_arc_id = index));
                 let vm = vm_arc.lock().unwrap();
                 for t in &vm.sync_tasks {
+                    log(format!("checking sync task {task_name}...", task_name = t.name));
                     let res_nums = t.deps.clone();
                     let name = t.name.clone();
 
                     for r in &res_nums {
+                        log(format!("checking resource {r}..."));
                         if !res_wasm_locks.contains_key(r) {
                             res_wasm_locks.insert(r.clone(), (
                                 None,
@@ -2080,8 +2087,12 @@ impl ConcurrentRunner {
             }
         }
 
+        log("iterating upto key counter".to_string());
+
         for i in 1..=key_counter {
             if let Some((res_nums, vm_index, name)) = all_wasm_tasks.get(&i) {
+                log(format!("generating wasm_task {i}..."));
+
                 let inputs = Arc::new(Mutex::new(HashMap::new()));
                 let outputs = Arc::new(Mutex::new(HashMap::new()));
                 let task = Arc::new(
@@ -2100,7 +2111,10 @@ impl ConcurrentRunner {
                 task_refs.insert(format!("{}:{}", vm_index_str, name), cloned_task);
 
                 for r in res_nums {
+                    log(format!("check resource {r} details..."));
+
                     if r.starts_with("lock_") {
+                        log("resource is a lock".to_string());
                         if let Some(t) = task_refs.get(&format!("{}:{}", vm_index_str, r)) {
                             let t_cloned = Arc::clone(&t);
                             let t_cloned_ref = t_cloned.lock().unwrap();
@@ -2114,15 +2128,17 @@ impl ConcurrentRunner {
                             outputs_cloned_ref.insert(t_cloned_ref.id.clone(), t_cloned3);
                         }
                     } else {
+                        log("resource is a data".to_string());
                         if let Some((first_task, _)) = res_wasm_locks.get_mut(r) {
                             if first_task.is_none() {
+                                log("first task is empty".to_string());
                                 let cloned_task = Arc::clone(&task);
                                 *first_task = Some(cloned_task);
                                 let cloned_task2 = Arc::clone(&task);
                                 start_points.insert(r.clone(), cloned_task2);
+                                log("done 1".to_string());
                             } else {
-                                let cloned_task = Arc::clone(&task);
-                                *first_task = Some(cloned_task);
+                                log("first task is not empty".to_string());
                                 let cloned_task2 = Arc::clone(&task);
                                 let cloned_task_ref2 = cloned_task2.lock().unwrap();
                                 let inputs_cloned = Arc::clone(&cloned_task_ref2.inputs);
@@ -2146,6 +2162,7 @@ impl ConcurrentRunner {
                                     Some(cloned_task5),
                                     l_cloned,
                                 ));
+                                log("done 2".to_string());
                             }
                         }
                     }
@@ -2154,6 +2171,8 @@ impl ConcurrentRunner {
         }
 
         {
+            log("generating thread pool...".to_string());
+
             let cloned_cr0 = Arc::clone(unsafe { &GLOBAL_CR });
             let mut cloned_cr_ref0 = cloned_cr0.lock().unwrap();
             cloned_cr_ref0.thread_pool = Arc::new(
@@ -2170,6 +2189,8 @@ impl ConcurrentRunner {
             }
         }
 
+        log("checking...".to_string());
+
         let cloned_cr_t3 = Arc::clone(unsafe { &GLOBAL_CR });
         let cloned_cr_ref_t3 = cloned_cr_t3.lock().unwrap();
         cloned_cr_ref_t3.thread_pool.lock().unwrap().stick();
@@ -2177,96 +2198,166 @@ impl ConcurrentRunner {
     }
 
     pub fn exec_wasm_task(&mut self, task: Arc<Mutex<WasmTask>>) {
+        log("ok 1".to_string());
         unsafe {
             let wasm_done_wasm_tasks_count = Arc::new(AtomicI32::new(1));
             let mut ready_to_exec = false;
             {
+                log("ok 2".to_string());
                 let _gcr = GLOBAL_CR.lock().unwrap();
+                log("ok 3".to_string());
                 let _mg = _gcr.wasm_global_lock.lock().unwrap();
+                log("ok 4".to_string());
                 let cloned_task_t = Arc::clone(&task);
                 let mut cloned_task_ref_t = cloned_task_t.lock().unwrap();
+                log("ok 5".to_string());
                 if cloned_task_ref_t.started == false {
+                    log("ok 6".to_string());
                     let mut passed = true;
                     for (_, val) in cloned_task_ref_t.inputs.lock().unwrap().iter() {
+                        log(format!("ok 7 ... {val_bool}", val_bool = val.0));
                         if !val.0 {
                             passed = false;
                             break;
                         }
                     }
                     if passed {
+                        log(format!("ok 8 ..."));
                         cloned_task_ref_t.started = true;
                         ready_to_exec = true;
                     }
                 }
             }
+
+            log(format!("ok 9 ..."));
+
             if ready_to_exec {
+                log(format!("ok 10 ..."));
+
                 let cloned_cr_t = Arc::clone(&GLOBAL_CR);
                 let cloned_cr_ref_t = cloned_cr_t.lock().unwrap();
+
+                log(format!("ok 11 ..."));
+
                 cloned_cr_ref_t.thread_pool
                     .lock()
                     .unwrap()
                     .enqueue(move || {
                         {
+                            log(format!("ok 12 ..."));
+
                             let cloned_cr1 = Arc::clone(&GLOBAL_CR);
                             let cloned_cr_ref1 = cloned_cr1.lock().unwrap();
+
+                            log(format!("ok 13 ..."));
+
                             let cloned_task_t = Arc::clone(&task);
                             let cloned_task_ref_t = cloned_task_t.lock().unwrap();
+
+                            log(format!("ok 14 ..."));
+
                             let _mg = cloned_cr_ref1.exec_wasm_locks
                                 .get(cloned_task_ref_t.vm_index as usize)
                                 .unwrap()
                                 .lock();
 
+                            log(format!("ok 15 ..."));
+
                             let cloned_task2 = Arc::clone(&task);
                             cloned_cr_ref1.wasm_run_task(move |vm: &mut WasmMac| {
+                                log(format!("ok 16 ..."));
+
                                 let cloned_task_ref2 = cloned_task2.lock().unwrap();
+
+                                log(format!("ok 17 ..."));
+
                                 vm.run_task(cloned_task_ref2.name.clone());
                             }, cloned_task_ref_t.vm_index.clone() as usize);
                         }
                         let mut next_wasm_tasks: Vec<Arc<Mutex<WasmTask>>> = Vec::new();
                         {
+                            log(format!("ok 18 ..."));
+
                             let cloned_cr3 = Arc::clone(&GLOBAL_CR);
                             let cloned_cr_ref3 = cloned_cr3.lock().unwrap();
+
+                            log(format!("ok 19 ..."));
+
                             let _mg = cloned_cr_ref3.wasm_global_lock.lock();
                             wasm_done_wasm_tasks_count.fetch_add(1, Ordering::Acquire);
                             if
                                 wasm_done_wasm_tasks_count.load(Ordering::Acquire) ==
                                 cloned_cr_ref3.saved_key_counter
                             {
-                                println!();
-                                println!("finishing and stopping parallel transactions thread...");
-                                println!();
+                                log(
+                                    "finishing and stopping parallel transactions thread...".to_string()
+                                );
                                 cloned_cr_ref3.thread_pool.lock().unwrap().stop_pool();
                             }
                             let mut cloned_outputs: Option<
                                 HashMap<i32, Arc<Mutex<WasmTask>>>
                             > = None;
                             {
+                                log("ok 20".to_string());
+
                                 let cloned_task1 = Arc::clone(&task);
                                 let cloned_task_ref1 = cloned_task1.lock().unwrap();
+
+                                log("ok 21".to_string());
+
                                 let cloned_outputs_1 = Arc::clone(&cloned_task_ref1.outputs);
                                 let cloned_outputs_ref1 = cloned_outputs_1.lock().unwrap();
+
+                                log("ok 22".to_string());
+
                                 cloned_outputs = Some(cloned_outputs_ref1.clone());
                             }
+
+                            log("ok 23".to_string());
+
                             for (_, val) in cloned_outputs.unwrap().iter() {
+                                log("ok 24".to_string());
+
                                 let cloned_task_t2 = Arc::clone(&val);
                                 let cloned_task_ref_t2 = cloned_task_t2.lock().unwrap();
+
+                                log("ok 25".to_string());
+
                                 if !cloned_task_ref_t2.started {
+                                    log("ok 26".to_string());
+
                                     let cloned_task1 = Arc::clone(&task);
                                     let cloned_task_ref1 = cloned_task1.lock().unwrap();
+
+                                    log("ok 27".to_string());
+
                                     cloned_task_ref_t2.inputs
                                         .lock()
                                         .unwrap()
                                         .get_mut(&cloned_task_ref1.id.clone())
                                         .unwrap().0 = true;
+
+                                    log("ok 28".to_string());
+
                                     let cloned_task_t3 = Arc::clone(&val);
                                     next_wasm_tasks.push(cloned_task_t3);
+
+                                    log("ok 29".to_string());
                                 }
                             }
                         }
+
+                        log("ok 30".to_string());
+
                         for t in next_wasm_tasks {
+                            log("ok 31".to_string());
+
                             let cloned_t = Arc::clone(&t);
                             let cloned_cr4 = Arc::clone(&GLOBAL_CR);
                             let mut cloned_cr_ref4 = cloned_cr4.lock().unwrap();
+
+                            log("ok 32".to_string());
+
                             cloned_cr_ref4.exec_wasm_task(cloned_t);
                         }
                     });
