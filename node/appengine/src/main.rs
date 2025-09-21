@@ -89,11 +89,11 @@ fn main() {
                         trx.commit().unwrap();
                         log("applied transactions effects successfully.".to_string());
                     } else if packet["type"] == "runOnChain" {
-                        let packet: JsonValue = serde_json
+                        let input: JsonValue = serde_json
                             ::from_str(packet["input"].as_str().unwrap())
                             .unwrap();
                         let mut trxs: Vec<ChainTrx> = vec![];
-                        for item in packet.as_array().unwrap().iter() {
+                        for item in input.as_array().unwrap().iter() {
                             trxs.push(
                                 ChainTrx::new(
                                     item["machineId"].as_str().unwrap().to_string(),

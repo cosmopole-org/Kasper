@@ -96,7 +96,8 @@ func Run(signal model.Send) {
 		{
 			text := input["text"].(string)
 			if strings.Contains(text, "@pexel") {
-				if strings.Trim(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(text, "@pexel", ""), "\n", ""), "\t", ""), " ") == "/activate" {
+				str := strings.Trim(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(text, "@pexel", ""), "\n", ""), "\t", ""), " ")
+				if str == "/activate" {
 					trx.Db.Points.CreateAndInsert(&api.Point{
 						Id: signal.Point.Id,
 					})
@@ -115,8 +116,16 @@ func Run(signal model.Send) {
 						Data:     data,
 					}
 					trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/storage/uploadPointEntity", "", "", "", inp)
+				} else if str == "/test" {
+					token := input["token"].(string)
+					trx.Chain.SubmitAppletPacketTrx(signal.Point.Id, "47@global", "", "", "", token, "", map[string]any{"type": "hello"})
 				}
 			}
+			break
+		}
+	case "hello":
+		{
+			api.Console.Log("hello world !!!")
 			break
 		}
 	}

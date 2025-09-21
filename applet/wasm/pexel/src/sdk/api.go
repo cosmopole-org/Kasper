@@ -646,7 +646,7 @@ type OffChain struct {
 func (c *Chain) SubmitAppletPacketTrx(pointId string, targetMachineId string, key string, userId string, signature string, tokenId string, tag string, input any) []byte {
 	tmO, tmL := bytesToPointer([]byte(targetMachineId))
 	tagO, tagL := bytesToPointer([]byte("00" + tag))
-	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + tokenId))
+	keyO, keyL := bytesToPointer([]byte(pointId + "|" + key + "|" + userId + "|" + signature + "|" + tokenId + "|" + "true"))
 	b, e := json.Marshal(input)
 	if e != nil {
 		Console.Log(e.Error())

@@ -292,8 +292,11 @@ func (c *Blockchain) GetNodeOwnerId(origin string) string {
 
 func (c *Blockchain) GetValidatorsOfMachineShard(machineId string) []string {
 	validators := []string{}
-	for k, _ := range c.app.Executors() {
-		validators = append(validators, k)
+	mainChain, _ := c.chains.Get("main")
+	shardId := mainChain.sharder.Hasher.GetShard(machineId)
+	shardChain, _ := mainChain.shardChains.Get(shardId)
+	for _, peer := range shardChain.shardLedger.Peers.Peers {
+		validators = append(validators, strings.Split(peer.NetAddr, ":")[0])
 	}
 	return validators
 }
