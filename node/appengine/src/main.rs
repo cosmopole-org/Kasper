@@ -109,20 +109,18 @@ fn main() {
                                 packet["astStorePath"].as_str().unwrap().to_string(),
                                 trxs
                             );
-                            let wasm_thread_pool: Arc<Mutex<WasmThreadPool>>;
-                            {
-                                unsafe {
-                                    let wasm_thread_pool_i = GLOBAL_CR.lock().unwrap().run();
-                                    wasm_thread_pool = wasm_thread_pool_i;
-                                }
-                            }
-                            thread::spawn(move || {
+                            unsafe {
+                                let mut gcr_lock = GLOBAL_CR.lock().unwrap();
+                                let wasm_thread_pool = gcr_lock.run();
+                                drop(gcr_lock);
                                 let mut wtp = wasm_thread_pool.lock().unwrap();
                                 wtp.stop_pool();
                                 wtp.stick();
-                                let mut gcr = unsafe { GLOBAL_CR.lock().unwrap() };
-                                gcr.collect_results();
-                            });
+                                drop(wtp);
+                                let mut gcr_lock2 = GLOBAL_CR.lock().unwrap();
+                                gcr_lock2.collect_results();
+                                drop(gcr_lock2);
+                            }
                         });
                     } else if packet["type"] == "apiResponse" {
                         let request_id = packet["requestId"].as_i64().unwrap();
