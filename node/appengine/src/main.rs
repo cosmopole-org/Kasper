@@ -1244,18 +1244,15 @@ impl WasmMac {
 
         if self.onchain {
             let cr_cloned = Arc::clone(unsafe { &GLOBAL_CR });
-            let cr = cr_cloned.lock().unwrap();
-            let _lock = cr.wasm_global_lock.lock().unwrap();
-            let cr_cloned2 = Arc::clone(unsafe { &GLOBAL_CR });
-            let mut cr2 = cr_cloned2.lock().unwrap();
-            cr2.wasm_done_tasks += 1;
-            if cr2.wasm_done_tasks == cr2.wasm_count {
+            let mut cr = cr_cloned.lock().unwrap();
+            cr.wasm_done_tasks += 1;
+            if cr.wasm_done_tasks == cr.wasm_count {
                 log("all transactions completed !".to_string());
                 unsafe {
                     if STEP == 0 {
-                        cr2.wasm_done_tasks = 0;
+                        cr.wasm_done_tasks = 0;
                         STEP += 1;
-                        cr2.wasm_do_critical();
+                        cr.wasm_do_critical();
                     }
                 }
             }
