@@ -108,21 +108,17 @@ fn main() {
                             packet["astStorePath"].as_str().unwrap().to_string(),
                             trxs
                         );
-                        let mut hs: Vec<JoinHandle<()>> = vec![];
-                        let mut wasm_thread_pool: WasmThreadPool;
+                        let wasm_thread_pool: Arc<Mutex<WasmThreadPool>>;
                         {
                             unsafe {
-                                let (hs_i, wasm_thread_pool_i) = GLOBAL_CR.lock().unwrap().run();
-                                hs = hs_i;
+                                let wasm_thread_pool_i = GLOBAL_CR.lock().unwrap().run();
                                 wasm_thread_pool = wasm_thread_pool_i;
                             }
                         }
                         thread::spawn(move || {
-                            for handle in hs {
-                                handle.join().unwrap();
-                            }
-                            wasm_thread_pool.stop_pool();
-                            wasm_thread_pool.stick();
+                            let mut wtp = wasm_thread_pool.lock().unwrap();
+                            wtp.stop_pool();
+                            wtp.stick();
                             let mut gcr = unsafe { GLOBAL_CR.lock().unwrap() };
                             gcr.collect_results();
                         });
@@ -917,7 +913,10 @@ impl WasmMac {
         let c = ((val_offset as i64) << 32) | (val_l as i64);
 
         let mut run_fn = instance_item_ref.get_func_mut("run").unwrap();
-        exec_item_ref.call_func(&mut run_fn, [WasmValue::from_i64(c)]).unwrap();
+        let res = exec_item_ref.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+        if res.is_ok() {
+            res.unwrap();
+        }
     }
 
     pub fn run_task(&mut self, task_id: String) {
@@ -1239,7 +1238,10 @@ impl WasmMac {
             let c = ((val_offset as i64) << 32) | (val_l as i64);
 
             let mut run_fn = instance_item_ref.get_func_mut("run").unwrap();
-            exec_item_ref.call_func(&mut run_fn, [WasmValue::from_i64(c)]).unwrap();
+            let res = exec_item_ref.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+            if res.is_ok() {
+                res.unwrap();
+            }
         }
 
         if self.onchain {
@@ -1959,7 +1961,7 @@ impl ConcurrentRunner {
         }
     }
 
-    pub fn run(&mut self) -> (Vec<JoinHandle<()>>, WasmThreadPool) {
+    pub fn run(&mut self) -> Arc<Mutex<WasmThreadPool>> {
         let wasm_thread_pool: WasmThreadPool = WasmThreadPool::generate(Some(8));
         self.prepare_context(self.trxs.len());
 
@@ -1980,7 +1982,12 @@ impl ConcurrentRunner {
             });
             handles.push(handle);
         }
-        (handles, wasm_thread_pool)
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        Arc::new(Mutex::new(wasm_thread_pool))
     }
 
     pub fn collect_results(&mut self) {

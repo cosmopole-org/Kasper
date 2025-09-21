@@ -736,7 +736,7 @@ func ParseArgs(a int64) model.Send {
 	e := json.Unmarshal(str, &input)
 	if e != nil {
 		fmt.Println("unable to parse args as send.")
-		return model.Send{}
+		return model.Send{Data: string(str)}
 	}
 	return input
 }

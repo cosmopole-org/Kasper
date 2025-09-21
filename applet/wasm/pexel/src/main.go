@@ -3,6 +3,7 @@ package main
 import (
 	model "applet/src/models"
 	api "applet/src/sdk"
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,8 @@ func Run(signal model.Send) {
 
 	api.Init()
 
+	isOnChain := signal.Point.Id == ""
+
 	trx := &api.Trx[api.MyDb]{
 		Db:       api.NewMyDb(),
 		Chain:    &api.Chain{},
@@ -25,16 +28,16 @@ func Run(signal model.Send) {
 	}
 
 	input := map[string]any{}
-	err := json.Unmarshal([]byte(signal.Data), &input)
+	err := json.Unmarshal(bytes.Trim([]byte(signal.Data), "\x00"), &input)
 	if err != nil {
 		api.Console.Log(err.Error())
 	}
 	actRaw, ok := input["type"]
-	if !ok {
+	if !ok && !isOnChain {
 		trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 1}, true)
 	}
 	act, ok := actRaw.(string)
-	if !ok {
+	if !ok && !isOnChain {
 		trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"success": false, "errCode": 2}, true)
 	}
 
