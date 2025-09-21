@@ -104,23 +104,25 @@ fn main() {
                                 )
                             );
                         }
-                        ConcurrentRunner::init(
-                            packet["astStorePath"].as_str().unwrap().to_string(),
-                            trxs
-                        );
-                        let wasm_thread_pool: Arc<Mutex<WasmThreadPool>>;
-                        {
-                            unsafe {
-                                let wasm_thread_pool_i = GLOBAL_CR.lock().unwrap().run();
-                                wasm_thread_pool = wasm_thread_pool_i;
-                            }
-                        }
                         thread::spawn(move || {
-                            let mut wtp = wasm_thread_pool.lock().unwrap();
-                            wtp.stop_pool();
-                            wtp.stick();
-                            let mut gcr = unsafe { GLOBAL_CR.lock().unwrap() };
-                            gcr.collect_results();
+                            ConcurrentRunner::init(
+                                packet["astStorePath"].as_str().unwrap().to_string(),
+                                trxs
+                            );
+                            let wasm_thread_pool: Arc<Mutex<WasmThreadPool>>;
+                            {
+                                unsafe {
+                                    let wasm_thread_pool_i = GLOBAL_CR.lock().unwrap().run();
+                                    wasm_thread_pool = wasm_thread_pool_i;
+                                }
+                            }
+                            thread::spawn(move || {
+                                let mut wtp = wasm_thread_pool.lock().unwrap();
+                                wtp.stop_pool();
+                                wtp.stick();
+                                let mut gcr = unsafe { GLOBAL_CR.lock().unwrap() };
+                                gcr.collect_results();
+                            });
                         });
                     } else if packet["type"] == "apiResponse" {
                         let request_id = packet["requestId"].as_i64().unwrap();
