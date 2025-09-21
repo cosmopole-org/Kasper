@@ -807,7 +807,7 @@ var network = &NetHttp{}
 
 var syncTasks = map[string]func(){}
 
-func doSync(task func(), deps []string, name string) {
+func DoSync(task func(), deps []string, name string) {
 	syncTasks[name] = task
 	packet := map[string]any{
 		"name": name,

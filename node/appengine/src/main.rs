@@ -105,23 +105,17 @@ fn main() {
                             );
                         }
                         thread::spawn(move || {
-                            println!();
-                            println!("generating concurrent runner...");
-                            println!();
+                            log("generating concurrent runner...".to_string());
                             ConcurrentRunner::init(
                                 packet["astStorePath"].as_str().unwrap().to_string(),
                                 trxs
                             );
                             unsafe {
-                                println!();
-                                println!("running paralell transactions...");
-                                println!();
+                                log("running paralell transactions...".to_string());
                                 let mut gcr_lock = GLOBAL_CR.lock().unwrap();
                                 gcr_lock.run();
                                 drop(gcr_lock);
-                                println!();
-                                println!("waiting for paralell transactions to be done...");
-                                println!();
+                                log("waiting for paralell transactions to be done...".to_string());
                             }
                         });
                     } else if packet["type"] == "apiResponse" {
@@ -1246,6 +1240,8 @@ impl WasmMac {
             }
         }
 
+        log("finished a trx !".to_string());
+
         if self.onchain {
             let cr_cloned = Arc::clone(unsafe { &GLOBAL_CR });
             let cr = cr_cloned.lock().unwrap();
@@ -1254,6 +1250,7 @@ impl WasmMac {
             let mut cr2 = cr_cloned2.lock().unwrap();
             cr2.wasm_done_tasks += 1;
             if cr2.wasm_done_tasks == cr2.wasm_count {
+                log("all transactions completed !".to_string());
                 unsafe {
                     if STEP == 0 {
                         cr2.wasm_done_tasks = 0;
@@ -1966,12 +1963,10 @@ impl ConcurrentRunner {
     pub fn run(&mut self) {
         self.prepare_context(self.trxs.len());
 
-        let mut handles = Vec::new();
-
         for i in 0..self.trxs.len() {
             let trx = self.trxs[i].clone();
             let ast_store_path = self.ast_store_path.clone();
-            let handle = thread::spawn(move || {
+            thread::spawn(move || {
                 let mut rt = WasmMac::new_onchain(
                     trx.machine_id.clone(),
                     i.to_string(),
@@ -1981,7 +1976,6 @@ impl ConcurrentRunner {
                 );
                 rt.execute_on_chain(trx.input, trx.user_id);
             });
-            handles.push(handle);
         }
     }
 
@@ -2028,6 +2022,9 @@ impl ConcurrentRunner {
     }
 
     pub fn prepare_context(&mut self, vm_count: usize) {
+        unsafe {
+            STEP = 0;
+        }
         self.wasm_count = vm_count as i32;
         self.wasm_vms = vec![None; vm_count];
         self.exec_wasm_locks = (0..vm_count).map(|_| Arc::new(Mutex::new(()))).collect();
@@ -2063,7 +2060,6 @@ impl ConcurrentRunner {
         > = HashMap::new();
         let mut start_points: HashMap<String, Arc<Mutex<WasmTask>>> = HashMap::new();
         let mut res_counter = 0;
-        let mut c = 0;
 
         for index in 0..self.wasm_count {
             if let Some(vm_arc) = &self.wasm_vms[index as usize] {
@@ -2083,7 +2079,6 @@ impl ConcurrentRunner {
                     }
                     all_wasm_tasks.insert(key_counter, (res_nums, index as usize, name));
                     key_counter += 1;
-                    c += 1;
                 }
             }
         }
@@ -2181,9 +2176,7 @@ impl ConcurrentRunner {
         let cloned_cr_t3 = Arc::clone(unsafe { &GLOBAL_CR });
         let cloned_cr_ref_t3 = cloned_cr_t3.lock().unwrap();
         cloned_cr_ref_t3.thread_pool.lock().unwrap().stick();
-        println!();
-        println!("parallel transactions execution finished.");
-        println!();
+        log("parallel transactions execution finished.".to_string());
     }
 
     pub fn exec_wasm_task(&mut self, task: Arc<Mutex<WasmTask>>) {
