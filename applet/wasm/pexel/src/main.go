@@ -118,7 +118,8 @@ func Run(signal model.Send) {
 					trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/storage/uploadPointEntity", "", "", "", inp)
 				} else if str == "/test" {
 					token := input["token"].(string)
-					trx.Chain.SubmitAppletPacketTrx(signal.Point.Id, "47@global", "", "", "", token, "", map[string]any{"type": "hello"})
+					params, _ := json.Marshal(map[string]any{"type": "hello"})
+					trx.Chain.SubmitAppletPacketTrx(signal.Point.Id, "47@global", "", signal.User.Id, "", token, "", map[string]any{"params": string(params), "tokenId": token})
 				}
 			}
 			break

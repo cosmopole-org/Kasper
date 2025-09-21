@@ -311,7 +311,7 @@ func (c *Core) ExecAppletRequestOnChain(pointId string, machineId string, key st
 		return nil
 	})
 	future.Async(func() {
-		c.chain <- chain.ChainAppletRequest{TokenId: tokenId, Tag: tag, Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload, Runtime: runtimeType}
+		c.chain <- chain.ChainAppletRequest{MachineId: machineId, TokenId: tokenId, Tag: tag, Signatures: []string{c.SignPacket(payload), signature}, Submitter: c.id, RequestId: callbackId, Author: "user::" + userId, Key: key, Payload: payload, Runtime: runtimeType}
 	}, false)
 }
 
