@@ -2214,10 +2214,6 @@ impl ConcurrentRunner {
             let mut ready_to_exec = false;
             {
                 log("ok 2".to_string());
-                let _gcr = GLOBAL_CR.lock().unwrap();
-                log("ok 3".to_string());
-                let _mg = _gcr.wasm_global_lock.lock().unwrap();
-                log("ok 4".to_string());
                 let cloned_task_t = Arc::clone(&task);
                 let mut cloned_task_ref_t = cloned_task_t.lock().unwrap();
                 log("ok 5".to_string());
@@ -2244,12 +2240,7 @@ impl ConcurrentRunner {
             if ready_to_exec {
                 log(format!("ok 10 ..."));
 
-                let cloned_cr_t = Arc::clone(&GLOBAL_CR);
-                let cloned_cr_ref_t = cloned_cr_t.lock().unwrap();
-
-                log(format!("ok 11 ..."));
-
-                cloned_cr_ref_t.thread_pool
+                self.thread_pool
                     .lock()
                     .unwrap()
                     .enqueue(move || {
