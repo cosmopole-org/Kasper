@@ -2242,16 +2242,14 @@ impl ConcurrentRunner {
 
                             log(format!("ok 15 ..."));
 
-                            let cloned_task2 = Arc::clone(&task);
-                            cloned_cr_ref1.wasm_run_task(move |vm: &mut Rc<RefCell<WasmMac>>| {
-                                log(format!("ok 16 ..."));
+                            let vmi = cloned_task_ref_t.vm_index.clone() as usize;
 
-                                let cloned_task_ref2 = cloned_task2.lock().unwrap();
+                            cloned_cr_ref1.wasm_run_task(move |vm: &mut Rc<RefCell<WasmMac>>| {
 
                                 log(format!("ok 17 ..."));
 
-                                vm.borrow_mut().run_task(cloned_task_ref2.name.clone());
-                            }, cloned_task_ref_t.vm_index.clone() as usize);
+                                vm.borrow_mut().run_task(cloned_task_ref_t.name.clone());
+                            }, vmi);
                         }
                         let mut next_wasm_tasks: Vec<Arc<Mutex<WasmTask>>> = Vec::new();
                         {
@@ -2262,7 +2260,6 @@ impl ConcurrentRunner {
 
                             log(format!("ok 19 ..."));
 
-                            let _mg = cloned_cr_ref3.wasm_global_lock.lock();
                             wasm_done_wasm_tasks_count.fetch_add(1, Ordering::Acquire);
                             if
                                 wasm_done_wasm_tasks_count.load(Ordering::Acquire) ==
