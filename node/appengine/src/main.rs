@@ -3,6 +3,7 @@ use std::collections::{ HashMap, VecDeque, BTreeMap };
 use std::fmt::format;
 use std::ops::{ DerefMut };
 use std::rc::Rc;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{ Arc, Condvar, Mutex };
 use std::thread::JoinHandle;
 use std::{ thread };
@@ -531,7 +532,7 @@ pub struct WasmMac {
     execution_result: String,
     has_output: bool,
 
-    tasks_: Arc<Mutex<VecDeque<String>>>,
+    tasks_: Arc<Mutex<VecDeque<(String, Sender<i32>)>>>,
     cv_: Arc<Condvar>,
     stop_: Arc<AtomicBool>,
 }
@@ -555,8 +556,8 @@ impl WasmMac {
         mod_path: String,
         cb: Box<dyn (Fn(JsonValue) -> String) + Send + Sync>
     ) -> Self {
-        let vd: VecDeque<String> = VecDeque::new();
-        let tasks_: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(vd));
+        let vd: VecDeque<(String, Sender<i32>)> = VecDeque::new();
+        let tasks_: Arc<Mutex<VecDeque<(String, Sender<i32>)>>> = Arc::new(Mutex::new(vd));
         let cv_ = Arc::new(Condvar::new());
         let stop_ = Arc::new(AtomicBool::new(false));
 
@@ -593,8 +594,8 @@ impl WasmMac {
         mod_path: String,
         cb: Box<dyn (Fn(JsonValue) -> String) + Send + Sync>
     ) -> Self {
-        let vd: VecDeque<String> = VecDeque::new();
-        let tasks_: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(vd));
+        let vd: VecDeque<(String, Sender<i32>)> = VecDeque::new();
+        let tasks_: Arc<Mutex<VecDeque<(String, Sender<i32>)>>> = Arc::new(Mutex::new(vd));
         let cv_ = Arc::new(Condvar::new());
         let stop_ = Arc::new(AtomicBool::new(false));
 
@@ -896,10 +897,10 @@ impl WasmMac {
         self.cv_.notify_all();
     }
 
-    pub fn enqueue_task(&self, task_id: String) {
+    pub fn enqueue_task(&self, task_id: String, cb_chan: Sender<i32>) {
         {
             let mut tasks = self.tasks_.lock().unwrap();
-            tasks.push_back(task_id);
+            tasks.push_back((task_id, cb_chan));
             drop(tasks);
         }
         self.cv_.notify_one();
@@ -1235,8 +1236,10 @@ impl WasmMac {
                 loop {
                     let task = {
                         let tasks = tasks_clone.lock().unwrap();
-                        let mut _mg: std::sync::MutexGuard<'_, VecDeque<String>> = cv_clone
-                            .wait_while(tasks, |tasks| { tasks.is_empty() && !self.stop_.load(Ordering::Relaxed) })
+                        let mut _mg: std::sync::MutexGuard<'_, VecDeque<(String, Sender<i32>)>> = cv_clone
+                            .wait_while(tasks, |tasks| {
+                                tasks.is_empty() && !self.stop_.load(Ordering::Relaxed)
+                            })
                             .unwrap();
                         if stop_clone.load(Ordering::Relaxed) && _mg.is_empty() {
                             return;
@@ -1245,7 +1248,7 @@ impl WasmMac {
                     };
 
                     if let Some(task_id) = task {
-                        let val_l = task_id.len() as i32;
+                        let val_l = task_id.0.len() as i32;
                         let vm_instance: &mut Instance = unsafe {
                             &mut *host_data_for_tasks.inst.unwrap()
                         };
@@ -1259,7 +1262,7 @@ impl WasmMac {
                             .unwrap();
 
                         let val_offset = res2[0].to_i32();
-                        let raw_arr = task_id.as_bytes();
+                        let raw_arr = task_id.0.as_bytes();
                         let arr: Vec<u8> = raw_arr.to_vec();
                         let mem = vm_instance.get_memory_mut("memory");
                         mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
@@ -1270,6 +1273,7 @@ impl WasmMac {
                         if res3.is_ok() {
                             res3.unwrap();
                         }
+                        task_id.1.send(1).unwrap();
                     }
                 }
             }
@@ -2066,13 +2070,6 @@ impl ConcurrentRunner {
         self.wasm_vms[index as usize] = Some(cloned_rt2);
     }
 
-    pub fn wasm_run_task<F>(&self, task: F, index: usize) where F: Fn(&mut Rc<RefCell<WasmMac>>) {
-        if let Some(rt_arc) = &self.wasm_vms[index] {
-            let mut rt = rt_arc.lock().unwrap();
-            task(&mut rt);
-        }
-    }
-
     pub fn wasm_do_critical(&mut self) {
         let mut key_counter = 1;
         let mut all_wasm_tasks: HashMap<i32, (Vec<String>, usize, String)> = HashMap::new();
@@ -2270,11 +2267,13 @@ impl ConcurrentRunner {
 
                             let vmi = cloned_task_ref_t.vm_index.clone() as usize;
 
-                            cloned_cr_ref1.wasm_run_task(move |vm: &mut Rc<RefCell<WasmMac>>| {
-                                log(format!("ok 17 ..."));
-
-                                vm.borrow_mut().enqueue_task(cloned_task_ref_t.name.clone());
-                            }, vmi);
+                            if let Some(rt_arc) = &cloned_cr_ref1.wasm_vms[vmi] {
+                                let rt = rt_arc.lock().unwrap();
+                                let (tx, rx): (Sender<i32>, Receiver<i32>) = mpsc::channel();
+                                let thread_tx: Sender<i32> = tx.clone();
+                                rt.borrow_mut().enqueue_task(cloned_task_ref_t.name.clone(), thread_tx);
+                                rx.recv().unwrap();
+                            }
                         }
                         let mut next_wasm_tasks: Vec<Arc<Mutex<WasmTask>>> = Vec::new();
                         {
