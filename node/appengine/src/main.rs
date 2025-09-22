@@ -1,15 +1,15 @@
 use std::cell::{ RefCell };
 use std::collections::{ HashMap, VecDeque, BTreeMap };
 use std::fmt::format;
-use std::ops::{ DerefMut };
+use std::ops::{ Deref, DerefMut };
 use std::rc::Rc;
 use std::sync::mpsc::{ self, Receiver, Sender };
 use std::sync::{ Arc, Condvar, Mutex };
 use std::thread::JoinHandle;
-use std::{ thread };
+use std::{ clone, thread };
 use std::sync::atomic::{ AtomicBool, AtomicI64, Ordering };
 use serde_json::{ json, value, Value as JsonValue };
-use wasmedge_sys::{ Validator };
+use wasmedge_sys::{ instance, Validator };
 use wasmedge_sys::{
     Executor,
     Function,
@@ -509,7 +509,6 @@ impl WasmUtils {
     }
 }
 
-// WasmMac Implementation: -------------------------------------------------
 pub struct WasmMac {
     pub onchain: bool,
     pub chain_token_id: String,
@@ -525,22 +524,18 @@ pub struct WasmMac {
     pub sync_tasks: Vec<SyncTask>,
     pub queue_mutex_: Mutex<()>,
     pub mod_path: String,
-    pub vm_executor: Option<Rc<RefCell<Executor>>>,
-    pub vm_instance: Option<Rc<RefCell<Instance>>>,
-    pub vm_stats: Option<Arc<Mutex<Statistics>>>,
+    pub cost: u64,
 
     execution_result: String,
     has_output: bool,
-
     tasks_: Arc<Mutex<VecDeque<(String, Sender<i32>)>>>,
     cv_: Arc<Condvar>,
     stop_: Arc<AtomicBool>,
 }
 
 pub struct HostData {
-    runtime: *mut WasmMac,
     exec: *mut Executor,
-    inst: Option<*mut Instance>,
+    runtime: *mut WasmMac,
 }
 
 pub struct HostDataForTasks {
@@ -578,12 +573,10 @@ impl WasmMac {
             mod_path,
             execution_result: "".to_string(),
             has_output: false,
-            vm_executor: None,
-            vm_instance: None,
-            vm_stats: None,
             tasks_: tasks_,
             cv_: cv_,
             stop_: stop_,
+            cost: 0,
         }
     }
 
@@ -616,12 +609,10 @@ impl WasmMac {
             mod_path,
             execution_result: "".to_string(),
             has_output: false,
-            vm_executor: None,
-            vm_instance: None,
-            vm_stats: None,
             tasks_: tasks_,
             cv_: cv_,
             stop_: stop_,
+            cost: 0,
         }
     }
 
@@ -660,7 +651,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 new_sync_task,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -678,7 +669,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 run_docker,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -696,7 +687,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 exec_docker,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -716,7 +707,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 copy_to_docker,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -724,7 +715,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 console_log,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -732,7 +723,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 output,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -750,7 +741,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 http_post,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -769,7 +760,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 plant_trigger,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -789,7 +780,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 signal_point,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -809,7 +800,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 submit_onchain_trx,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -820,7 +811,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 trx_put,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -828,7 +819,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 trx_del,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -836,7 +827,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 trx_get,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -844,7 +835,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 trx_get_by_prefix,
-                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
+                &mut (HostData { exec: &mut exec, runtime: self }),
                 1
             ).unwrap()
         });
@@ -859,34 +850,25 @@ impl WasmMac {
         let v = Validator::create(Some(&conf2)).unwrap();
         v.validate(&main_mod_raw).unwrap();
 
-        let vm_instance = exec.register_active_module(&mut store, &main_mod_raw).unwrap();
+        let mut vm_instance = exec.register_active_module(&mut store, &main_mod_raw).unwrap();
 
-        self.vm_executor = Some(Rc::new(RefCell::new(exec)));
-        self.vm_instance = Some(Rc::new(RefCell::new(vm_instance)));
-        self.vm_stats = Some(Arc::new(Mutex::new(stats)));
+        let mut binding = vm_instance.get_func_mut("_start").unwrap();
 
-        let instance_item = Rc::clone(&self.vm_instance.as_ref().unwrap());
-        let mut instance_item_ref = instance_item.borrow_mut();
-
-        let exec_item = Rc::clone(&self.vm_executor.as_ref().unwrap());
-        let mut exec_item_ref = exec_item.borrow_mut();
-        let mut binding = instance_item_ref.get_func_mut("_start").unwrap();
-
-        exec_item_ref.call_func(&mut binding, []).unwrap();
+        exec.call_func(&mut binding, []).unwrap();
 
         let val_l = input.len() as i32;
-        let mut malloc_fn = instance_item_ref.get_func_mut("malloc").unwrap();
-        let res2 = exec_item_ref.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
+        let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+        let res2 = exec.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
 
         let val_offset = res2[0].to_i32();
         let raw_arr = input.as_bytes();
         let arr: Vec<u8> = raw_arr.to_vec();
-        let mem = instance_item_ref.get_memory_mut("memory");
+        let mem = vm_instance.get_memory_mut("memory");
         mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
         let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        let mut run_fn = instance_item_ref.get_func_mut("run").unwrap();
-        let res = exec_item_ref.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+        let mut run_fn = vm_instance.get_func_mut("run").unwrap();
+        let res = exec.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
         if res.is_ok() {
             res.unwrap();
         }
@@ -906,15 +888,42 @@ impl WasmMac {
         self.cv_.notify_one();
     }
 
-    pub fn execute_on_chain(&mut self, input: String, user_id: String) {
-        let input_json: JsonValue = serde_json::from_str(&input).unwrap();
-        let token_id = input_json["tokenId"].as_str().unwrap().to_string();
-        let params = input_json["params"].as_str().unwrap().to_string();
+    pub fn stick(&mut self) {
+        if let Some(handle) = self.looper.take() {
+            handle.join().unwrap();
+        }
+    }
+}
 
-        self.chain_token_id = token_id.clone();
+fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: String) {
+    let tasks_clone: Arc<Mutex<VecDeque<(String, Sender<i32>)>>>;
+    let cv_clone: Arc<Condvar>;
+    let stop_clone: Arc<AtomicBool>;
+    {
+        let mut mac_lock = mac_item.lock().unwrap();
+        let mac = mac_lock.deref_mut();
 
-        let j =
-            json!({
+        tasks_clone = Arc::clone(&mac.tasks_);
+        cv_clone = Arc::clone(&mac.cv_);
+        stop_clone = Arc::clone(&mac.stop_);
+    }
+    thread::spawn(move || {
+        let mut host_data_for_tasks: HostDataForTasks;
+        let mut stats = Statistics::create().unwrap();
+
+        let gas_limit;
+        {
+            let mut mac_lock = mac_item.lock().unwrap();
+            let mac = mac_lock.deref_mut();
+
+            let input_json: JsonValue = serde_json::from_str(&input).unwrap();
+            let token_id = input_json["tokenId"].as_str().unwrap().to_string();
+            let params = input_json["params"].as_str().unwrap().to_string();
+
+            mac.chain_token_id = token_id.clone();
+
+            let j =
+                json!({
             "key": "checkTokenValidity",
             "input": {
                 "tokenOwnerId": user_id,
@@ -922,372 +931,356 @@ impl WasmMac {
             }
         });
 
-        let val = (self.callback)(j);
+            let val = (mac.callback)(j);
 
-        let jsn: JsonValue = serde_json::from_str(&val).unwrap();
-        let gas_limit = jsn["gasLimit"].as_u64().unwrap_or(0);
-
-        let mut host_data_for_tasks = HostDataForTasks { exec: None, inst: None, runtime: None };
-
-        if gas_limit > 0 {
-            self.is_token_valid = true;
-
-            let mut store = Store::create().unwrap();
-
-            let wasi_mod = wasmedge_sys::WasiModule::create(None, None, None).unwrap();
-
-            let mut dummy: i32 = 1;
-            let extern_mod = &mut ImportModule::create("env", Box::new(&mut dummy)).unwrap();
-
-            let mut config = Config::create().unwrap();
-            config.measure_cost(true);
-            let mut stats = Statistics::create().unwrap();
-            stats.set_cost_limit(gas_limit);
-            let mut exec = Executor::create(Some(&config), Some(&stats)).unwrap();
+            let jsn: JsonValue = serde_json::from_str(&val).unwrap();
+            gas_limit = jsn["gasLimit"].as_u64().unwrap_or(0);
 
             host_data_for_tasks = HostDataForTasks {
-                runtime: Some(self),
-                exec: Some(&mut exec),
+                exec: None,
                 inst: None,
+                runtime: None,
             };
 
-            extern_mod.add_func("newSyncTask", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![ValType::I32, ValType::I32],
-                        vec![ValType::I64]
-                    ),
-                    new_sync_task,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("runDocker", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32
-                        ],
-                        vec![ValType::I64]
-                    ),
-                    run_docker,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("execDocker", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32
-                        ],
-                        vec![ValType::I64]
-                    ),
-                    exec_docker,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("copyToDocker", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32
-                        ],
-                        vec![ValType::I64]
-                    ),
-                    copy_to_docker,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("consoleLog", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![ValType::I32, ValType::I32],
-                        vec![ValType::I64]
-                    ),
-                    console_log,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("output", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![ValType::I32, ValType::I32],
-                        vec![ValType::I64]
-                    ),
-                    output,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("httpPost", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32
-                        ],
-                        vec![ValType::I64]
-                    ),
-                    http_post,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("plantTrigger", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32
-                        ],
-                        vec![ValType::I64]
-                    ),
-                    plant_trigger,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("signalPoint", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32
-                        ],
-                        vec![ValType::I64]
-                    ),
-                    signal_point,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("submitOnchainTrx", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32,
-                            ValType::I32
-                        ],
-                        vec![ValType::I64]
-                    ),
-                    submit_onchain_trx,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("put", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32],
-                        vec![ValType::I64]
-                    ),
-                    trx_put,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("del", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![ValType::I32, ValType::I32],
-                        vec![ValType::I64]
-                    ),
-                    trx_del,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("get", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![ValType::I32, ValType::I32],
-                        vec![ValType::I64]
-                    ),
-                    trx_get,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
-            extern_mod.add_func("getByPrefix", unsafe {
-                Function::create_sync_func(
-                    &wasmedge_sys::FuncType::new(
-                        vec![ValType::I32, ValType::I32],
-                        vec![ValType::I64]
-                    ),
-                    trx_get_by_prefix,
-                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
-                    1
-                ).unwrap()
-            });
+            if gas_limit > 0 {
+                mac.is_token_valid = true;
 
-            exec.register_import_module(&mut store, &wasi_mod).unwrap();
-            exec.register_import_module(&mut store, extern_mod).unwrap();
+                let mut store = Store::create().unwrap();
 
-            let loader = Loader::create(Some(&config)).unwrap();
-            let main_mod_raw = loader.from_file(self.mod_path.clone()).unwrap();
-            let config2 = Config::create().unwrap();
-            let v = Validator::create(Some(&config2)).unwrap();
-            v.validate(&main_mod_raw).unwrap();
+                let wasi_mod = wasmedge_sys::WasiModule::create(None, None, None).unwrap();
 
-            let mut vm_instance = exec.register_active_module(&mut store, &main_mod_raw).unwrap();
+                let mut dummy: i32 = 1;
+                let extern_mod = &mut ImportModule::create("env", Box::new(&mut dummy)).unwrap();
 
-            host_data_for_tasks.inst = Some(&mut vm_instance);
+                let mut config = Config::create().unwrap();
+                config.measure_cost(true);
+                stats.set_cost_limit(gas_limit);
+                let mut exec = Executor::create(Some(&config), Some(&stats)).unwrap();
 
-            self.vm_executor = Some(Rc::new(RefCell::new(exec)));
-            self.vm_instance = Some(Rc::new(RefCell::new(vm_instance)));
-            self.vm_stats = Some(Arc::new(Mutex::new(stats)));
+                host_data_for_tasks = HostDataForTasks {
+                    runtime: Some(mac),
+                    exec: Some(&mut exec),
+                    inst: None,
+                };
 
-            let instance_item = Rc::clone(&self.vm_instance.as_ref().unwrap());
-            let mut instance_item_ref = instance_item.borrow_mut();
+                extern_mod.add_func("newSyncTask", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![ValType::I32, ValType::I32],
+                            vec![ValType::I64]
+                        ),
+                        new_sync_task,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("runDocker", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32
+                            ],
+                            vec![ValType::I64]
+                        ),
+                        run_docker,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("execDocker", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32
+                            ],
+                            vec![ValType::I64]
+                        ),
+                        exec_docker,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("copyToDocker", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32
+                            ],
+                            vec![ValType::I64]
+                        ),
+                        copy_to_docker,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("consoleLog", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![ValType::I32, ValType::I32],
+                            vec![ValType::I64]
+                        ),
+                        console_log,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("output", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![ValType::I32, ValType::I32],
+                            vec![ValType::I64]
+                        ),
+                        output,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("httpPost", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32
+                            ],
+                            vec![ValType::I64]
+                        ),
+                        http_post,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("plantTrigger", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32
+                            ],
+                            vec![ValType::I64]
+                        ),
+                        plant_trigger,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("signalPoint", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32
+                            ],
+                            vec![ValType::I64]
+                        ),
+                        signal_point,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("submitOnchainTrx", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32,
+                                ValType::I32
+                            ],
+                            vec![ValType::I64]
+                        ),
+                        submit_onchain_trx,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("put", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+                            vec![ValType::I64]
+                        ),
+                        trx_put,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("del", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![ValType::I32, ValType::I32],
+                            vec![ValType::I64]
+                        ),
+                        trx_del,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("get", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![ValType::I32, ValType::I32],
+                            vec![ValType::I64]
+                        ),
+                        trx_get,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
+                extern_mod.add_func("getByPrefix", unsafe {
+                    Function::create_sync_func(
+                        &wasmedge_sys::FuncType::new(
+                            vec![ValType::I32, ValType::I32],
+                            vec![ValType::I64]
+                        ),
+                        trx_get_by_prefix,
+                        &mut (HostData { runtime: mac, exec: &mut exec }),
+                        1
+                    ).unwrap()
+                });
 
-            let exec_item = Rc::clone(&self.vm_executor.as_ref().unwrap());
-            let mut exec_item_ref = exec_item.borrow_mut();
-            let mut binding = instance_item_ref.get_func_mut("_start").unwrap();
+                exec.register_import_module(&mut store, &wasi_mod).unwrap();
+                exec.register_import_module(&mut store, extern_mod).unwrap();
 
-            exec_item_ref.call_func(&mut binding, []).unwrap();
+                let loader = Loader::create(Some(&config)).unwrap();
+                let main_mod_raw = loader.from_file(mac.mod_path.clone()).unwrap();
+                let config2 = Config::create().unwrap();
+                let v = Validator::create(Some(&config2)).unwrap();
+                v.validate(&main_mod_raw).unwrap();
 
-            let val_l = input.len() as i32;
-            let mut malloc_fn = instance_item_ref.get_func_mut("malloc").unwrap();
-            let res2 = exec_item_ref
-                .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
-                .unwrap();
+                let mut vm_instance = exec
+                    .register_active_module(&mut store, &main_mod_raw)
+                    .unwrap();
 
-            let val_offset = res2[0].to_i32();
-            let raw_arr = params.as_bytes();
-            let arr: Vec<u8> = raw_arr.to_vec();
-            let mem = instance_item_ref.get_memory_mut("memory");
-            mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
-            let c = ((val_offset as i64) << 32) | (val_l as i64);
+                host_data_for_tasks.inst = Some(&mut vm_instance);
 
-            let mut run_fn = instance_item_ref.get_func_mut("run").unwrap();
-            let res = exec_item_ref.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
-            if res.is_ok() {
-                res.unwrap();
+                let mut binding = vm_instance.get_func_mut("_start").unwrap();
+
+                exec.call_func(&mut binding, []).unwrap();
+
+                let val_l = input.len() as i32;
+                let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+                let res2 = exec.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
+
+                let val_offset = res2[0].to_i32();
+                let raw_arr = params.as_bytes();
+                let arr: Vec<u8> = raw_arr.to_vec();
+                let mem = vm_instance.get_memory_mut("memory");
+                mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
+                let c = ((val_offset as i64) << 32) | (val_l as i64);
+
+                let mut run_fn = vm_instance.get_func_mut("run").unwrap();
+                let res = exec.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+                if res.is_ok() {
+                    res.unwrap();
+                }
             }
+
+            log("finished a trx !".to_string());
         }
 
-        log("finished a trx !".to_string());
-
-        if self.onchain {
-            thread::spawn(|| {
-                let cr_cloned = Arc::clone(unsafe { &GLOBAL_CR });
-                let mut cr = cr_cloned.lock().unwrap();
-                cr.wasm_done_tasks += 1;
-                if cr.wasm_done_tasks == cr.wasm_count {
-                    log("all transactions completed !".to_string());
-                    unsafe {
-                        if STEP == 0 {
-                            cr.wasm_done_tasks = 0;
-                            STEP += 1;
-                            log("ready to execute critical scope...".to_string());
-                            cr.wasm_do_critical();
-                        }
+        thread::spawn(|| {
+            let cr_cloned = Arc::clone(unsafe { &GLOBAL_CR });
+            let mut cr = cr_cloned.lock().unwrap();
+            cr.wasm_done_tasks += 1;
+            if cr.wasm_done_tasks == cr.wasm_count {
+                log("all transactions completed !".to_string());
+                unsafe {
+                    if STEP == 0 {
+                        cr.wasm_done_tasks = 0;
+                        STEP += 1;
+                        log("ready to execute critical scope...".to_string());
+                        cr.wasm_do_critical();
                     }
                 }
-            });
+            }
+        });
 
-            if gas_limit > 0 {
-                let tasks_clone = Arc::clone(&self.tasks_);
-                let cv_clone = Arc::clone(&self.cv_);
-                let stop_clone = Arc::clone(&self.stop_);
+        if gas_limit > 0 {
+            loop {
+                let task = {
+                    let tasks = tasks_clone.lock().unwrap();
+                    let mut _mg: std::sync::MutexGuard<
+                        '_,
+                        VecDeque<(String, Sender<i32>)>
+                    > = cv_clone
+                        .wait_while(tasks, |tasks| {
+                            tasks.is_empty() && !stop_clone.load(Ordering::Relaxed)
+                        })
+                        .unwrap();
+                    if stop_clone.load(Ordering::Relaxed) && _mg.is_empty() {
+                        mac_item.lock().unwrap().cost = stats.cost_in_total();
+                        break;
+                    }
+                    _mg.pop_front()
+                };
 
-                loop {
-                    let task = {
-                        let tasks = tasks_clone.lock().unwrap();
-                        let mut _mg: std::sync::MutexGuard<
-                            '_,
-                            VecDeque<(String, Sender<i32>)>
-                        > = cv_clone
-                            .wait_while(tasks, |tasks| {
-                                tasks.is_empty() && !self.stop_.load(Ordering::Relaxed)
-                            })
-                            .unwrap();
-                        if stop_clone.load(Ordering::Relaxed) && _mg.is_empty() {
-                            return;
-                        }
-                        _mg.pop_front()
+                if let Some(task_id) = task {
+                    let val_l = task_id.0.len() as i32;
+                    let vm_instance: &mut Instance = unsafe {
+                        &mut *host_data_for_tasks.inst.unwrap()
+                    };
+                    let vm_executor: &mut Executor = unsafe {
+                        &mut *host_data_for_tasks.exec.unwrap()
                     };
 
-                    if let Some(task_id) = task {
-                        let val_l = task_id.0.len() as i32;
-                        let vm_instance: &mut Instance = unsafe {
-                            &mut *host_data_for_tasks.inst.unwrap()
-                        };
-                        let vm_executor: &mut Executor = unsafe {
-                            &mut *host_data_for_tasks.exec.unwrap()
-                        };
+                    let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+                    let res2 = vm_executor
+                        .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
+                        .unwrap();
 
-                        let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
-                        let res2 = vm_executor
-                            .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
-                            .unwrap();
+                    let val_offset = res2[0].to_i32();
+                    let raw_arr = task_id.0.as_bytes();
+                    let arr: Vec<u8> = raw_arr.to_vec();
+                    let mem = vm_instance.get_memory_mut("memory");
+                    mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
+                    let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-                        let val_offset = res2[0].to_i32();
-                        let raw_arr = task_id.0.as_bytes();
-                        let arr: Vec<u8> = raw_arr.to_vec();
-                        let mem = vm_instance.get_memory_mut("memory");
-                        mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
-                        let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-                        let mut run_fn = vm_instance.get_func_mut("runTask").unwrap();
-                        let res3 = vm_executor.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
-                        if res3.is_ok() {
-                            res3.unwrap();
-                        }
-                        task_id.1.send(1).unwrap();
+                    let mut run_fn = vm_instance.get_func_mut("runTask").unwrap();
+                    let res3 = vm_executor.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+                    if res3.is_ok() {
+                        res3.unwrap();
                     }
+                    task_id.1.send(1).unwrap();
                 }
             }
         }
-    }
-
-    pub fn stick(&mut self) {
-        if let Some(handle) = self.looper.take() {
-            handle.join().unwrap();
-        }
-    }
+    });
 }
 
 // Sync task structure
@@ -1936,8 +1929,8 @@ pub struct ConcurrentRunner {
     pub wasm_count: i32,
     pub trxs: Vec<ChainTrx>,
     pub ast_store_path: String,
-    pub wasm_vms: Vec<Option<Arc<Mutex<Rc<RefCell<WasmMac>>>>>>,
-    pub wasm_vm_map: HashMap<String, (usize, Arc<Mutex<Rc<RefCell<WasmMac>>>>)>,
+    pub wasm_vms: Vec<Option<Arc<Mutex<WasmMac>>>>,
+    pub wasm_vm_map: HashMap<String, (usize, Arc<Mutex<WasmMac>>)>,
     pub exec_wasm_locks: Vec<Arc<Mutex<()>>>,
     pub main_wasm_lock: Arc<Mutex<()>>,
     pub thread_pool: Arc<Mutex<WasmThreadPool>>,
@@ -1994,15 +1987,16 @@ impl ConcurrentRunner {
                     format!("{}/{}/module", ast_store_path, trx.machine_id),
                     Box::new(wasm_send)
                 );
-                let rt_arc = Arc::new(Mutex::new(Rc::new(RefCell::new(rt))));
-                unsafe {
-                    let mut gcr = GLOBAL_CR.lock().unwrap();
-                    let rt_cloned = Arc::clone(&rt_arc);
-                    gcr.register_wasm_mac(rt_cloned);
+                let rt_arc = Arc::new(Mutex::new(rt));
+                {
+                    unsafe {
+                        let mut gcr = GLOBAL_CR.lock().unwrap();
+                        let rt_cloned = Arc::clone(&rt_arc);
+                        gcr.register_wasm_mac(rt_cloned);
+                        drop(gcr);
+                    }
                 }
-                let rt_cloned2 = Arc::clone(&rt_arc);
-                let rt_ref = rt_cloned2.lock().unwrap();
-                rt_ref.borrow_mut().execute_on_chain(trx.input, trx.user_id);
+                execute_on_chain(rt_arc, trx.input, trx.user_id);
             });
         }
     }
@@ -2010,11 +2004,8 @@ impl ConcurrentRunner {
     pub fn collect_results(&mut self) {
         for rt_opt in &self.wasm_vms {
             if let Some(rt_arc) = rt_opt {
-                let rt_lock = rt_arc.lock().unwrap();
-                let mut rt = rt_lock.borrow_mut();
-                let stats = rt.vm_stats.clone().unwrap();
-                let cloned_stats = Arc::clone(&stats);
-                let cost = cloned_stats.lock().unwrap().cost_in_total();
+                let mut rt = rt_arc.lock().unwrap();
+                let cost = rt.cost;
 
                 let output = rt.execution_result.clone();
                 let changes = rt.finalize();
@@ -2059,12 +2050,11 @@ impl ConcurrentRunner {
         self.exec_wasm_locks = (0..vm_count).map(|_| Arc::new(Mutex::new(()))).collect();
     }
 
-    pub fn register_wasm_mac(&mut self, rt: Arc<Mutex<Rc<RefCell<WasmMac>>>>) {
+    pub fn register_wasm_mac(&mut self, rt: Arc<Mutex<WasmMac>>) {
         let rt_guard_lock = rt.lock().unwrap();
-        let rt_guard = rt_guard_lock.borrow_mut();
-        let id = rt_guard.id.clone();
-        let index = rt_guard.index;
-        drop(rt_guard);
+        let id = rt_guard_lock.id.clone();
+        let index = rt_guard_lock.index;
+        drop(rt_guard_lock);
 
         let cloned_rt1 = Arc::clone(&rt);
         let cloned_rt2 = Arc::clone(&rt);
@@ -2089,8 +2079,7 @@ impl ConcurrentRunner {
         for index in 0..self.wasm_count {
             if let Some(vm_arc) = &self.wasm_vms[index as usize] {
                 log(format!("checking vm {vm_arc_id}...", vm_arc_id = index));
-                let vm_lock = vm_arc.lock().unwrap();
-                let vm = vm_lock.borrow_mut();
+                let vm = vm_arc.lock().unwrap();
                 for t in &vm.sync_tasks {
                     log(format!("checking sync task {task_name}...", task_name = t.name));
                     let res_nums = t.deps.clone();
@@ -2274,10 +2263,7 @@ impl ConcurrentRunner {
                                 let rt = rt_arc.lock().unwrap();
                                 let (tx, rx): (Sender<i32>, Receiver<i32>) = mpsc::channel();
                                 let thread_tx: Sender<i32> = tx.clone();
-                                rt.borrow_mut().enqueue_task(
-                                    cloned_task_ref_t.name.clone(),
-                                    thread_tx
-                                );
+                                rt.enqueue_task(cloned_task_ref_t.name.clone(), thread_tx);
                                 rx.recv().unwrap();
                             }
                         }
@@ -2302,8 +2288,8 @@ impl ConcurrentRunner {
 
                                 for i in 0..cloned_cr_ref3.wasm_vms.len() {
                                     if let Some(rt_arc) = &cloned_cr_ref3.wasm_vms[i] {
-                                        let rt = rt_arc.lock().unwrap();
-                                        rt.borrow_mut().stop();
+                                        let mut rt = rt_arc.lock().unwrap();
+                                        rt.stop();
                                     }
                                 }
                                 return;
