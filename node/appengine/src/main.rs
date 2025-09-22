@@ -430,7 +430,7 @@ impl WasmThreadPool {
                 loop {
                     let task = {
                         let tasks = tasks_clone.lock().unwrap();
-                        let _mg: std::sync::MutexGuard<
+                        let mut _mg: std::sync::MutexGuard<
                             '_,
                             VecDeque<Box<dyn FnOnce() + Send>>
                         > = cv_clone
@@ -438,12 +438,12 @@ impl WasmThreadPool {
                             .unwrap();
                         if
                             stop_clone.load(Ordering::Relaxed) &&
-                            tasks_clone.lock().unwrap().is_empty()
+                            _mg.is_empty()
                         {
                             return;
                         }
 
-                        tasks_clone.lock().unwrap().pop_front()
+                        _mg.pop_front()
                     };
 
                     if let Some(task) = task {
