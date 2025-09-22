@@ -924,12 +924,12 @@ fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: Strin
 
             let j =
                 json!({
-            "key": "checkTokenValidity",
-            "input": {
-                "tokenOwnerId": user_id,
-                "tokenId": token_id
-            }
-        });
+                "key": "checkTokenValidity",
+                "input": {
+                    "tokenOwnerId": user_id,
+                    "tokenId": token_id
+                }
+            });
 
             let val = (mac.callback)(j);
 
@@ -2005,6 +2005,8 @@ impl ConcurrentRunner {
         for rt_opt in &self.wasm_vms {
             if let Some(rt_arc) = rt_opt {
                 let mut rt = rt_arc.lock().unwrap();
+                rt.stop();
+
                 let cost = rt.cost;
 
                 let output = rt.execution_result.clone();
@@ -2260,10 +2262,13 @@ impl ConcurrentRunner {
                             let vmi = cloned_task_ref_t.vm_index.clone() as usize;
 
                             if let Some(rt_arc) = &cloned_cr_ref1.wasm_vms[vmi] {
-                                let rt = rt_arc.lock().unwrap();
                                 let (tx, rx): (Sender<i32>, Receiver<i32>) = mpsc::channel();
                                 let thread_tx: Sender<i32> = tx.clone();
-                                rt.enqueue_task(cloned_task_ref_t.name.clone(), thread_tx);
+                                {
+                                    let rt = rt_arc.lock().unwrap();
+                                    rt.enqueue_task(cloned_task_ref_t.name.clone(), thread_tx);
+                                    drop(rt);
+                                }
                                 rx.recv().unwrap();
                             }
                         }
@@ -2272,7 +2277,7 @@ impl ConcurrentRunner {
                             log(format!("ok 18 ..."));
 
                             let cloned_cr3 = Arc::clone(&GLOBAL_CR);
-                            let cloned_cr_ref3 = cloned_cr3.lock().unwrap();
+                            let mut cloned_cr_ref3 = cloned_cr3.lock().unwrap();
 
                             log(format!("ok 19 ..."));
 
@@ -2285,13 +2290,7 @@ impl ConcurrentRunner {
                                     "finishing and stopping parallel transactions thread...".to_string()
                                 );
                                 cloned_cr_ref3.thread_pool.lock().unwrap().stop_pool();
-
-                                for i in 0..cloned_cr_ref3.wasm_vms.len() {
-                                    if let Some(rt_arc) = &cloned_cr_ref3.wasm_vms[i] {
-                                        let mut rt = rt_arc.lock().unwrap();
-                                        rt.stop();
-                                    }
-                                }
+                                cloned_cr_ref3.collect_results();
                                 return;
                             }
                             let mut cloned_outputs: Option<
