@@ -3,7 +3,7 @@ use std::collections::{ HashMap, VecDeque, BTreeMap };
 use std::fmt::format;
 use std::ops::{ DerefMut };
 use std::rc::Rc;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{ self, Receiver, Sender };
 use std::sync::{ Arc, Condvar, Mutex };
 use std::thread::JoinHandle;
 use std::{ thread };
@@ -1236,7 +1236,10 @@ impl WasmMac {
                 loop {
                     let task = {
                         let tasks = tasks_clone.lock().unwrap();
-                        let mut _mg: std::sync::MutexGuard<'_, VecDeque<(String, Sender<i32>)>> = cv_clone
+                        let mut _mg: std::sync::MutexGuard<
+                            '_,
+                            VecDeque<(String, Sender<i32>)>
+                        > = cv_clone
                             .wait_while(tasks, |tasks| {
                                 tasks.is_empty() && !self.stop_.load(Ordering::Relaxed)
                             })
@@ -2271,7 +2274,10 @@ impl ConcurrentRunner {
                                 let rt = rt_arc.lock().unwrap();
                                 let (tx, rx): (Sender<i32>, Receiver<i32>) = mpsc::channel();
                                 let thread_tx: Sender<i32> = tx.clone();
-                                rt.borrow_mut().enqueue_task(cloned_task_ref_t.name.clone(), thread_tx);
+                                rt.borrow_mut().enqueue_task(
+                                    cloned_task_ref_t.name.clone(),
+                                    thread_tx
+                                );
                                 rx.recv().unwrap();
                             }
                         }
@@ -2293,6 +2299,13 @@ impl ConcurrentRunner {
                                     "finishing and stopping parallel transactions thread...".to_string()
                                 );
                                 cloned_cr_ref3.thread_pool.lock().unwrap().stop_pool();
+
+                                for i in 0..cloned_cr_ref3.wasm_vms.len() {
+                                    if let Some(rt_arc) = &cloned_cr_ref3.wasm_vms[i] {
+                                        let rt = rt_arc.lock().unwrap();
+                                        rt.borrow_mut().stop();
+                                    }
+                                }
                                 return;
                             }
                             let mut cloned_outputs: Option<
