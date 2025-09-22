@@ -403,7 +403,6 @@ impl Trx {
 pub struct WasmThreadPool {
     threads_: Vec<thread::JoinHandle<()>>,
     tasks_: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send>>>>,
-    queue_mutex_: Arc<Mutex<()>>,
     cv_: Arc<Condvar>,
     stop_: Arc<AtomicBool>,
 }
@@ -418,31 +417,25 @@ impl WasmThreadPool {
         );
         let vd: VecDeque<Box<dyn FnOnce() + Send>> = VecDeque::new();
         let tasks_: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send>>>> = Arc::new(Mutex::new(vd));
-        let queue_mutex_ = Arc::new(Mutex::new(()));
         let cv_ = Arc::new(Condvar::new());
         let stop_ = Arc::new(AtomicBool::new(false));
         let mut threads_ = Vec::new();
 
         for _i in 0..num_threads {
             let tasks_clone = Arc::clone(&tasks_);
-            let queue_mutex_clone = Arc::clone(&queue_mutex_);
             let cv_clone = Arc::clone(&cv_);
             let stop_clone = Arc::clone(&stop_);
 
             let handle = thread::spawn(move || {
                 loop {
                     let task = {
-                        let _lock = queue_mutex_clone.lock().unwrap();
                         let tasks = tasks_clone.lock().unwrap();
                         let _mg: std::sync::MutexGuard<
                             '_,
                             VecDeque<Box<dyn FnOnce() + Send>>
                         > = cv_clone
-                            .wait_while(tasks, |tasks| {
-                                tasks.is_empty() && !stop_clone.load(Ordering::Relaxed)
-                            })
+                            .wait(tasks)
                             .unwrap();
-
                         if
                             stop_clone.load(Ordering::Relaxed) &&
                             tasks_clone.lock().unwrap().is_empty()
@@ -464,7 +457,6 @@ impl WasmThreadPool {
         WasmThreadPool {
             threads_,
             tasks_,
-            queue_mutex_,
             cv_,
             stop_,
         }
@@ -483,9 +475,9 @@ impl WasmThreadPool {
 
     pub fn enqueue<F>(&self, task: F) where F: FnOnce() + Send + 'static {
         {
-            let _lock = self.queue_mutex_.lock().unwrap();
             let mut tasks = self.tasks_.lock().unwrap();
             tasks.push_back(Box::new(task));
+            drop(tasks);
         }
         self.cv_.notify_one();
     }

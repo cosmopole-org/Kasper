@@ -131,7 +131,7 @@ func Run(signal model.Send) {
 		{
 			api.DoSync(func() {
 				api.Console.Log("test sync task !")
-			}, []string{}, "lock_1")
+			}, []string{"a"}, "lock_1")
 			api.Console.Log("hello world !!!")
 			break
 		}
