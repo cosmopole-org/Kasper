@@ -433,13 +433,8 @@ impl WasmThreadPool {
                         let mut _mg: std::sync::MutexGuard<
                             '_,
                             VecDeque<Box<dyn FnOnce() + Send>>
-                        > = cv_clone
-                            .wait(tasks)
-                            .unwrap();
-                        if
-                            stop_clone.load(Ordering::Relaxed) &&
-                            _mg.is_empty()
-                        {
+                        > = cv_clone.wait(tasks).unwrap();
+                        if stop_clone.load(Ordering::Relaxed) && _mg.is_empty() {
                             return;
                         }
 
@@ -2176,17 +2171,18 @@ impl ConcurrentRunner {
 
         log("generating thread pool...".to_string());
 
-        self.thread_pool = Arc::new(Mutex::new(WasmThreadPool::generate(Some(res_counter))));
-        self.saved_key_counter = key_counter;
+        if start_points.is_empty() {
+            log("finishing and stopping parallel transactions thread...".to_string());
+        } else {
+            self.thread_pool = Arc::new(Mutex::new(WasmThreadPool::generate(Some(res_counter))));
+            self.saved_key_counter = key_counter;
 
-        for (_r, task) in start_points {
-            self.exec_wasm_task(task);
+            for (_r, task) in start_points {
+                self.exec_wasm_task(task);
+            }
+
+            log("checking...".to_string());
         }
-
-        log("checking...".to_string());
-
-        self.thread_pool.lock().unwrap().stick();
-        log("parallel transactions execution finished.".to_string());
     }
 
     pub fn exec_wasm_task(&mut self, task: Arc<Mutex<WasmTask>>) {
