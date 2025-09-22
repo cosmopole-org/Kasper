@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::mpsc::{ self, Receiver, Sender };
 use std::sync::{ Arc, Condvar, Mutex };
 use std::thread::JoinHandle;
-use std::{ clone, thread };
+use std::{ clone, string, thread };
 use std::sync::atomic::{ AtomicBool, AtomicI64, Ordering };
 use serde_json::{ json, value, Value as JsonValue };
 use wasmedge_sys::{ instance, Validator };
@@ -512,6 +512,7 @@ impl WasmUtils {
 pub struct WasmMac {
     pub onchain: bool,
     pub chain_token_id: String,
+    pub token_owner_id: String,
     pub is_token_valid: bool,
     pub callback: Box<dyn (Fn(JsonValue) -> String) + Send + Sync>,
     pub machine_id: String,
@@ -558,6 +559,7 @@ impl WasmMac {
 
         WasmMac {
             onchain: false,
+            token_owner_id: String::new(),
             chain_token_id: String::new(),
             is_token_valid: false,
             callback: cb,
@@ -594,6 +596,7 @@ impl WasmMac {
 
         WasmMac {
             onchain: true,
+            token_owner_id: String::new(),
             chain_token_id: String::new(),
             is_token_valid: false,
             callback: cb,
@@ -922,6 +925,7 @@ fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: Strin
         let token_id = input_json["tokenId"].as_str().unwrap().to_string();
         let params = input_json["params"].as_str().unwrap().to_string();
 
+        mac.token_owner_id = user_id.clone();
         mac.chain_token_id = token_id.clone();
 
         let j =
@@ -1197,6 +1201,8 @@ fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: Strin
             res.unwrap();
         }
 
+        mac_lock.cost = stats.cost_in_total();
+
         log("finished a trx !".to_string());
 
         drop(mac_lock);
@@ -1227,7 +1233,6 @@ fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: Strin
                         VecDeque<(String, Sender<i32>)>
                     > = cv_clone.wait(tasks).unwrap();
                     if stop_clone.load(Ordering::Acquire) && _mg.is_empty() {
-                        mac_item.lock().unwrap().cost = stats.cost_in_total();
                         break;
                     }
                     _mg.pop_front()
@@ -1256,6 +1261,8 @@ fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: Strin
                     task_id.1.send(1).unwrap();
                 }
             }
+            let mut ml = mac_item.lock().unwrap();
+            ml.cost = stats.cost_in_total();
         }
     });
 }
@@ -2002,7 +2009,8 @@ impl ConcurrentRunner {
                         "error": "",
                         "changes": ops_str,
                         "cost": cost,
-                        "tokenId": rt.chain_token_id
+                        "tokenId": rt.chain_token_id,
+                        "tokenOwnerId": rt.token_owner_id,
                     }
                 });
 
