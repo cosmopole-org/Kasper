@@ -523,8 +523,6 @@ pub struct WasmMac {
     pub tasks: VecDeque<Box<dyn FnOnce() + Send>>,
     pub sync_tasks: Vec<SyncTask>,
     pub queue_mutex_: Mutex<()>,
-    pub cv_: Condvar,
-    pub stop_: bool,
     pub mod_path: String,
     pub vm_executor: Option<Rc<RefCell<Executor>>>,
     pub vm_instance: Option<Rc<RefCell<Instance>>>,
@@ -532,44 +530,37 @@ pub struct WasmMac {
 
     execution_result: String,
     has_output: bool,
+
+    tasks_: Arc<Mutex<VecDeque<String>>>,
+    cv_: Arc<Condvar>,
+    stop_: Arc<AtomicBool>,
 }
 
 pub struct HostData {
     runtime: *mut WasmMac,
     exec: *mut Executor,
+    inst: Option<*mut Instance>,
+}
+
+pub struct HostDataForTasks {
+    runtime: Option<*mut WasmMac>,
+    exec: Option<*mut Executor>,
+    inst: Option<*mut Instance>,
 }
 
 impl WasmMac {
-    fn prepare_looper(&mut self) {
-        // Create a channel for communication instead of directly accessing self
-        let (_, receiver) = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send>>();
-
-        self.looper = Some(
-            thread::spawn(move || {
-                loop {
-                    match receiver.recv() {
-                        Ok(task) => {
-                            println!("executing...");
-                            task();
-                            println!("done!");
-                        }
-                        Err(_) => {
-                            println!("ended!");
-                            break;
-                        }
-                    }
-                }
-            })
-        );
-    }
-
     pub fn new_offchain(
         machine_id: String,
         point_id: String,
         mod_path: String,
         cb: Box<dyn (Fn(JsonValue) -> String) + Send + Sync>
     ) -> Self {
-        let mut wasm_mac = WasmMac {
+        let vd: VecDeque<String> = VecDeque::new();
+        let tasks_: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(vd));
+        let cv_ = Arc::new(Condvar::new());
+        let stop_ = Arc::new(AtomicBool::new(false));
+
+        WasmMac {
             onchain: false,
             chain_token_id: String::new(),
             is_token_valid: false,
@@ -583,20 +574,16 @@ impl WasmMac {
             tasks: VecDeque::new(),
             sync_tasks: Vec::new(),
             queue_mutex_: Mutex::new(()),
-            cv_: Condvar::new(),
-            stop_: false,
             mod_path,
             execution_result: "".to_string(),
             has_output: false,
             vm_executor: None,
             vm_instance: None,
             vm_stats: None,
-        };
-
-        if wasm_mac.onchain {
-            wasm_mac.prepare_looper();
+            tasks_: tasks_,
+            cv_: cv_,
+            stop_: stop_,
         }
-        wasm_mac
     }
 
     pub fn new_onchain(
@@ -606,7 +593,12 @@ impl WasmMac {
         mod_path: String,
         cb: Box<dyn (Fn(JsonValue) -> String) + Send + Sync>
     ) -> Self {
-        let mut wasm_mac = WasmMac {
+        let vd: VecDeque<String> = VecDeque::new();
+        let tasks_: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(vd));
+        let cv_ = Arc::new(Condvar::new());
+        let stop_ = Arc::new(AtomicBool::new(false));
+
+        WasmMac {
             onchain: true,
             chain_token_id: String::new(),
             is_token_valid: false,
@@ -620,20 +612,16 @@ impl WasmMac {
             tasks: VecDeque::new(),
             sync_tasks: Vec::new(),
             queue_mutex_: Mutex::new(()),
-            cv_: Condvar::new(),
-            stop_: false,
             mod_path,
             execution_result: "".to_string(),
             has_output: false,
             vm_executor: None,
             vm_instance: None,
             vm_stats: None,
-        };
-
-        if wasm_mac.onchain {
-            wasm_mac.prepare_looper();
+            tasks_: tasks_,
+            cv_: cv_,
+            stop_: stop_,
         }
-        wasm_mac
     }
 
     pub fn finalize(&mut self) -> Vec<WasmDbOp> {
@@ -671,7 +659,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 new_sync_task,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -689,7 +677,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 run_docker,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -707,7 +695,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 exec_docker,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -727,7 +715,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 copy_to_docker,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -735,7 +723,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 console_log,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -743,7 +731,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 output,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -761,7 +749,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 http_post,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -780,7 +768,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 plant_trigger,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -800,7 +788,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 signal_point,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -820,7 +808,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 submit_onchain_trx,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -831,7 +819,7 @@ impl WasmMac {
                     vec![ValType::I64]
                 ),
                 trx_put,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -839,7 +827,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 trx_del,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -847,7 +835,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 trx_get,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -855,7 +843,7 @@ impl WasmMac {
             Function::create_sync_func(
                 &wasmedge_sys::FuncType::new(vec![ValType::I32, ValType::I32], vec![ValType::I64]),
                 trx_get_by_prefix,
-                &mut (HostData { runtime: self, exec: &mut exec }),
+                &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                 1
             ).unwrap()
         });
@@ -903,28 +891,18 @@ impl WasmMac {
         }
     }
 
-    pub fn run_task(&mut self, task_id: String) {
-        let val_l = task_id.len() as i32;
-        let inst_ref = Rc::clone(&self.vm_instance.as_ref().unwrap());
-        let mut vm_instance = inst_ref.borrow_mut();
-        let exec_ref = Rc::clone(&self.vm_executor.as_ref().unwrap());
-        let mut vm_executor = exec_ref.borrow_mut();
+    pub fn stop(&mut self) {
+        self.stop_.store(true, Ordering::Relaxed);
+        self.cv_.notify_all();
+    }
 
-        let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
-        let res2 = vm_executor.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
-
-        let val_offset = res2[0].to_i32();
-        let raw_arr = task_id.as_bytes();
-        let arr: Vec<u8> = raw_arr.to_vec();
-        let mem = vm_instance.get_memory_mut("memory");
-        mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
-        let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-        let mut run_fn = vm_instance.get_func_mut("runTask").unwrap();
-        let res3 = vm_executor.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
-        if res3.is_ok() {
-            res3.unwrap();
+    pub fn enqueue_task(&self, task_id: String) {
+        {
+            let mut tasks = self.tasks_.lock().unwrap();
+            tasks.push_back(task_id);
+            drop(tasks);
         }
+        self.cv_.notify_one();
     }
 
     pub fn execute_on_chain(&mut self, input: String, user_id: String) {
@@ -948,6 +926,8 @@ impl WasmMac {
         let jsn: JsonValue = serde_json::from_str(&val).unwrap();
         let gas_limit = jsn["gasLimit"].as_u64().unwrap_or(0);
 
+        let mut host_data_for_tasks = HostDataForTasks { exec: None, inst: None, runtime: None };
+
         if gas_limit > 0 {
             self.is_token_valid = true;
 
@@ -964,6 +944,12 @@ impl WasmMac {
             stats.set_cost_limit(gas_limit);
             let mut exec = Executor::create(Some(&config), Some(&stats)).unwrap();
 
+            host_data_for_tasks = HostDataForTasks {
+                runtime: Some(self),
+                exec: Some(&mut exec),
+                inst: None,
+            };
+
             extern_mod.add_func("newSyncTask", unsafe {
                 Function::create_sync_func(
                     &wasmedge_sys::FuncType::new(
@@ -971,7 +957,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     new_sync_task,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -989,7 +975,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     run_docker,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1007,7 +993,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     exec_docker,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1027,7 +1013,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     copy_to_docker,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1038,7 +1024,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     console_log,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1049,7 +1035,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     output,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1067,7 +1053,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     http_post,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1086,7 +1072,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     plant_trigger,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1106,7 +1092,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     signal_point,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1126,7 +1112,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     submit_onchain_trx,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1137,7 +1123,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     trx_put,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1148,7 +1134,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     trx_del,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1159,7 +1145,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     trx_get,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1170,7 +1156,7 @@ impl WasmMac {
                         vec![ValType::I64]
                     ),
                     trx_get_by_prefix,
-                    &mut (HostData { runtime: self, exec: &mut exec }),
+                    &mut (HostData { runtime: self, exec: &mut exec, inst: None }),
                     1
                 ).unwrap()
             });
@@ -1184,7 +1170,9 @@ impl WasmMac {
             let v = Validator::create(Some(&config2)).unwrap();
             v.validate(&main_mod_raw).unwrap();
 
-            let vm_instance = exec.register_active_module(&mut store, &main_mod_raw).unwrap();
+            let mut vm_instance = exec.register_active_module(&mut store, &main_mod_raw).unwrap();
+
+            host_data_for_tasks.inst = Some(&mut vm_instance);
 
             self.vm_executor = Some(Rc::new(RefCell::new(exec)));
             self.vm_instance = Some(Rc::new(RefCell::new(vm_instance)));
@@ -1238,6 +1226,53 @@ impl WasmMac {
                     }
                 }
             });
+
+            if gas_limit > 0 {
+                let tasks_clone = Arc::clone(&self.tasks_);
+                let cv_clone = Arc::clone(&self.cv_);
+                let stop_clone = Arc::clone(&self.stop_);
+
+                loop {
+                    let task = {
+                        let tasks = tasks_clone.lock().unwrap();
+                        let mut _mg: std::sync::MutexGuard<'_, VecDeque<String>> = cv_clone
+                            .wait_while(tasks, |tasks| { tasks.is_empty() && !self.stop_.load(Ordering::Relaxed) })
+                            .unwrap();
+                        if stop_clone.load(Ordering::Relaxed) && _mg.is_empty() {
+                            return;
+                        }
+                        _mg.pop_front()
+                    };
+
+                    if let Some(task_id) = task {
+                        let val_l = task_id.len() as i32;
+                        let vm_instance: &mut Instance = unsafe {
+                            &mut *host_data_for_tasks.inst.unwrap()
+                        };
+                        let vm_executor: &mut Executor = unsafe {
+                            &mut *host_data_for_tasks.exec.unwrap()
+                        };
+
+                        let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+                        let res2 = vm_executor
+                            .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
+                            .unwrap();
+
+                        let val_offset = res2[0].to_i32();
+                        let raw_arr = task_id.as_bytes();
+                        let arr: Vec<u8> = raw_arr.to_vec();
+                        let mem = vm_instance.get_memory_mut("memory");
+                        mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
+                        let c = ((val_offset as i64) << 32) | (val_l as i64);
+
+                        let mut run_fn = vm_instance.get_func_mut("runTask").unwrap();
+                        let res3 = vm_executor.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+                        if res3.is_ok() {
+                            res3.unwrap();
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1323,7 +1358,7 @@ pub fn console_log(
     let text_bytes_next = text_bytes.unwrap();
     let text = str::from_utf8(&text_bytes_next).unwrap();
 
-    println!("{text}");
+    log(text.to_string());
 
     Ok(vec![WasmValue::from_i64(0)])
 }
@@ -2238,7 +2273,7 @@ impl ConcurrentRunner {
                             cloned_cr_ref1.wasm_run_task(move |vm: &mut Rc<RefCell<WasmMac>>| {
                                 log(format!("ok 17 ..."));
 
-                                vm.borrow_mut().run_task(cloned_task_ref_t.name.clone());
+                                vm.borrow_mut().enqueue_task(cloned_task_ref_t.name.clone());
                             }, vmi);
                         }
                         let mut next_wasm_tasks: Vec<Arc<Mutex<WasmTask>>> = Vec::new();
@@ -2259,6 +2294,7 @@ impl ConcurrentRunner {
                                     "finishing and stopping parallel transactions thread...".to_string()
                                 );
                                 cloned_cr_ref3.thread_pool.lock().unwrap().stop_pool();
+                                return;
                             }
                             let mut cloned_outputs: Option<
                                 HashMap<i32, Arc<Mutex<WasmTask>>>
