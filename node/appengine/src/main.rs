@@ -905,35 +905,26 @@ impl WasmMac {
 
     pub fn run_task(&mut self, task_id: String) {
         let val_l = task_id.len() as i32;
-        let inst_ref1 = Rc::clone(&self.vm_instance.as_ref().unwrap());
-        let mut inst_ref1_mut = inst_ref1.borrow_mut();
-        let mut malloc_fn = inst_ref1_mut.get_func_mut("malloc").unwrap();
-        let mfn = malloc_fn.deref_mut();
-        let exec_ref1 = Rc::clone(&self.vm_executor.as_ref().unwrap());
-        let res2 = exec_ref1
-            .borrow_mut()
-            .call_func(mfn, [WasmValue::from_i32(val_l)])
-            .unwrap();
+        let inst_ref = Rc::clone(&self.vm_instance.as_ref().unwrap());
+        let mut vm_instance = inst_ref.borrow_mut();
+        let exec_ref = Rc::clone(&self.vm_executor.as_ref().unwrap());
+        let mut vm_executor = exec_ref.borrow_mut();
+
+        let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+        let res2 = vm_executor.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
 
         let val_offset = res2[0].to_i32();
         let raw_arr = task_id.as_bytes();
         let arr: Vec<u8> = raw_arr.to_vec();
-        let inst_ref2 = Rc::clone(&self.vm_instance.as_ref().unwrap());
-        let mut inst_ref2_mut = inst_ref2.borrow_mut();
-        let mem = inst_ref2_mut.get_memory_mut("memory");
+        let mem = vm_instance.get_memory_mut("memory");
         mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
         let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        let inst_ref3 = Rc::clone(&self.vm_instance.as_ref().unwrap());
-        let mut inst_ref3_mut = inst_ref3.borrow_mut();
-        let mut run_fn = inst_ref3_mut.get_func_mut("runTask").unwrap();
-        let rfn = run_fn.deref_mut();
-
-        let exec_ref2 = Rc::clone(&self.vm_executor.as_ref().unwrap());
-        exec_ref2
-            .borrow_mut()
-            .call_func(rfn, [WasmValue::from_i64(c)])
-            .unwrap();
+        let mut run_fn = vm_instance.get_func_mut("runTask").unwrap();
+        let res3 = vm_executor.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+        if res3.is_ok() {
+            res3.unwrap();
+        }
     }
 
     pub fn execute_on_chain(&mut self, input: String, user_id: String) {
@@ -2245,7 +2236,6 @@ impl ConcurrentRunner {
                             let vmi = cloned_task_ref_t.vm_index.clone() as usize;
 
                             cloned_cr_ref1.wasm_run_task(move |vm: &mut Rc<RefCell<WasmMac>>| {
-
                                 log(format!("ok 17 ..."));
 
                                 vm.borrow_mut().run_task(cloned_task_ref_t.name.clone());
