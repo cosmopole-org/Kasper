@@ -487,7 +487,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 						return
 					}
 					result = b
-					if isRequesterOnchain {
+					if !isRequesterOnchain {
 						outputCnan <- 1
 					}
 				})
@@ -518,7 +518,7 @@ func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 						return
 					}
 					result = b
-					if isRequesterOnchain {
+					if !isRequesterOnchain {
 						outputCnan <- 1
 					}
 				})
