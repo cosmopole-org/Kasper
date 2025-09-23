@@ -524,10 +524,10 @@ func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 				})
 			}
 		}
-		if isRequesterOnchain {
+		if !isRequesterOnchain {
 			<-outputCnan
 		}
-		if isRequesterOnchain {
+		if !isRequesterOnchain {
 			return string(result), reqId
 		} else {
 			return "{}", reqId

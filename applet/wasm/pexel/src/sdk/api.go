@@ -155,6 +155,11 @@ var converters = map[string]func(reflect.Value) any{
 	},
 }
 
+func SubmitOutput(data []byte) {
+	po, pl := bytesToPointer([]byte(data))
+	Output(po, pl)
+}
+
 func NewEntityType[T any](db *Db, s T) *EntityType[T] {
 	t := reflect.TypeOf(s)
 	propsMap := map[string]Field{}

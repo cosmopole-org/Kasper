@@ -122,7 +122,7 @@ func Run(signal model.Send) {
 				} else if str == "/test" {
 					token := input["token"].(string)
 					params, _ := json.Marshal(map[string]any{"type": "hello"})
-					trx.Chain.SubmitAppletPacketTrx(signal.Point.Id, "47@global", "", signal.User.Id, "", token, "", map[string]any{"params": string(params), "tokenId": token})
+					trx.Signaler.Answer(signal.Point.Id, signal.User.Id, string(trx.Chain.SubmitAppletPacketTrx(signal.Point.Id, "47@global", "", signal.User.Id, "", token, "", map[string]any{"params": string(params), "tokenId": token})), false)
 				}
 			}
 			break
@@ -133,6 +133,8 @@ func Run(signal model.Send) {
 				api.Console.Log("test new task !")
 			}, []string{"a"}, "lock_1")
 			api.Console.Log("hello world !!!")
+			result, _ := json.Marshal(map[string]any{"message": "this is output of transaction"})
+			api.SubmitOutput(result)
 			break
 		}
 	}

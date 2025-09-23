@@ -939,8 +939,13 @@ fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: Strin
 
         let val = (mac.callback)(j);
 
-        let jsn: JsonValue = serde_json::from_str(&val).unwrap();
-        gas_limit = jsn["gasLimit"].as_u64().unwrap_or(0);
+        let jsn_result = serde_json::from_str(&val);
+        if jsn_result.is_ok() {
+            let jsn: JsonValue = jsn_result.unwrap();
+            gas_limit = jsn["gasLimit"].as_u64().unwrap_or(0);
+        } else {
+            gas_limit = 0;
+        }
 
         if gas_limit == 0 {
             thread::spawn(|| {
