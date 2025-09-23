@@ -1932,7 +1932,7 @@ static mut GLOBAL_CR: Lazy<Arc<Mutex<ConcurrentRunner>>> = Lazy::new(|| {
             ast_store_path: "".to_string(),
             wasm_vms: vec![],
             wasm_vm_map: HashMap::new(),
-            thread_pool: Arc::new(Mutex::new(WasmThreadPool::generate(Some(8)))),
+            thread_pool: Arc::new(Mutex::new(WasmThreadPool::generate(Some(0)))),
             saved_key_counter: 0,
         })
     )
@@ -1949,7 +1949,6 @@ impl ConcurrentRunner {
             gcr.wasm_count = 0;
             gcr.wasm_vms = vec![];
             gcr.wasm_vm_map = HashMap::new();
-            gcr.thread_pool = Arc::new(Mutex::new(WasmThreadPool::generate(Some(8))));
             gcr.saved_key_counter = 0;
         }
     }
@@ -2022,6 +2021,18 @@ impl ConcurrentRunner {
                 wasm_send(j);
             }
         }
+        self.cleanup();
+    }
+
+    pub fn cleanup(&mut self) {
+        self.wasm_done_tasks = 0;
+        self.wasm_count = 0;
+        self.trxs = vec![];
+        self.ast_store_path = "".to_string();
+        self.wasm_vms = vec![];
+        self.wasm_vm_map = HashMap::new();
+        self.thread_pool = Arc::new(Mutex::new(WasmThreadPool::generate(Some(0))));
+        self.saved_key_counter = 0;
     }
 
     pub fn prepare_context(&mut self, vm_count: usize) {
