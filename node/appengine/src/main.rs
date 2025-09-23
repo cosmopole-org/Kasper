@@ -1,16 +1,12 @@
-use std::cell::{ RefCell };
 use std::collections::{ HashMap, VecDeque, BTreeMap };
-use std::fmt::format;
-use std::ops::{ Deref, DerefMut };
-use std::rc::Rc;
+use std::ops::{ DerefMut };
 use std::sync::mpsc::{ self, Receiver, Sender };
 use std::sync::{ Arc, Condvar, Mutex };
-use std::thread::JoinHandle;
-use std::{ clone, string, thread };
+use std::{ thread };
 use std::sync::atomic::{ AtomicBool, AtomicI64, Ordering };
-use serde_json::{ json, value, Value as JsonValue };
-use wasmedge_sys::{ instance, Validator };
+use serde_json::{ json, Value as JsonValue };
 use wasmedge_sys::{
+    Validator,
     Executor,
     Function,
     ImportModule,
@@ -23,11 +19,7 @@ use wasmedge_sys::{
     CallingFrame,
     WasmValue,
 };
-
 use wasmedge_types::{ ValType, error::CoreError };
-
-use once_cell::sync::Lazy;
-
 use rocksdb::{
     Options,
     ReadOptions,
@@ -36,8 +28,9 @@ use rocksdb::{
     TransactionOptions,
     WriteOptions,
 };
-
 use blockingqueue::BlockingQueue;
+use once_cell::sync::Lazy;
+use std::sync::{ atomic::{ AtomicI32 } };
 
 static RESP_MAP: Lazy<Arc<Mutex<HashMap<i64, String>>>> = Lazy::new(|| {
     Arc::new(Mutex::new(HashMap::new()))
@@ -47,20 +40,36 @@ static TRIGGER_MAP: Lazy<Arc<Mutex<HashMap<i64, Arc<Condvar>>>>> = Lazy::new(|| 
 });
 static REQ_ID_COUNTER: Lazy<AtomicI64> = Lazy::new(|| { AtomicI64::new(0) });
 static GLOBAL_REQ_CHAN: Lazy<BlockingQueue<String>> = Lazy::new(|| { BlockingQueue::new() });
+static GLOBAL_TRX_STORE: Lazy<BlockingQueue<(Vec<ChainTrx>, String)>> = Lazy::new(|| {
+    BlockingQueue::new()
+});
+static GLOBAL_HEART_BEAT: Lazy<Arc<Condvar>> = Lazy::new(|| { Arc::new(Condvar::new()) });
+static GLOBAL_DB: Lazy<Arc<Mutex<TransactionDB>>> = Lazy::new(|| {
+    let path = "appletdb";
+    let _ = std::fs::remove_dir_all(path);
+    let mut db_options = Options::default();
+    db_options.create_if_missing(true);
+    let txn_db_options = TransactionDBOptions::default();
+    let db = TransactionDB::open(&db_options, &txn_db_options, path).unwrap();
+    Arc::new(Mutex::new(db))
+});
+static mut STEP: i32 = 0;
 
 fn main() {
     let receiver_handler = thread::spawn(|| {
         let context = zmq::Context::new();
         let responder = Arc::new(Mutex::new(context.socket(zmq::REP).unwrap()));
         {
-            assert!(responder.lock().unwrap().bind("tcp://*:5556").is_ok());
+            let res_lock = responder.lock().unwrap();
+            assert!(res_lock.bind("tcp://*:5556").is_ok());
         }
         let mut msg = zmq::Message::new();
         crossbeam
             ::scope(|s| {
                 loop {
                     {
-                        responder.lock().unwrap().recv(&mut msg, 0).unwrap();
+                        let res_lock = responder.lock().unwrap();
+                        res_lock.recv(&mut msg, 0).unwrap();
                     }
                     let data = msg.as_str().unwrap();
                     println!("recevied {data}");
@@ -106,29 +115,24 @@ fn main() {
                                 )
                             );
                         }
-                        thread::spawn(move || {
-                            log("generating concurrent runner...".to_string());
-                            ConcurrentRunner::init(
-                                packet["astStorePath"].as_str().unwrap().to_string(),
-                                trxs
-                            );
-                            unsafe {
-                                log("running paralell transactions...".to_string());
-                                let mut gcr_lock = GLOBAL_CR.lock().unwrap();
-                                gcr_lock.run();
-                                drop(gcr_lock);
-                                log("waiting for paralell transactions to be done...".to_string());
-                            }
-                        });
+                        GLOBAL_TRX_STORE.push((
+                            trxs,
+                            packet["astStorePath"].as_str().unwrap().to_string(),
+                        ));
                     } else if packet["type"] == "apiResponse" {
                         let request_id = packet["requestId"].as_i64().unwrap();
                         RESP_MAP.lock()
                             .unwrap()
                             .insert(request_id, packet["data"].as_str().unwrap().to_string());
-                        TRIGGER_MAP.lock().unwrap().get(&request_id).unwrap().notify_one();
+                        let tgm_lock = TRIGGER_MAP.lock().unwrap();
+                        let t_item = tgm_lock.get(&request_id);
+                        if !t_item.is_none() {
+                            t_item.unwrap().notify_one();
+                        }
                     }
                     {
-                        responder.lock().unwrap().send("", 0).unwrap();
+                        let res_lock = responder.lock().unwrap();
+                        res_lock.send("", 0).unwrap();
                     }
                 }
             })
@@ -147,8 +151,30 @@ fn main() {
             requester.recv(&mut msg, 0).unwrap();
         }
     });
+    trx_processor();
     receiver_handler.join().unwrap();
     sender_handler.join().unwrap();
+}
+
+pub fn trx_processor() {
+    let (tx, rx): (Sender<i32>, Receiver<i32>) = mpsc::channel();
+    thread::spawn(move || {
+        loop {
+            let block = GLOBAL_TRX_STORE.pop();
+            {
+                log("generating concurrent runner...".to_string());
+                ConcurrentRunner::init(block.1, block.0, tx.clone());
+                unsafe {
+                    log("running paralell transactions...".to_string());
+                    let mut gcr_lock = GLOBAL_CR.lock().unwrap();
+                    gcr_lock.run();
+                    drop(gcr_lock);
+                    log("waiting for paralell transactions to be done...".to_string());
+                }
+            }
+            rx.recv().unwrap();
+        }
+    });
 }
 
 pub fn wasm_run_vm(ast_path: String, input: String, machine_id: String) {
@@ -164,28 +190,14 @@ pub fn wasm_run_vm(ast_path: String, input: String, machine_id: String) {
     rt.execute_on_update(inp1);
 }
 
-static GLOBAL_DB: Lazy<Arc<Mutex<TransactionDB>>> = Lazy::new(|| {
-    let path = "appletdb";
-    let _ = std::fs::remove_dir_all(path);
-
-    let mut db_options = Options::default();
-    db_options.create_if_missing(true);
-
-    let txn_db_options = TransactionDBOptions::default();
-
-    let db = TransactionDB::open(&db_options, &txn_db_options, path).unwrap();
-    Arc::new(Mutex::new(db))
-});
-
-static mut STEP: i32 = 0;
-
 fn wasm_send(mut data: JsonValue) -> std::string::String {
-    let req_id = REQ_ID_COUNTER.fetch_add(1, Ordering::Acquire);
+    let req_id = REQ_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
     data["requestId"] = JsonValue::from(req_id);
     let cv_ = Arc::new(Condvar::new());
     {
         let cv_clone = Arc::clone(&cv_);
-        TRIGGER_MAP.lock().unwrap().insert(req_id, cv_clone);
+        let mut tgm_lock = TRIGGER_MAP.lock().unwrap();
+        tgm_lock.insert(req_id, cv_clone);
     }
     {
         GLOBAL_REQ_CHAN.clone().push(data.to_string());
@@ -198,10 +210,13 @@ fn wasm_send(mut data: JsonValue) -> std::string::String {
                 .wait_while(triggers_ref, |tr| { tr.is_empty() && !tr.contains_key(&req_id) })
                 .unwrap();
         }
-        let t = triggers.lock().unwrap().remove(&req_id);
+        let mut triggers_lock = triggers.lock().unwrap();
+        let t = triggers_lock.remove(&req_id);
         let t_final = if t.is_none() { "".to_string() } else { t.unwrap().clone() };
         t_final
     };
+    let mut tgm_lock = TRIGGER_MAP.lock().unwrap();
+    tgm_lock.remove(&req_id);
     res.to_string()
 }
 
@@ -335,11 +350,12 @@ impl Trx {
     pub fn get_by_prefix(&mut self, prefix: String) -> Vec<String> {
         let mut result = Vec::new();
         for (key, value) in &self.store {
-            if WasmUtils::startswith(key, &prefix) {
+            if key.starts_with(&prefix) {
                 result.push(value.clone());
             }
         }
-        for t in GLOBAL_DB.lock().unwrap().prefix_iterator(prefix.as_bytes().to_vec().as_slice()) {
+        let db = GLOBAL_DB.lock().unwrap();
+        for t in db.prefix_iterator(prefix.as_bytes().to_vec().as_slice()) {
             let item = t.unwrap();
             let key = str::from_utf8(item.0.to_vec().as_slice()).unwrap().to_string();
             let val = str::from_utf8(item.1.to_vec().as_slice()).unwrap().to_string();
@@ -356,7 +372,8 @@ impl Trx {
         } else if self.newly_deleted.contains_key(&key) {
             return "".to_string();
         } else {
-            let raw_val = GLOBAL_DB.lock().unwrap().get(key.as_bytes().to_vec().as_slice());
+            let db = GLOBAL_DB.lock().unwrap();
+            let raw_val = db.get(key.as_bytes().to_vec().as_slice());
             let value: String;
             if raw_val.is_ok() {
                 value = if let Some(val) = raw_val.unwrap() {
@@ -402,7 +419,6 @@ impl Trx {
 }
 
 pub struct WasmThreadPool {
-    threads_: Vec<thread::JoinHandle<()>>,
     tasks_: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send>>>>,
     cv_: Arc<Condvar>,
     stop_: Arc<AtomicBool>,
@@ -420,22 +436,25 @@ impl WasmThreadPool {
         let tasks_: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send>>>> = Arc::new(Mutex::new(vd));
         let cv_ = Arc::new(Condvar::new());
         let stop_ = Arc::new(AtomicBool::new(false));
-        let mut threads_ = Vec::new();
 
         for _i in 0..num_threads {
             let tasks_clone = Arc::clone(&tasks_);
             let cv_clone = Arc::clone(&cv_);
             let stop_clone = Arc::clone(&stop_);
 
-            let handle = thread::spawn(move || {
+            thread::spawn(move || {
                 loop {
                     let task = {
                         let tasks = tasks_clone.lock().unwrap();
                         let mut _mg: std::sync::MutexGuard<
                             '_,
                             VecDeque<Box<dyn FnOnce() + Send>>
-                        > = cv_clone.wait(tasks).unwrap();
-                        if stop_clone.load(Ordering::Acquire) && _mg.is_empty() {
+                        > = cv_clone
+                            .wait_while(tasks, |tasks| {
+                                tasks.is_empty() && !stop_clone.load(Ordering::Relaxed)
+                            })
+                            .unwrap();
+                        if stop_clone.load(Ordering::Relaxed) && _mg.is_empty() {
                             return;
                         }
 
@@ -447,20 +466,12 @@ impl WasmThreadPool {
                     }
                 }
             });
-            threads_.push(handle);
         }
 
         WasmThreadPool {
-            threads_,
             tasks_,
             cv_,
             stop_,
-        }
-    }
-
-    pub fn stick(&mut self) {
-        for thread in self.threads_.drain(..) {
-            thread.join().unwrap();
         }
     }
 
@@ -479,36 +490,6 @@ impl WasmThreadPool {
     }
 }
 
-pub struct WasmUtils;
-
-impl WasmUtils {
-    pub fn parse_data_as_int(buffer: Vec<u8>) -> i32 {
-        (((buffer[0] as u32) << 24) as i32) |
-            (((buffer[1] as u32) << 16) as i32) |
-            (((buffer[2] as u32) << 8) as i32) |
-            (buffer[3] as u32 as i32)
-    }
-
-    pub fn pick_subarray(a: Vec<u8>, i: usize, j: usize) -> Vec<u8> {
-        let mut sub = vec![0u8; j];
-        for x in i..i + j {
-            if x < a.len() && x - i < sub.len() {
-                sub[x - i] = a[x];
-            }
-        }
-        sub
-    }
-
-    pub fn startswith(str_val: &str, cmp: &str) -> bool {
-        str_val.starts_with(cmp)
-    }
-
-    pub fn pick_string(a: Vec<u8>, i: usize, j: usize) -> String {
-        let da = WasmUtils::pick_subarray(a, i, j);
-        String::from_utf8_lossy(&da).to_string()
-    }
-}
-
 pub struct WasmMac {
     pub onchain: bool,
     pub chain_token_id: String,
@@ -520,10 +501,7 @@ pub struct WasmMac {
     pub id: String,
     pub index: i32,
     pub trx: Box<Trx>,
-    pub looper: Option<thread::JoinHandle<()>>,
-    pub tasks: VecDeque<Box<dyn FnOnce() + Send>>,
     pub sync_tasks: Vec<SyncTask>,
-    pub queue_mutex_: Mutex<()>,
     pub mod_path: String,
     pub cost: u64,
 
@@ -537,12 +515,6 @@ pub struct WasmMac {
 pub struct HostData {
     exec: *mut Executor,
     runtime: *mut WasmMac,
-}
-
-pub struct HostDataForTasks {
-    runtime: Option<*mut WasmMac>,
-    exec: Option<*mut Executor>,
-    inst: Option<*mut Instance>,
 }
 
 impl WasmMac {
@@ -568,10 +540,7 @@ impl WasmMac {
             id: String::new(),
             index: 0,
             trx: Box::new(Trx::new()),
-            looper: None,
-            tasks: VecDeque::new(),
             sync_tasks: Vec::new(),
-            queue_mutex_: Mutex::new(()),
             mod_path,
             execution_result: "".to_string(),
             has_output: false,
@@ -605,10 +574,7 @@ impl WasmMac {
             id: vm_id,
             index,
             trx: Box::new(Trx::new()),
-            looper: None,
-            tasks: VecDeque::new(),
             sync_tasks: Vec::new(),
-            queue_mutex_: Mutex::new(()),
             mod_path,
             execution_result: "".to_string(),
             has_output: false,
@@ -627,14 +593,6 @@ impl WasmMac {
         }
 
         self.trx.ops.clone()
-    }
-
-    pub fn enqueue<F>(&mut self, task: F) where F: FnOnce() + Send + 'static {
-        let _lock = self.queue_mutex_.lock().unwrap();
-        if self.tasks.is_empty() {
-            self.tasks.push_back(Box::new(task));
-        }
-        self.cv_.notify_one();
     }
 
     pub fn execute_on_update(&mut self, input: String) {
@@ -890,12 +848,6 @@ impl WasmMac {
         }
         self.cv_.notify_one();
     }
-
-    pub fn stick(&mut self) {
-        if let Some(handle) = self.looper.take() {
-            handle.join().unwrap();
-        }
-    }
 }
 
 fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: String) {
@@ -948,6 +900,9 @@ fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: Strin
         }
 
         if gas_limit == 0 {
+            mac.has_output = false;
+            mac.is_token_valid = false;
+            drop(mac_lock);
             thread::spawn(|| {
                 let cr_cloned = Arc::clone(unsafe { &GLOBAL_CR });
                 let mut cr = cr_cloned.lock().unwrap();
@@ -1229,45 +1184,45 @@ fn execute_on_chain(mac_item: Arc<Mutex<WasmMac>>, input: String, user_id: Strin
             }
         });
 
-        if gas_limit > 0 {
-            loop {
-                let task = {
-                    let tasks = tasks_clone.lock().unwrap();
-                    let mut _mg: std::sync::MutexGuard<
-                        '_,
-                        VecDeque<(String, Sender<i32>)>
-                    > = cv_clone.wait(tasks).unwrap();
-                    if stop_clone.load(Ordering::Acquire) && _mg.is_empty() {
-                        break;
-                    }
-                    _mg.pop_front()
-                };
-
-                if let Some(task_id) = task {
-                    let val_l = task_id.0.len() as i32;
-
-                    let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
-                    let res2 = exec
-                        .call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)])
-                        .unwrap();
-
-                    let val_offset = res2[0].to_i32();
-                    let raw_arr = task_id.0.as_bytes();
-                    let arr: Vec<u8> = raw_arr.to_vec();
-                    let mem = vm_instance.get_memory_mut("memory");
-                    mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
-                    let c = ((val_offset as i64) << 32) | (val_l as i64);
-
-                    let mut run_fn = vm_instance.get_func_mut("runTask").unwrap();
-                    let res3 = exec.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
-                    if res3.is_ok() {
-                        res3.unwrap();
-                    }
-                    task_id.1.send(1).unwrap();
+        loop {
+            let task = {
+                let tasks = tasks_clone.lock().unwrap();
+                let mut _mg: std::sync::MutexGuard<'_, VecDeque<(String, Sender<i32>)>> = cv_clone
+                    .wait_while(tasks, |tasks| {
+                        tasks.is_empty() && !stop_clone.load(Ordering::Relaxed)
+                    })
+                    .unwrap();
+                if stop_clone.load(Ordering::Relaxed) && _mg.is_empty() {
+                    log(
+                        "------------------------------ end of vm lifecycle ---------------------------------------".to_string()
+                    );
+                    let mut ml = mac_item.lock().unwrap();
+                    ml.cost = stats.cost_in_total();
+                    return;
                 }
+                _mg.pop_front()
+            };
+
+            if let Some(task_id) = task {
+                let val_l = task_id.0.len() as i32;
+
+                let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+                let res2 = exec.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
+
+                let val_offset = res2[0].to_i32();
+                let raw_arr = task_id.0.as_bytes();
+                let arr: Vec<u8> = raw_arr.to_vec();
+                let mem = vm_instance.get_memory_mut("memory");
+                mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
+                let c = ((val_offset as i64) << 32) | (val_l as i64);
+
+                let mut run_fn = vm_instance.get_func_mut("runTask").unwrap();
+                let res3 = exec.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+                if res3.is_ok() {
+                    res3.unwrap();
+                }
+                task_id.1.send(1).unwrap();
             }
-            let mut ml = mac_item.lock().unwrap();
-            ml.cost = stats.cost_in_total();
         }
     });
 }
@@ -1790,9 +1745,6 @@ pub fn signal_point(
     Ok(vec![WasmValue::from_i64(c)])
 }
 
-use std::sync::{ atomic::{ AtomicI32 } };
-use std::time::Instant;
-
 pub fn trx_put(
     host_data: &mut HostData,
     _inst: &mut Instance,
@@ -1913,6 +1865,7 @@ pub fn trx_get_by_prefix(
 }
 
 pub struct ConcurrentRunner {
+    pub end_cb: Sender<i32>,
     pub wasm_done_tasks: i32,
     pub wasm_count: i32,
     pub trxs: Vec<ChainTrx>,
@@ -1924,8 +1877,10 @@ pub struct ConcurrentRunner {
 }
 
 static mut GLOBAL_CR: Lazy<Arc<Mutex<ConcurrentRunner>>> = Lazy::new(|| {
+    let (tx, _): (Sender<i32>, Receiver<i32>) = mpsc::channel();
     Arc::new(
         Mutex::new(ConcurrentRunner {
+            end_cb: tx.clone(),
             wasm_done_tasks: 0,
             wasm_count: 0,
             trxs: vec![],
@@ -1939,7 +1894,7 @@ static mut GLOBAL_CR: Lazy<Arc<Mutex<ConcurrentRunner>>> = Lazy::new(|| {
 });
 
 impl ConcurrentRunner {
-    pub fn init(ast_store_path: String, trxs: Vec<ChainTrx>) {
+    pub fn init(ast_store_path: String, trxs: Vec<ChainTrx>, end_cb: Sender<i32>) {
         unsafe {
             let gcr_raw = Arc::clone(&GLOBAL_CR);
             let mut gcr = gcr_raw.lock().unwrap();
@@ -1950,6 +1905,7 @@ impl ConcurrentRunner {
             gcr.wasm_vms = vec![];
             gcr.wasm_vm_map = HashMap::new();
             gcr.saved_key_counter = 0;
+            gcr.end_cb = end_cb;
         }
     }
 
@@ -2027,12 +1983,13 @@ impl ConcurrentRunner {
     pub fn cleanup(&mut self) {
         self.wasm_done_tasks = 0;
         self.wasm_count = 0;
-        self.trxs = vec![];
+        self.trxs.clear();
         self.ast_store_path = "".to_string();
-        self.wasm_vms = vec![];
-        self.wasm_vm_map = HashMap::new();
+        self.wasm_vms.clear();
+        self.wasm_vm_map.clear();
         self.thread_pool = Arc::new(Mutex::new(WasmThreadPool::generate(Some(0))));
         self.saved_key_counter = 0;
+        self.end_cb.send(1).unwrap();
     }
 
     pub fn prepare_context(&mut self, vm_count: usize) {
@@ -2181,6 +2138,7 @@ impl ConcurrentRunner {
 
         if start_points.is_empty() {
             log("finishing and stopping parallel transactions thread...".to_string());
+            self.collect_results();
         } else {
             self.thread_pool = Arc::new(Mutex::new(WasmThreadPool::generate(Some(res_counter))));
             self.saved_key_counter = key_counter;
@@ -2206,11 +2164,14 @@ impl ConcurrentRunner {
                 if cloned_task_ref_t.started == false {
                     log("ok 6".to_string());
                     let mut passed = true;
-                    for (_, val) in cloned_task_ref_t.inputs.lock().unwrap().iter() {
-                        log(format!("ok 7 ... {val_bool}", val_bool = val.0));
-                        if !val.0 {
-                            passed = false;
-                            break;
+                    {
+                        let tc = cloned_task_ref_t.inputs.lock().unwrap();
+                        for (_, val) in tc.iter() {
+                            log(format!("ok 7 ... {val_bool}", val_bool = val.0));
+                            if !val.0 {
+                                passed = false;
+                                break;
+                            }
                         }
                     }
                     if passed {
@@ -2265,15 +2226,18 @@ impl ConcurrentRunner {
 
                             log(format!("ok 19 ..."));
 
-                            wasm_done_wasm_tasks_count.fetch_add(1, Ordering::Acquire);
+                            wasm_done_wasm_tasks_count.fetch_add(1, Ordering::Relaxed);
                             if
-                                wasm_done_wasm_tasks_count.load(Ordering::Acquire) ==
+                                wasm_done_wasm_tasks_count.load(Ordering::Relaxed) ==
                                 cloned_cr_ref3.saved_key_counter
                             {
                                 log(
                                     "finishing and stopping parallel transactions thread...".to_string()
                                 );
-                                cloned_cr_ref3.thread_pool.lock().unwrap().stop_pool();
+                                {
+                                    let mut tpool = cloned_cr_ref3.thread_pool.lock().unwrap();
+                                    tpool.stop_pool();
+                                }
                                 cloned_cr_ref3.collect_results();
                                 return;
                             }
