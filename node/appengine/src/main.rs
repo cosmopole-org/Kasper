@@ -207,7 +207,7 @@ fn wasm_send(mut data: JsonValue) -> std::string::String {
         {
             let triggers_ref = triggers.lock().unwrap();
             let _mg: std::sync::MutexGuard<'_, HashMap<i64, String>> = cv_
-                .wait_while(triggers_ref, |tr| { tr.is_empty() && !tr.contains_key(&req_id) })
+                .wait_while(triggers_ref, |tr| { !tr.contains_key(&req_id) })
                 .unwrap();
         }
         let mut triggers_lock = triggers.lock().unwrap();
