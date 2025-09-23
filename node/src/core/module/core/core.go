@@ -701,6 +701,7 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 				}
 
 				kvTokenKeyword := "consumeToken: "
+				kvstoreKeyword := "applet: "
 				for _, ef := range packet.Effects.DbUpdates {
 					if (len(ef.Val) > len(kvTokenKeyword)) && (string(ef.Val[0:len(kvTokenKeyword)]) == kvTokenKeyword) {
 						tokenData := packetmodel.ConsumeTokenInput{}
@@ -747,16 +748,15 @@ func (c *Core) OnChainPacket(typ string, trxPayload []byte) string {
 							}
 						})
 						break
+					} else if (len(ef.Val) > len(kvstoreKeyword)) && (string(ef.Val[0:len(kvstoreKeyword)]) == kvstoreKeyword) {
+						c.tools.Wasm().ExecuteChainEffects(string(ef.Val[len(kvstoreKeyword):]))
 					}
 				}
 
 				if !callback.Executors[c.Ip] {
-					kvstoreKeyword := "applet: "
 					c.ModifyState(false, func(trx trx.ITrx) error {
 						for _, ef := range packet.Effects.DbUpdates {
-							if (len(ef.Val) > len(kvstoreKeyword)) && (string(ef.Val[0:len(kvstoreKeyword)]) == kvstoreKeyword) {
-								c.tools.Wasm().ExecuteChainEffects(string(ef.Val[len(kvstoreKeyword):]))
-							} else {
+							if ef.Key != "" {
 								if ef.Typ == "put" {
 									trx.PutBytes(ef.Key, ef.Val)
 								} else if ef.Typ == "del" {
