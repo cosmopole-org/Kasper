@@ -50,6 +50,14 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.StopMachine)
 		}
 		
+		func (c *Plugger) ReadBuildLogs() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ReadBuildLogs)
+		}
+		
+		func (c *Plugger) ReadMachineBuilds() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.ReadMachineBuilds)
+		}
+		
 		func (c *Plugger) Deploy() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Deploy)
 		}

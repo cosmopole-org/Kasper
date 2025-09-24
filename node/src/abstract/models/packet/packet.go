@@ -7,10 +7,16 @@ type Packet struct {
 
 type LogPacket struct {
 	Id      string `json:"id"`
-	MsgId   int64  `json:"messageId"`
 	PointId string `json:"pointId"`
 	UserId  string `json:"userId"`
 	Data    string `json:"data"`
 	Time    int64  `json:"time"`
 	Edited  bool   `json:"edited"`
+}
+
+type BuildPacket struct {
+	Id        string `json:"id"`
+	BuildId   string `json:"buildId"`
+	MachineId string `json:"machineId"`
+	Data      string `json:"data"`
 }

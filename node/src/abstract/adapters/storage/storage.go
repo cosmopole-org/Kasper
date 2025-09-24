@@ -17,4 +17,6 @@ type IStorage interface {
 	UpdateLog(pointId string, userId string, signalId string, data string, timeVal int64) packet.LogPacket
 	ReadPointLogs(pointId string, beforeTime int64, count int) []packet.LogPacket
 	PickPointLogs(pointId string, ids []string) []packet.LogPacket
+	LogBuild(buildId string, machineId string, data string) packet.BuildPacket
+	ReadBuildLogs(buildId string, machineId string) []packet.BuildPacket
 }

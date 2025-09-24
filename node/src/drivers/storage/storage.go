@@ -39,6 +39,46 @@ func (sm *StorageManager) TsDb() *sql.DB {
 	return sm.tsdb
 }
 
+func (sm *StorageManager) LogBuild(buildId string, machineId string, data string) packet.BuildPacket {
+	sm.lock.Lock()
+	defer sm.lock.Unlock()
+	ctx := context.Background()
+	id := uuid.NewString()
+	_, err := sm.tsdb.ExecContext(ctx,
+		"INSERT INTO buildlogs (id, build_id, machine_id, data) VALUES ($1, $2, $3)",
+		id, buildId, machineId, data,
+	)
+	if err != nil {
+		log.Println("Insert error: " + err.Error())
+	}
+	packet := packet.BuildPacket{Id: id, BuildId: buildId, MachineId: machineId, Data: data}
+	return packet
+}
+
+func (sm *StorageManager) ReadBuildLogs(buildId string, machineId string) []packet.BuildPacket {
+	sm.lock.Lock()
+	defer sm.lock.Unlock()
+	ctx := context.Background()
+	var rows *sql.Rows
+	var err error
+	rows, err = sm.tsdb.QueryContext(ctx, "SELECT id, data FROM storage WHERE build_id = $1 and machine_id = $2", buildId, machineId)
+	if err != nil {
+		log.Println(err)
+		return []packet.BuildPacket{}
+	}
+	defer rows.Close()
+	logs := []packet.BuildPacket{}
+	for rows.Next() {
+		var id string
+		var data string
+		if err := rows.Scan(&id, &data); err != nil {
+			log.Println(err)
+		}
+		logs = append(logs, packet.BuildPacket{Id: id, BuildId: buildId, MachineId: machineId, Data: data})
+	}
+	return logs
+}
+
 func (sm *StorageManager) LogTimeSieries(pointId string, userId string, data string, timeVal int64) packet.LogPacket {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
@@ -93,7 +133,6 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime int64, count 
 	}
 	logs := []packet.LogPacket{}
 
-	fmt.Println("Query results:")
 	for rows.Next() {
 		var id string
 		var userId string
@@ -109,12 +148,12 @@ func (sm *StorageManager) ReadPointLogs(pointId string, beforeTime int64, count 
 }
 
 func (sm *StorageManager) PickPointLogs(pointId string, ids []string) []packet.LogPacket {
-	
+
 	ctx := context.Background()
 	if len(ids) == 0 {
 		return []packet.LogPacket{}
 	}
-	rows, err := sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in ('" + strings.Join(ids, "','") + "')", pointId)
+	rows, err := sm.tsdb.QueryContext(ctx, "SELECT id, user_id, data, time, edited FROM storage WHERE point_id = $1 and id in ('"+strings.Join(ids, "','")+"')", pointId)
 	if err != nil {
 		log.Println(err)
 		return []packet.LogPacket{}

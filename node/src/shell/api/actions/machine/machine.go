@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"kasper/src/abstract/models/core"
-	"kasper/src/abstract/models/packet"
 	"kasper/src/abstract/models/trx"
 	"kasper/src/abstract/state"
 	inputs_machiner "kasper/src/shell/api/inputs/machine"
@@ -12,6 +11,8 @@ import (
 	outputs_machiner "kasper/src/shell/api/outputs/plugin"
 	"kasper/src/shell/utils/future"
 	"log"
+
+	"github.com/google/uuid"
 )
 
 const pluginsTemplateName = "/machines/"
@@ -260,6 +261,25 @@ func (a *Actions) StopMachine(state state.IState, input inputs_machiner.RunMachi
 	return map[string]any{}, nil
 }
 
+// ReadBuildLogs /machines/readBuildLogs check [ true false false ] access [ true false false false POST ]
+func (a *Actions) ReadBuildLogs(state state.IState, input inputs_machiner.ReadBuildLogsInput) (any, error) {
+	if state.Trx().GetLink("BuildLogs::" + input.MachineId+"::"+input.BuildId) != "true" {
+		return nil, errors.New("build not found")
+	}
+	return map[string]any{"logs": a.App.Tools().Storage().ReadBuildLogs(input.BuildId, input.MachineId)}, nil
+}
+
+// ReadMachineBuilds /machines/readMachineBuilds check [ true false false ] access [ true false false false POST ]
+func (a *Actions) ReadMachineBuilds(state state.IState, input inputs_machiner.RunMachineInput) (any, error) {
+	prefix := "BuildLogs::" + input.MachineId+"::"
+	builds, err := state.Trx().GetLinksList(prefix, input.Offset, input.Count, false)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return map[string]any{"buildsList": builds}, nil
+}
+
 // Deploy /machines/deploy check [ true false false ] access [ true false false false POST ]
 func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) (any, error) {
 	trx := state.Trx()
@@ -334,13 +354,16 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 			}
 		}
 		outputChan := make(chan string)
+		buildId := uuid.NewString()
+		trx.PutLink("VmBuilds::"+vm.MachineId+"::"+buildId, "true")
 		future.Async(func() {
 			for {
 				data := <-outputChan
 				if data == "" {
 					break
 				}
-				a.App.Tools().Signaler().SignalUser("docker/build", state.Info().UserId(), packet.ResponseSimpleMessage{Message: data}, true)
+				l := a.App.Tools().Storage().LogBuild(buildId, vm.MachineId, data)
+				a.App.Tools().Signaler().SignalUser("docker/build", state.Info().UserId(), l, true)
 			}
 		}, false)
 		future.Async(func() {
