@@ -283,6 +283,10 @@ func (a *Actions) Create(state state.IState, input inputsusers.CreateInput) (any
 			}
 		}
 	}
+	err := trx.PutJson("UserMeta::"+user.Id, "metadata.private.settings.privacy", map[string]any{"onlineView": "all"}, true)
+	if err != nil {
+		log.Println(err)
+	}
 
 	point := models.Point{Id: a.App.Tools().Storage().GenId(trx, "global"), Tag: "home", IsPublic: false, PersHist: true, ParentId: ""}
 	point.Push(trx)
