@@ -263,15 +263,15 @@ func (a *Actions) StopMachine(state state.IState, input inputs_machiner.RunMachi
 
 // ReadBuildLogs /machines/readBuildLogs check [ true false false ] access [ true false false false POST ]
 func (a *Actions) ReadBuildLogs(state state.IState, input inputs_machiner.ReadBuildLogsInput) (any, error) {
-	if state.Trx().GetLink("BuildLogs::" + input.MachineId+"::"+input.BuildId) != "true" {
+	if state.Trx().GetLink("BuildLogs::"+input.MachineId+"::"+input.BuildId) != "true" {
 		return nil, errors.New("build not found")
 	}
 	return map[string]any{"logs": a.App.Tools().Storage().ReadBuildLogs(input.BuildId, input.MachineId)}, nil
 }
 
 // ReadMachineBuilds /machines/readMachineBuilds check [ true false false ] access [ true false false false POST ]
-func (a *Actions) ReadMachineBuilds(state state.IState, input inputs_machiner.RunMachineInput) (any, error) {
-	prefix := "BuildLogs::" + input.MachineId+"::"
+func (a *Actions) ReadMachineBuilds(state state.IState, input inputs_machiner.MachineBuildsInput) (any, error) {
+	prefix := "BuildLogs::" + input.MachineId + "::"
 	builds, err := state.Trx().GetLinksList(prefix, input.Offset, input.Count, false)
 	if err != nil {
 		log.Println(err)
