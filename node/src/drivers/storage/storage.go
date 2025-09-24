@@ -236,5 +236,11 @@ func NewStorage(core core.ICore, storageRoot string, baseDbPath string, logsDbPa
 			break
 		}
 	}
+	_, err = tsdb.ExecContext(context.Background(),
+		"create table if not exists buildlogs(id text, build_id text, machine_id text, data text);",
+	)
+	if err != nil {
+		panic(err)
+	}
 	return &StorageManager{core: core, tsdb: tsdb, kvdb: kvdb, storageRoot: storageRoot}
 }
