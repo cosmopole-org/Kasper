@@ -188,6 +188,7 @@ pub fn wasm_run_vm(ast_path: String, input: String, machine_id: String) {
         Box::new(wasm_send)
     );
     rt.execute_on_update(inp1);
+    rt.finalize();
 }
 
 fn wasm_send(mut data: JsonValue) -> std::string::String {
