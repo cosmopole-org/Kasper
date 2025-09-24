@@ -1848,7 +1848,7 @@ pub fn trx_get_by_prefix(
     });
 
     let val = j.to_string();
-    let val_l = vals.len();
+    let val_l = val.len();
 
     let mut malloc_fn = _inst.get_func_mut("malloc").unwrap();
     let mfn = malloc_fn.deref_mut();
