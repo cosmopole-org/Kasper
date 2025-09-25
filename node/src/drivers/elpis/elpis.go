@@ -2,7 +2,9 @@ package elpis
 
 /*
  #cgo CXXFLAGS: -std=c++17
+ #cgo LDFLAGS: -lrocksdb -lpthread -lz -lsnappy -lzstd -llz4 -lbz2 -lwasmedge -static-libgcc -static-libstdc++
 
+ #include <stdlib.h>
  #include "main.h"
 */
 import "C"

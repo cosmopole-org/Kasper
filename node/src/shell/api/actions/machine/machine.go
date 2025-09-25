@@ -11,6 +11,8 @@ import (
 	outputs_machiner "kasper/src/shell/api/outputs/plugin"
 	"kasper/src/shell/utils/future"
 	"log"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -30,10 +32,32 @@ func Install(a *Actions, extra ...any) error {
 		for _, vm := range vms {
 			if vm.Runtime == "wasm" {
 				a.App.Tools().Wasm().Assign(vm.MachineId)
+				if pointId := trx.GetLink("vmAlarmPointId::" + vm.MachineId); pointId != "" {
+					future.Async(func() {
+						t, _ := strconv.ParseInt(trx.GetLink("vmAlarmTime::"+vm.MachineId), 10, 64)
+						ct := time.Now().UnixMilli()
+						if t > ct {
+							time.Sleep(time.Duration(t-ct) * time.Millisecond)
+						}
+						data := trx.GetLink("vmAlarmData::" + vm.MachineId)
+						trx.DelKey("link::vmAlarmPointId::" + vm.MachineId)
+						trx.DelKey("link::vmAlarmData::" + vm.MachineId)
+						trx.DelKey("link::vmAlarmTime::" + vm.MachineId)
+						if a.App.Tools().Security().HasAccessToPoint(vm.MachineId, pointId) {
+							a.App.Tools().Wasm().RunVm(vm.MachineId, pointId, data)
+						}
+					}, false)
+				}
 			} else if vm.Runtime == "elpis" {
 				a.App.Tools().Elpis().Assign(vm.MachineId)
 			} else if vm.Runtime == "docker" {
 				a.App.Tools().Docker().Assign(vm.MachineId)
+				if trx.GetLink("vmStatus::"+vm.MachineId) == "running" {
+					future.Async(func() {
+						a.App.Tools().Docker().SaRContainer(vm.MachineId, "main", "main")
+						a.App.Tools().Docker().RunContainer(vm.MachineId, "", "main", "main", map[string]string{}, true)
+					}, false)
+				}
 			}
 			var pointIds []string
 			prefix := "memberof::" + vm.MachineId + "::"
@@ -239,6 +263,7 @@ func (a *Actions) RunMachine(state state.IState, input inputs_machiner.RunMachin
 	if app.OwnerId != state.Info().UserId() {
 		return nil, errors.New("you are not owner of this machine")
 	}
+	trx.PutLink("machineStatus::"+vm.MachineId, "running")
 	future.Async(func() {
 		a.App.Tools().Docker().SaRContainer(input.MachineId, "main", "main")
 		a.App.Tools().Docker().RunContainer(input.MachineId, "", "main", "main", map[string]string{}, true)
@@ -257,13 +282,14 @@ func (a *Actions) StopMachine(state state.IState, input inputs_machiner.RunMachi
 	if app.OwnerId != state.Info().UserId() {
 		return nil, errors.New("you are not owner of this machine")
 	}
+	trx.DelKey("link::machineStatus::" + vm.MachineId)
 	a.App.Tools().Docker().SaRContainer(input.MachineId, "main", "main")
 	return map[string]any{}, nil
 }
 
 // ReadBuildLogs /machines/readBuildLogs check [ true false false ] access [ true false false false POST ]
 func (a *Actions) ReadBuildLogs(state state.IState, input inputs_machiner.ReadBuildLogsInput) (any, error) {
-	if state.Trx().GetLink("BuildLogs::"+input.MachineId+"::"+input.BuildId) != "true" {
+	if state.Trx().GetLink("vmBuilds::"+input.MachineId+"::"+input.BuildId) != "true" {
 		return nil, errors.New("build not found")
 	}
 	return map[string]any{"logs": a.App.Tools().Storage().ReadBuildLogs(input.BuildId, input.MachineId)}, nil
@@ -271,7 +297,7 @@ func (a *Actions) ReadBuildLogs(state state.IState, input inputs_machiner.ReadBu
 
 // ReadMachineBuilds /machines/readMachineBuilds check [ true false false ] access [ true false false false POST ]
 func (a *Actions) ReadMachineBuilds(state state.IState, input inputs_machiner.MachineBuildsInput) (any, error) {
-	prefix := "BuildLogs::" + input.MachineId + "::"
+	prefix := "vmBuilds::" + input.MachineId + "::"
 	builds, err := state.Trx().GetLinksList(prefix, input.Offset, input.Count, false)
 	if err != nil {
 		log.Println(err)
@@ -355,7 +381,7 @@ func (a *Actions) Deploy(state state.IState, input inputs_machiner.DeployInput) 
 		}
 		outputChan := make(chan string)
 		buildId := uuid.NewString()
-		trx.PutLink("VmBuilds::"+vm.MachineId+"::"+buildId, "true")
+		trx.PutLink("vmBuilds::"+vm.MachineId+"::"+buildId, "true")
 		future.Async(func() {
 			for {
 				data := <-outputChan

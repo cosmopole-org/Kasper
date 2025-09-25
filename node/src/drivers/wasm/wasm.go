@@ -1,14 +1,5 @@
 package wasm
 
-/*
- #cgo CXXFLAGS: -std=c++17
- #cgo LDFLAGS: -lrocksdb -lpthread -lz -lsnappy -lzstd -llz4 -lbz2 -lwasmedge -static-libgcc -static-libstdc++
-
- #include <stdlib.h>
- #include "main.h"
-*/
-import "C"
-
 import (
 	"bytes"
 	"encoding/base64"
@@ -560,7 +551,19 @@ func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 		}
 		if tag == "alarm" {
 			future.Async(func() {
+				wm.app.ModifyState(false, func(trx trx.ITrx) error {
+					trx.PutLink("vmAlarmPointId::"+machineId, pointId)
+					trx.PutLink("vmAlarmData::"+machineId, data)
+					trx.PutLink("vmAlarmTime::"+machineId, fmt.Sprintf("%d", time.Now().UnixMilli()+(int64(count)*1000)))
+					return nil
+				})
 				time.Sleep(time.Duration(count) * time.Second)
+				wm.app.ModifyState(false, func(trx trx.ITrx) error {
+					trx.DelKey("link::vmAlarmPointId::" + machineId)
+					trx.DelKey("link::vmAlarmData::" + machineId)
+					trx.DelKey("link::vmAlarmTime::" + machineId)
+					return nil
+				})
 				if wm.app.Tools().Security().HasAccessToPoint(machineId, pointId) {
 					wm.RunVm(machineId, pointId, data)
 				}
