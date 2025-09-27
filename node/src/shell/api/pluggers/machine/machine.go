@@ -42,6 +42,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.UpdateMachine)
 		}
 		
+		func (c *Plugger) Signal() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.Signal)
+		}
+		
 		func (c *Plugger) RunMachine() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.RunMachine)
 		}

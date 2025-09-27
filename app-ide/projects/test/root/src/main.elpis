@@ -1,0 +1,4 @@
+
+print(text: "hello sky !")
+define function hello():
+  print(text: "test")

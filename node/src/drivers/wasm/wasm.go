@@ -21,6 +21,7 @@ import (
 	"kasper/src/core/module/actor/model/base"
 	inputs_points "kasper/src/shell/api/inputs/points"
 	inputs_storage "kasper/src/shell/api/inputs/storage"
+	inputs_users "kasper/src/shell/api/inputs/users"
 	"kasper/src/shell/api/model"
 	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/future"
@@ -187,24 +188,54 @@ func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 			println(err)
 			return err.Error(), reqId
 		}
-		containerName, err := checkField(input, "containerName", "")
+		cn, err := checkField(input, "containerName", "")
 		if err != nil {
 			println(err)
 			return err.Error(), reqId
 		}
-		wm.docker.SaRContainer(machineId, imageName, containerName)
-		outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles, false)
-		if err != nil {
-			println(err)
-			return err.Error(), reqId
-		}
-		if outputFile != nil {
-			str, err := json.Marshal(outputFile)
+		cnParts := strings.Split(cn, "|")
+		containerName := cnParts[0]
+		isAsync := cnParts[1] == "true"
+		if isAsync {
+			creatorUserId := cnParts[2]
+			creatorSignature := cnParts[3]
+			lockId := cnParts[4]
+			inp, _ := json.Marshal(inputs_users.ConsumeLockInput{
+				Type:      "pay",
+				UserId:    creatorUserId,
+				Signature: creatorSignature,
+				LockId:    lockId,
+				Amount:    100,
+			})
+			sign := wm.app.SignPacketAsOwner(inp)
+			wm.app.ExecBaseRequestOnChain("/users/consumeLock", inp, sign, wm.app.OwnerId(), "", func(b []byte, i int, err error) {
+				if err != nil {
+					println(err)
+					return
+				}
+				future.Async(func() {
+					if imageName != "main" || containerName != "main" {
+						wm.docker.Assign(machineId + "_" + imageName + "_" + containerName)
+					}
+					wm.docker.SaRContainer(machineId, imageName, containerName)
+					wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles, false)
+				}, false)
+			})
+		} else {
+			wm.docker.SaRContainer(machineId, imageName, containerName)
+			outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles, false)
 			if err != nil {
 				println(err)
 				return err.Error(), reqId
 			}
-			return string(str), reqId
+			if outputFile != nil {
+				str, err := json.Marshal(outputFile)
+				if err != nil {
+					println(err)
+					return err.Error(), reqId
+				}
+				return string(str), reqId
+			}
 		}
 	} else if key == "execDocker" {
 		machineId, err := checkField(input, "machineId", "")

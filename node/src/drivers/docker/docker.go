@@ -2,6 +2,7 @@ package docker
 
 import (
 	"bufio"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -23,8 +24,10 @@ import (
 	models "kasper/src/shell/api/model"
 	"kasper/src/shell/utils/crypto"
 	"kasper/src/shell/utils/future"
+	"maps"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"archive/tar"
@@ -795,7 +798,6 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 
 func (wm *Docker) Assign(machineId string) {
 	wm.lockers.SetIfAbsent(machineId, &IOLocker{})
-
 	wm.app.Tools().Signaler().ListenToSingle(&signaler.Listener{
 		Id: machineId,
 		Signal: func(key string, a any) {
@@ -1133,7 +1135,7 @@ func genProxyConfig() string {
     		ssl_certificate_key /etc/nginx/ssl/nginx-selfsigned.key;
 			
 `
-	for machId, _ := range activeMachines {
+	for machId := range activeMachines {
 		proxyConfig += `
 			location /` + strings.Join(strings.Split(machId, "@"), "_") + `/hello/ {
             	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/hello;
@@ -1145,6 +1147,16 @@ func genProxyConfig() string {
             	proxy_pass http://` + strings.Join(strings.Split(machId, "@"), "_") + "_main_main" + `:80/stream_send;
 			}`
 	}
+	for machId := range sideMachines {
+		parts := strings.Split(machId, "_")
+		mi := strings.Join(strings.Split(parts[0], "@"), "_")
+		in := parts[1]
+		cn := parts[2]
+		proxyConfig += `
+			location /` + mi + "_" + in + "_" + cn + `/ {
+            	proxy_pass http://` + mi + "_" + in + "_" + cn + `:80;
+			}`
+	}
 	proxyConfig += `
 		}
 	}`
@@ -1152,6 +1164,141 @@ func genProxyConfig() string {
 }
 
 var activeMachines = map[string]bool{}
+var sideMachines = map[string]bool{}
+
+func registerRoute(mux *http.ServeMux, path string, handler func(w http.ResponseWriter, r *http.Request)) {
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			r := recover()
+			if r != nil {
+				var err error
+				switch t := r.(type) {
+				case string:
+					err = errors.New(t)
+				case error:
+					err = t
+				default:
+					err = errors.New("unknown error")
+				}
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}()
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		handler(w, r)
+	})
+}
+
+func (wm *Docker) RunGateway() {
+	mux := http.NewServeMux()
+	portStr := os.Getenv("VM_API_PORT")
+	port, err := strconv.ParseInt(portStr, 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	server := &http.Server{
+		Addr:      fmt.Sprintf(":%d", port),
+		Handler:   mux,
+		TLSConfig: wm.app.Tools().Network().TlsConfig(),
+	}
+	registerRoute(mux, "/stream/send", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.URL.Query().Get("userId")
+		inputBody := []byte(r.URL.Query().Get("input"))
+		signature := r.URL.Query().Get("signature")
+		if success, _, _ := wm.app.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			log.Println("Error accessing point:", err.Error())
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		origin := ""
+		wm.app.ModifyState(true, func(trx trx.ITrx) error {
+			uParts := strings.Split(string(trx.GetColumn("User", userId, "username")), "@")
+			if len(uParts) < 2 {
+				return nil
+			}
+			origin = uParts[1]
+			return nil
+		})
+		if origin == wm.app.Id() {
+			var input inputs_storage.StreamGetInput
+			err = json.Unmarshal(inputBody, &input)
+			if err != nil {
+				log.Println("Error parsing body:", err.Error())
+				http.Error(w, "can't parse body", http.StatusBadRequest)
+				return
+			}
+			if !wm.app.Tools().Security().HasAccessToPoint(userId, input.PointId) {
+				log.Printf("Error accessing point: %v", err)
+				http.Error(w, "can't access point", http.StatusForbidden)
+				return
+			}
+			url := fmt.Sprintf("%s://%s%s", "https", "10.10.0.5:8443", "/"+strings.Join(strings.Split(input.MachineId, "@"), "_")+"/stream/send/")
+			log.Println(url)
+
+			body, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				log.Printf("Error reading body: %v", err)
+				http.Error(w, "can't read body", http.StatusBadRequest)
+				return
+			}
+			log.Println("len of body in proxy", len(body))
+			proxyReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
+			if err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			maps.Copy(proxyReq.Header, r.Header)
+			proxyReq.Header.Set("Content-Type", "application/octet-stream")
+			proxyReq.Header.Set("User-Id", userId)
+			proxyReq.Header.Set("Point-Id", input.PointId)
+			proxyReq.Header.Set("Metadata", input.Metadata)
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			httpClient := &http.Client{Transport: tr}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			io.Copy(w, resp.Body)
+		} else {
+			url := fmt.Sprintf("%s://%s%s", "https", origin+":3000", r.RequestURI)
+			proxyReq, err := http.NewRequest(r.Method, url, r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			proxyReq.Header = make(http.Header)
+			for h, val := range r.Header {
+				proxyReq.Header[h] = val
+			}
+			httpClient := http.Client{}
+			resp, err := httpClient.Do(proxyReq)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			resp.Write(w)
+		}
+	})
+	future.Async(func() {
+		server.ListenAndServeTLS("", "")
+	}, false)
+}
 
 func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, file file.IFile) docker.IDocker {
 	client, err := client.NewClientWithOpts(client.FromEnv)
@@ -1187,12 +1334,19 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 			cnParts := strings.Split(containerName, "_")
 			machineId := cnParts[0] + "@" + cnParts[1]
 
-			locker, found := wm.lockers.Get(machineId)
-			if found {
-				locker.conn = c
+			if cnParts[2] == "main" && cnParts[3] == "main" {
+				locker, found := wm.lockers.Get(machineId)
+				if found {
+					locker.conn = c
+				}
+				activeMachines[machineId] = true
+			} else {
+				locker, found := wm.lockers.Get(machineId + "_" + cnParts[2] + "_" + cnParts[3])
+				if found {
+					locker.conn = c
+				}
+				sideMachines[machineId+"_"+cnParts[2]+"_"+cnParts[3]] = true
 			}
-
-			activeMachines[machineId] = true
 
 			config := genProxyConfig()
 			file.SaveDataToGlobalStorage(storageRoot+"/docker_proxy", []byte(config), "nginx.conf", true)
@@ -1247,8 +1401,19 @@ func NewDocker(core core.ICore, storageRoot string, storage storage.IStorage, fi
 						return
 					}
 					data := []byte(wm.dockerCallback(machineId, string(buf)))
-					locker, found := wm.lockers.Get(machineId)
-					if found {
+					var locker *IOLocker
+					if cnParts[2] == "main" && cnParts[3] == "main" {
+						l, found := wm.lockers.Get(machineId)
+						if found {
+							locker = l
+						}
+					} else {
+						l, found := wm.lockers.Get(machineId + "_" + cnParts[2] + "_" + cnParts[3])
+						if found {
+							locker = l
+						}
+					}
+					if locker != nil {
 						func() {
 							locker.Lock.Lock()
 							defer locker.Lock.Unlock()

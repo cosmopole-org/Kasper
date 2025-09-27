@@ -9,6 +9,7 @@ import (
 	inputs_machiner "kasper/src/shell/api/inputs/machine"
 	"kasper/src/shell/api/model"
 	outputs_machiner "kasper/src/shell/api/outputs/plugin"
+	updates_points "kasper/src/shell/api/updates/points"
 	"kasper/src/shell/utils/future"
 	"log"
 	"strconv"
@@ -249,6 +250,18 @@ func (a *Actions) UpdateMachine(state state.IState, input inputs_machiner.Update
 	if input.Metadata != nil {
 		trx.PutJson("MachineMeta::"+vm.MachineId, "metadata", input.Metadata, true)
 	}
+	return map[string]any{}, nil
+}
+
+// Signal /machines/signal check [ true false false ] access [ true false false false POST ]
+func (a *Actions) Signal(state state.IState, input inputs_machiner.SignalInput) (any, error) {
+	trx := state.Trx()
+	user := model.User{Id: state.Info().UserId()}.Pull(trx)
+	vm := model.Vm{MachineId: input.MachineId}.Pull(trx)
+	var p = updates_points.Send{Action: "single", User: user, Data: input.Data}
+	future.Async(func() {
+		a.App.Tools().Signaler().SignalUser("points/signal", vm.MachineId+"_"+input.VmTag, p, true)
+	}, false)
 	return map[string]any{}, nil
 }
 

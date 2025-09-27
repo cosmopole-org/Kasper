@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Skia WASM GUI Demo</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; }
+    #skiaCanvas { width:100%; height:100%; display:block; }
+  </style>
+</head>
+<body>
+  <canvas id="skiaCanvas"></canvas>
+
+  <script src="https://unpkg.com/canvaskit-wasm/bin/canvaskit.js"></script>
+  <script>
+    const loadSkia = () => CanvasKitInit({
+      locateFile: (file) => `https://unpkg.com/canvaskit-wasm/bin/${file}`
+    });
+  </script>
+
+  <script type="module" src="tes.js"></script>
+</body>
+</html>

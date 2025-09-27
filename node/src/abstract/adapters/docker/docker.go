@@ -11,4 +11,5 @@ type IDocker interface {
 	BuildImage(dockerfile string, machineId string, imageName string, outputChan chan string) error
 	ExecContainer(machineId string, imageName string, containerName string, command string) (string, error)
 	CopyToContainer(machineId string, imageName string, containerName string, fileName string, content string) error
+	RunGateway()
 }
