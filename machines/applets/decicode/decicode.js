@@ -301,7 +301,7 @@ try {
                                     child: {
                                         type: 'container',
                                         width: 350,
-                                        height: meta.height - 420,
+                                        height: meta.height - 320,
                                         borderRadius: 16,
                                         padding: {
                                             left: 16,
@@ -314,43 +314,70 @@ try {
                                             orientation: 'vertical',
                                             items: [
                                                 {
-                                                    type: 'array',
-                                                    orientation: 'vertical',
-                                                    items: [
-                                                        {
+                                                    type: 'expanded',
+                                                    child: {
+                                                        type: 'scroller',
+                                                        child: {
                                                             type: 'array',
-                                                            orientation: 'horizontal',
-                                                            items: [
-                                                                {
-                                                                    type: 'spacer'
-                                                                },
-                                                                {
-                                                                    type: 'container',
-                                                                    bgcolor: meta.primaryColor2,
-                                                                    width: 220,
-                                                                    borderRadius: 16,
-                                                                    padding: {
-                                                                        left: 8,
-                                                                        top: 8,
-                                                                        right: 8,
-                                                                        bottom: 8
+                                                            orientation: 'vertical',
+                                                            items: cache["messages"].map(msg => {
+                                                                return {
+                                                                    type: 'array',
+                                                                    orientation: 'horizontal',
+                                                                    margin: {
+                                                                        top: 16
                                                                     },
-                                                                    child: {
-                                                                        type: 'text',
-                                                                        content: 'hello gemini. generate a shopping app for me',
-                                                                        textColor: '#ffffff'
-                                                                    }
-                                                                }
-                                                            ]
-                                                        }
-                                                    ]
-                                                },
-                                                {
-                                                    type: 'spacer'
+                                                                    items: [
+                                                                        {
+                                                                            type: 'spacer'
+                                                                        },
+                                                                        {
+                                                                            type: 'container',
+                                                                            bgcolor: meta.primaryColor2,
+                                                                            width: 220,
+                                                                            borderRadius: 16,
+                                                                            padding: {
+                                                                                left: 8,
+                                                                                top: 8,
+                                                                                right: 8,
+                                                                                bottom: 8
+                                                                            },
+                                                                            child: {
+                                                                                type: 'text',
+                                                                                content: msg,
+                                                                                textColor: '#ffffff'
+                                                                            }
+                                                                        }
+                                                                    ]
+                                                                };
+                                                            })
+                                                        },
+                                                    },
                                                 },
                                                 {
                                                     type: 'input',
+                                                    key: 'chatInput',
                                                     hint: 'type your prompt',
+                                                    onChange: (text) => {
+                                                        cache["chatMessageInput"] = text;
+                                                    },
+                                                    trailing: {
+                                                        type: 'button',
+                                                        buttonStyle: 'elevated',
+                                                        label: 'Send',
+                                                        onPress: () => {
+                                                            if (!cache["chatMessageInput"] || cache["chatMessageInput"].length == 0) {
+                                                                return;
+                                                            }
+                                                            if (!cache["messages"]) {
+                                                                cache["messages"] = [];
+                                                            }
+                                                            cache["messages"].push(cache["chatMessageInput"]);
+                                                            cache["chatMessageInput"] = "";
+                                                            clearInput('chatInput');
+                                                            updateApp(comp());
+                                                        }
+                                                    }
                                                 }
                                             ]
                                         }
@@ -364,6 +391,7 @@ try {
         };
     }
     if (!started) {
+        cache["messages"] = [];
         initApp(comp());
     } else {
         updateApp(comp());
