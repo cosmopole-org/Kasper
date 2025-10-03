@@ -196,23 +196,28 @@ func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 		cnParts := strings.Split(cn, "|")
 		containerName := cnParts[0]
 		isAsync := cnParts[1] == "true"
-		if isAsync {
-			creatorUserId := cnParts[2]
-			creatorSignature := cnParts[3]
-			lockId := cnParts[4]
-			inp, _ := json.Marshal(inputs_users.ConsumeLockInput{
-				Type:      "pay",
-				UserId:    creatorUserId,
-				Signature: creatorSignature,
-				LockId:    lockId,
-				Amount:    100,
-			})
-			sign := wm.app.SignPacketAsOwner(inp)
-			wm.app.ExecBaseRequestOnChain("/users/consumeLock", inp, sign, wm.app.OwnerId(), "", func(b []byte, i int, err error) {
-				if err != nil {
-					println(err)
-					return
-				}
+		creatorUserId := cnParts[2]
+		creatorSignature := cnParts[3]
+		lockId := cnParts[4]
+		inp, _ := json.Marshal(inputs_users.ConsumeLockInput{
+			Type:      "pay",
+			UserId:    creatorUserId,
+			Signature: creatorSignature,
+			LockId:    lockId,
+			Amount:    100,
+		})
+		sign := wm.app.SignPacketAsOwner(inp)
+		resChan := make(chan bool)
+		wm.app.ExecBaseRequestOnChain("/users/consumeLock", inp, sign, wm.app.OwnerId(), "", func(b []byte, i int, err error) {
+			if err != nil {
+				println(err)
+				resChan <- false
+			} else {
+				resChan <- true
+			}
+		})
+		if res := <-resChan; res {
+			if isAsync {
 				future.Async(func() {
 					if imageName != "main" || containerName != "main" {
 						wm.docker.Assign(machineId + "_" + imageName + "_" + containerName)
@@ -220,21 +225,21 @@ func (wm *Wasm) WasmCallback(dataRaw string) (string, int64) {
 					wm.docker.SaRContainer(machineId, imageName, containerName)
 					wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles, false)
 				}, false)
-			})
-		} else {
-			wm.docker.SaRContainer(machineId, imageName, containerName)
-			outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles, false)
-			if err != nil {
-				println(err)
-				return err.Error(), reqId
-			}
-			if outputFile != nil {
-				str, err := json.Marshal(outputFile)
+			} else {
+				wm.docker.SaRContainer(machineId, imageName, containerName)
+				outputFile, err := wm.docker.RunContainer(machineId, pointId, imageName, containerName, finalInputFiles, false)
 				if err != nil {
 					println(err)
 					return err.Error(), reqId
 				}
-				return string(str), reqId
+				if outputFile != nil {
+					str, err := json.Marshal(outputFile)
+					if err != nil {
+						println(err)
+						return err.Error(), reqId
+					}
+					return string(str), reqId
+				}
 			}
 		}
 	} else if key == "execDocker" {
