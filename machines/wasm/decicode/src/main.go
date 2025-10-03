@@ -43,52 +43,70 @@ func Run(signal model.Send) {
 	switch act {
 	case "initWorkspace":
 		{
-			inp := input_model_points.CreateInput{
-				Tag:      "workspace",
-				IsPublic: false,
-				PersHist: true,
-				ParentId: signal.Point.Id,
-				Orig:     "",
-				Members: map[string]bool{
-					signal.User.Id: true,
-				},
-				Metadata: map[string]any{
-					"title":  "decicode-" + signal.User.Id,
-					"avatar": "avatar",
-				},
+			if wId := trx.Db.BaseDB.Get(signal.Point.Id); len(wId) == 0 {
+				inp := input_model_points.CreateInput{
+					Tag:      "workspace",
+					IsPublic: false,
+					PersHist: true,
+					ParentId: signal.Point.Id,
+					Orig:     "",
+					Members: map[string]bool{
+						signal.User.Id: true,
+					},
+					Metadata: map[string]any{
+						"title":  "decicode-" + signal.User.Id,
+						"avatar": "avatar",
+					},
+				}
+				res := trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/points/create", "", "", "", inp)
+				output := output_model_points.CreateOutput{}
+				json.Unmarshal(res, &output)
+				point := output.Point
+				p := &api.Point{Id: point.Id, CreatorId: signal.User.Id}
+				trx.Db.Points.CreateAndInsert(p)
+				trx.Db.BaseDB.Put(signal.Point.Id, []byte(point.Id))
+				trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "response", "requestId": input["requestId"], "data": p}, true)
+			} else {
+				point := trx.Db.Points.FindById(string(wId))
+				trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "response", "requestId": input["requestId"], "data": point}, true)
 			}
-			res := trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/points/create", "", "", "", inp)
-			output := output_model_points.CreateOutput{}
-			json.Unmarshal(res, &output)
-			point := output.Point
-			trx.Db.Points.CreateAndInsert(&api.Point{Id: point.Id, CreatorId: signal.User.Id})
-			trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "response", "requestId": input["requestId"], "data": point}, true)
+			break
+		}
+	case "files.purge":
+		{
+			point := trx.Db.Points.FindById(signal.Point.Id)
+			point.Docs.DeleteAll()
+			trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "response", "requestId": input["requestId"], "data": []api.Doc{}}, true)
 			break
 		}
 	case "files.create":
 		{
-			trx.Db.Docs.CreateAndInsert(&api.Doc{Id: uuid.NewString(), CreatorId: signal.User.Id, Title: input["docTitle"].(string), Path: input["docPath"].(string)})
-			docs := trx.Db.Docs.Read("all", "", "")
+			point := trx.Db.Points.FindById(signal.Point.Id)
+			point.Docs.CreateAndInsert(&api.Doc{Id: uuid.NewString(), PointId: point.Id, IsDir: input["isDir"].(bool), CreatorId: signal.User.Id, Title: input["docTitle"].(string), Path: input["docPath"].(string)})
+			docs := point.Docs.Read("all", "", "")
 			trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "response", "requestId": input["requestId"], "data": docs}, true)
 			break
 		}
 	case "files.read":
 		{
-			docs := trx.Db.Docs.Read("all", "", "")
+			point := trx.Db.Points.FindById(signal.Point.Id)
+			docs := point.Docs.Read("all", "", "")
 			trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "response", "requestId": input["requestId"], "data": docs}, true)
 			break
 		}
 	case "files.update":
 		{
-			trx.Db.Docs.CreateAndInsert(&api.Doc{Id: input["docId"].(string), CreatorId: signal.User.Id, Title: input["docTitle"].(string), Path: input["docPath"].(string)})
-			docs := trx.Db.Docs.Read("all", "", "")
+			point := trx.Db.Points.FindById(signal.Point.Id)
+			point.Docs.CreateAndInsert(&api.Doc{Id: input["docId"].(string), PointId: point.Id, CreatorId: signal.User.Id, Title: input["docTitle"].(string), Path: input["docPath"].(string)})
+			docs := point.Docs.Read("all", "", "")
 			trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "response", "requestId": input["requestId"], "data": docs}, true)
 			break
 		}
 	case "files.delete":
 		{
-			trx.Db.Docs.DeleteById(input["docId"].(string))
-			docs := trx.Db.Docs.Read("all", "", "")
+			point := trx.Db.Points.FindById(signal.Point.Id)
+			point.Docs.DeleteById(input["docId"].(string))
+			docs := point.Docs.Read("all", "", "")
 			trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "response", "requestId": input["requestId"], "data": docs}, true)
 			break
 		}

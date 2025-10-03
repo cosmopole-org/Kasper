@@ -18,70 +18,164 @@ function comp() {
                         },
                         height: meta.height,
                         child: {
-                            type: 'treeView',
-                            treeData: {
-                                key: 'root',
-                                data: 'src',
-                                children: [
-                                    {
-                                        key: 'resources',
-                                        data: 'resources',
-                                        children: [
-                                            {
-                                                key: 'background',
-                                                data: 'background.png',
-                                                children: []
-                                            },
-                                            {
-                                                key: 'logo',
-                                                data: 'logo.png',
-                                                children: []
+                            type: 'array',
+                            orientation: 'vertical',
+                            items: [
+                                {
+                                    type: 'array',
+                                    orientation: 'horizontal',
+                                    items: [
+                                        {
+                                            type: 'button',
+                                            buttonStyle: 'elevated',
+                                            label: '+ file',
+                                            onPress: () => {
+                                                ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: 'hello.js', docPath: 'src/logic/' }, (docs) => {
+                                                    cache["docs"] = docs;
+                                                    updateApp(comp());
+                                                });
                                             }
-                                        ]
-                                    },
-                                    {
-                                        key: 'logic',
-                                        data: 'logic',
-                                        children: [
-                                            {
-                                                key: 'sdk',
-                                                data: 'sdk',
-                                                children: [
-                                                    {
-                                                        key: 'api',
-                                                        data: 'api.js',
-                                                        children: []
-                                                    },
-                                                    {
-                                                        key: 'constants',
-                                                        data: 'costants.json',
-                                                        children: []
-                                                    },
-                                                ]
-                                            },
-                                            {
-                                                key: 'widgetjs',
-                                                data: 'widget.js',
-                                                children: []
-                                            },
-                                            {
-                                                key: 'applet',
-                                                data: 'applet.js',
-                                                children: []
-                                            },
-                                        ]
+                                        },
+                                        {
+                                            type: 'container',
+                                            width: 8,
+                                            height: 16
+                                        },
+                                        {
+                                            type: 'button',
+                                            buttonStyle: 'elevated',
+                                            label: '+ folder',
+                                            onPress: () => {
+                                                ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: 'src/logic/' }, (docs) => {
+                                                    cache["docs"] = docs;
+                                                    updateApp(comp());
+                                                });
+                                            }
+                                        },
+                                    ]
+                                },
+                                {
+                                    type: 'container',
+                                    width: 250,
+                                    height: 16
+                                },
+                                {
+                                    type: 'array',
+                                    orientation: 'horizontal',
+                                    items: [
+                                        {
+                                            type: 'button',
+                                            buttonStyle: 'elevated',
+                                            label: 'clear',
+                                            onPress: () => {
+                                                ask(cache["workspaceId"], { type: 'files.purge' }, (docs) => {
+                                                    cache["docs"] = docs;
+                                                    updateApp(comp());
+                                                });
+                                            }
+                                        },
+                                        {
+                                            type: 'container',
+                                            width: 8,
+                                            height: 16
+                                        },
+                                        {
+                                            type: 'button',
+                                            buttonStyle: 'elevated',
+                                            label: '+ folder',
+                                            onPress: () => {
+                                                ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: 'src/logic/' }, (docs) => {
+                                                    cache["docs"] = docs;
+                                                    updateApp(comp());
+                                                });
+                                            }
+                                        },
+                                    ]
+                                },
+                                {
+                                    type: 'container',
+                                    width: 250,
+                                    height: 16
+                                },
+                                {
+                                    type: 'container',
+                                    width: 250,
+                                    height: meta.height - 150,
+                                    child: {
+                                        type: 'treeView',
+                                        treeData: {
+                                            key: 'root',
+                                            data: 'src',
+                                            children: [
+                                                {
+                                                    key: 'resources',
+                                                    data: 'resources',
+                                                    children: [
+                                                        {
+                                                            key: 'background',
+                                                            data: 'background.png',
+                                                            children: []
+                                                        },
+                                                        {
+                                                            key: 'logo',
+                                                            data: 'logo.png',
+                                                            children: []
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    key: 'logic',
+                                                    data: 'logic',
+                                                    children: [
+                                                        {
+                                                            key: 'sdk',
+                                                            data: 'sdk',
+                                                            children: [
+                                                                {
+                                                                    key: 'api',
+                                                                    data: 'api.js',
+                                                                    children: []
+                                                                },
+                                                                {
+                                                                    key: 'constants',
+                                                                    data: 'costants.json',
+                                                                    children: []
+                                                                },
+                                                            ]
+                                                        },
+                                                        {
+                                                            key: 'widgetjs',
+                                                            data: 'widget.js',
+                                                            children: []
+                                                        },
+                                                        {
+                                                            key: 'applet',
+                                                            data: 'applet.js',
+                                                            children: []
+                                                        },
+                                                        ...cache["docs"].map((doc, index) => {
+                                                            return {
+                                                                key: doc.Title.replace(".", "_") + "_" + index,
+                                                                data: doc.Title,
+                                                                children: []
+                                                            }
+                                                        })
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        itemBuilder: (key, data, level) => {
+                                            return {
+                                                type: 'text',
+                                                content: level == 0 ? "src" : data
+                                            };
+                                        },
+                                        onItemTap: (key) => {
+                                            log(key + " tapped !");
+                                        }
                                     }
-                                ]
-                            },
-                            itemBuilder: (key, data, level) => {
-                                return {
-                                    type: 'text',
-                                    content: level == 0 ? "src" : data
-                                };
-                            },
-                            onItemTap: (key) => {
-                                log(key + " tapped !");
-                            }
+                                }
+                            ]
                         }
                     },
                     {
@@ -391,8 +485,16 @@ function comp() {
     };
 }
 if (!started) {
+    cache["docs"] = [];
     cache["messages"] = [];
-    initApp(comp());
+    ask(meta.pointId, { type: 'initWorkspace' }, (workspace) => {
+        cache["workspaceId"] = workspace.Id;
+        initApp(comp());
+        ask(cache["workspaceId"], { type: 'files.read' }, (docs) => {
+            cache["docs"] = docs;
+            updateApp(comp());
+        });
+    });
 } else {
     updateApp(comp());
 }

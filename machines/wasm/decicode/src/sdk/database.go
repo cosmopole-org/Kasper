@@ -20,13 +20,16 @@ type User struct {
 type Point struct {
 	Id        string
 	CreatorId string
+	Docs      *EntityGroup[Doc] `json:"-"`
 }
 
 type Doc struct {
 	Id        string
+	PointId   string
 	Title     string
 	CreatorId string
 	Path      string
+	IsDir     bool
 }
 
 func NewMyDb() *MyDb {

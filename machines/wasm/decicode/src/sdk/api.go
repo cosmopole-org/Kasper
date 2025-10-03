@@ -262,7 +262,6 @@ type EntityGroup[T any] struct {
 }
 
 func NewEntityGroup[T any](prefix string, et *EntityType[T], db *Db) *EntityGroup[T] {
-	Console.Log("hello 12")
 	return &EntityGroup[T]{
 		Prefix:     prefix,
 		EntityType: et,
@@ -272,7 +271,6 @@ func NewEntityGroup[T any](prefix string, et *EntityType[T], db *Db) *EntityGrou
 }
 
 func mapToStruct[T any](db *Db, et *EntityType[T], src map[string]any) T {
-	Console.Log("ok 0")
 	destP := new(T)
 	ps := reflect.ValueOf(destP)
 	s := ps.Elem()
@@ -371,6 +369,23 @@ func (eg *EntityGroup[T]) CreateAndInsert(s *T) {
 	eg.InsertEntity(eg.EntityType.NewEntity(s))
 	Console.Log("hello 18")
 }
+func (eg *EntityGroup[T]) DeleteAll() {
+	if eg.Prefix == eg.EntityType.Id {
+		bs := eg.Db.GetByPrefix("table::" + eg.Prefix)
+		for _, b := range bs {
+			src := map[string]any{}
+			json.Unmarshal(b, &src)
+			k := src["Id"].(string)
+			eg.DeleteById(k)
+		}
+	} else {
+		Console.Log("hello 16 [" + eg.Prefix + "]")
+		keys := eg.Db.GetByPrefix(eg.Prefix)
+		for _, k := range keys {
+			eg.DeleteById(string(k))
+		}
+	}
+}
 func (eg *EntityGroup[T]) DeleteById(id string) {
 	if eg.Prefix == eg.EntityType.Id {
 		eg.Db.Del("table::" + eg.Prefix + "::" + id)
@@ -463,20 +478,18 @@ func (eg *EntityGroup[T]) Load() {
 			Console.Log(string(b))
 		}
 	} else {
-		Console.Log("hello 16 [" + eg.Prefix + "]")
 		keys := eg.Db.GetByPrefix(eg.Prefix)
 		for _, keyB := range keys {
 			key := string(keyB)
-			if eg.Db == nil {
-				Console.Log(key + " false")
-			} else {
-				Console.Log(key + " true")
-			}
+			Console.Log(key)
 			b := eg.Db.Get("table::" + key)
-			Console.Log(string(b))
+			if len(b) == 0 {
+				continue
+			}
 			bs = append(bs, b)
 		}
 	}
+	Console.Log("end of fetch.")
 	for _, b := range bs {
 		src := map[string]any{}
 		json.Unmarshal(b, &src)
@@ -617,9 +630,15 @@ func (*Db) Get(key string) []byte {
 	kP, kL := bytesToPointer([]byte(key))
 	Console.Log("step 100 " + key)
 	val := Get(kP, kL)
+	if val == 0 {
+		return []byte{}
+	}
 	s := strconv.FormatInt(val, 10)
 	Console.Log("step 101 " + s)
-	return pointerToBytes(val)
+	Console.Log("step 102 " + s)
+	p := pointerToBytes(val)
+	Console.Log("step 100000")
+	return p
 }
 func (*Db) GetByPrefix(key string) [][]byte {
 	kP, kL := bytesToPointer([]byte(key))
