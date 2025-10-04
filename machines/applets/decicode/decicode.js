@@ -103,65 +103,57 @@ function comp() {
                                     height: meta.height - 150,
                                     child: {
                                         type: 'treeView',
-                                        treeData: {
-                                            key: 'root',
-                                            data: 'src',
-                                            children: []
-                                        },
+                                        treeData: cache["docsTree"],
                                         itemBuilder: (key, data, level) => {
                                             log("hi " + data);
+                                            let doc = JSON.parse(data);
                                             return {
-                                                type: 'text',
-                                                content: data,
+                                                type: 'popupMenu',
+                                                menuButton: {
+                                                    type: 'text',
+                                                    content: doc.title,
+                                                },
+                                                itemCount: 2,
+                                                itemBuilder: (index) => {
+                                                    if (index == 0) {
+                                                        return {
+                                                            type: 'text',
+                                                            content: 'new file',
+                                                        }
+                                                    } else if (index == 1) {
+                                                        return {
+                                                            type: 'text',
+                                                            content: 'new folder',
+                                                        }
+                                                    } else if (index == 2) {
+                                                        return {
+                                                            type: 'text',
+                                                            content: 'delete',
+                                                        }
+                                                    }
+                                                },
+                                                onItemPress: (index) => {
+                                                    if (index == 0) {
+                                                        ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: 'hello.js', docPath: doc.path + "/" + doc.id }, (docs) => {
+                                                            cache["docs"] = docs;
+                                                            buildDocsTree();
+                                                            updateApp(comp());
+                                                        });
+                                                    } else if (index == 1) {
+                                                        ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: doc.path + "/" + doc.id }, (docs) => {
+                                                            cache["docs"] = docs;
+                                                            buildDocsTree();
+                                                            updateApp(comp());
+                                                        });
+                                                    } else if (index == 2) {
+                                                        ask(cache["workspaceId"], { type: 'files.delete', docId: doc.id }, (docs) => {
+                                                            cache["docs"] = docs;
+                                                            buildDocsTree();
+                                                            updateApp(comp());
+                                                        });
+                                                    }
+                                                }
                                             };
-                                            // let doc = JSON.parse(data);
-                                            // return {
-                                            //     type: 'popupMenu',
-                                            //     menuButton: {
-                                            //         type: 'text',
-                                            //         content: doc.title,
-                                            //     },
-                                            //     itemCount: 2,
-                                            //     itemBuilder: (index) => {
-                                            //         if (index == 0) {
-                                            //             return {
-                                            //                 type: 'text',
-                                            //                 content: 'new file',
-                                            //             }
-                                            //         } else if (index == 1) {
-                                            //             return {
-                                            //                 type: 'text',
-                                            //                 content: 'new folder',
-                                            //             }
-                                            //         } else if (index == 2) {
-                                            //             return {
-                                            //                 type: 'text',
-                                            //                 content: 'delete',
-                                            //             }
-                                            //         }
-                                            //     },
-                                            //     onItemPress: (index) => {
-                                            //         if (index == 0) {
-                                            //             ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: 'hello.js', docPath: doc.path + "/" + doc.id }, (docs) => {
-                                            //                 cache["docs"] = docs;
-                                            //                 buildDocsTree();
-                                            //                 updateApp(comp());
-                                            //             });
-                                            //         } else if (index == 1) {
-                                            //             ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: doc.path + "/" + doc.id }, (docs) => {
-                                            //                 cache["docs"] = docs;
-                                            //                 buildDocsTree();
-                                            //                 updateApp(comp());
-                                            //             });
-                                            //         } else if (index == 2) {
-                                            //             ask(cache["workspaceId"], { type: 'files.delete', docId: doc.id }, (docs) => {
-                                            //                 cache["docs"] = docs;
-                                            //                 buildDocsTree();
-                                            //                 updateApp(comp());
-                                            //             });
-                                            //         }
-                                            //     }
-                                            // };
                                         },
                                         onItemTap: (key) => {
                                             log(key + " tapped !");
