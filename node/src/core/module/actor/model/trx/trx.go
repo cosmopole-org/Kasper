@@ -10,6 +10,7 @@ import (
 	"kasper/src/abstract/models/update"
 	"kasper/src/shell/utils/crypto"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 
@@ -501,7 +502,7 @@ func (tw *TrxWrapper) SearchLinkValsList(typ string, fromColumn string, toColumn
 	return m, nil
 }
 
-func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter map[string]string, offset int64, count int64, shouldBeGlobal ...bool) ([]string, error) {
+func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter map[string]string, inArrFilter map[string][]string, offset int64, count int64, shouldBeGlobal ...bool) ([]string, error) {
 	prefix := []byte(p)
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = true
@@ -519,6 +520,14 @@ func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter ma
 			if len(filter) > 0 {
 				for k, v := range filter {
 					if string(tw.GetColumn(typ, objId, k)) != v {
+						matched = false
+						break
+					}
+				}
+			}
+			if len(inArrFilter) > 0 {
+				for k, v := range inArrFilter {
+					if !slices.Contains(v, string(tw.GetColumn(typ, objId, k))) {
 						matched = false
 						break
 					}
@@ -546,6 +555,14 @@ func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter ma
 				if len(filter) > 0 {
 					for k, v := range filter {
 						if string(tw.GetColumn(typ, objId, k)) != v {
+							matched = false
+							break
+						}
+					}
+				}
+				if len(inArrFilter) > 0 {
+					for k, v := range inArrFilter {
+						if !slices.Contains(v, string(tw.GetColumn(typ, objId, k))) {
 							matched = false
 							break
 						}

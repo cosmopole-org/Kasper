@@ -925,9 +925,10 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 // Read /points/read check [ true false false ] access [ true false false false GET ]
 func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, error) {
 	trx := state.Trx()
-	points, err := model.Point{}.List(trx, "memberof::"+state.Info().UserId()+"::", input.Orig == "global", map[string]string{
-		"tag": "group",
-	}, input.Offset, input.Count)
+	points, err := model.Point{}.List(trx, "memberof::"+state.Info().UserId()+"::", input.Orig == "global", map[string]string{},
+		map[string][]string{
+			"tag": {"group", "1-to-1", "home"},
+		}, input.Offset, input.Count)
 	if err != nil {
 		log.Println(err)
 		return nil, err
