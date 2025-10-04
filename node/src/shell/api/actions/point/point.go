@@ -925,7 +925,9 @@ func (a *Actions) Get(state state.IState, input inputs_points.GetInput) (any, er
 // Read /points/read check [ true false false ] access [ true false false false GET ]
 func (a *Actions) Read(state state.IState, input inputs_points.ReadInput) (any, error) {
 	trx := state.Trx()
-	points, err := model.Point{}.List(trx, "memberof::"+state.Info().UserId()+"::", input.Orig == "global", input.Offset, input.Count)
+	points, err := model.Point{}.List(trx, "memberof::"+state.Info().UserId()+"::", input.Orig == "global", map[string]string{
+		"tag": "group",
+	}, input.Offset, input.Count)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -1109,7 +1111,7 @@ func (a *Actions) History(state state.IState, input inputs_points.HistoryInput) 
 // List /points/list check [ true false false ] access [ true false false false GET ]
 func (a *Actions) List(state state.IState, input inputs_points.ListInput) (any, error) {
 	trx := state.Trx()
-	points, err := model.Point{}.Search(trx, input.Offset, input.Count, input.Query, map[string]string{"isPublic": string([]byte{0x01})})
+	points, err := model.Point{}.Search(trx, input.Offset, input.Count, input.Query, map[string]string{"isPublic": string([]byte{0x01}), "tag": "group"})
 	if err != nil {
 		log.Println(err)
 		return nil, err

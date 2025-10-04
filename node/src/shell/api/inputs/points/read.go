@@ -1,8 +1,8 @@
 package inputs_points
 
 type ReadInput struct {
-	Offset int    `json:"offset"`
-	Count  int    `json:"count"`
+	Offset int64  `json:"offset"`
+	Count  int64  `json:"count"`
 	Tag    string `json:"tag"`
 	Orig   string `json:"orig"`
 }

@@ -73,29 +73,26 @@ func (d Point) Pull(trx trx.ITrx) Point {
 	return d
 }
 
-func (d Point) List(trx trx.ITrx, prefix string, global bool, positional ...int) ([]Point, error) {
-	offset := -1
-	count := -1
+func (d Point) List(trx trx.ITrx, prefix string, global bool, filter map[string]string, positional ...int64) ([]Point, error) {
+	offset := int64(-1)
+	count := int64(-1)
+	entities := []Point{}
 	if len(positional) == 1 {
 		offset = positional[0]
 	}
 	if len(positional) == 2 {
 		count = positional[1]
 	}
-	list, err := trx.GetLinksList(prefix, offset, count, global)
+	list, err := trx.SearchLinkKeysListByPrefix(prefix, "Point", filter, offset, count, global)
 	if err != nil {
 		log.Println(err)
 		return nil, err
-	}
-	for i := 0; i < len(list); i++ {
-		list[i] = list[i][len(prefix):]
 	}
 	objs, err := trx.GetObjList("Point", list, map[string]string{})
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
-	entities := []Point{}
 	for id, m := range objs {
 		if len(m) > 0 {
 			d := Point{}

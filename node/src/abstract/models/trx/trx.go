@@ -21,6 +21,7 @@ type ITrx interface {
 	GetColumn(typ string, objId string, columnName string) []byte
 	GetLinksList(p string, offset int, count int, shouldBeGlobal ...bool) ([]string, error)
 	SearchLinkValsList(typ string, fromColumn string, toColumn string, word string, filter map[string]string, offset int64, count int64) ([]string, error)
+	SearchLinkKeysListByPrefix(p string, typ string, filter map[string]string, offset int64, count int64, shouldBeGlobal ...bool) ([]string, error)
 	GetObjList(typ string, objIds []string, query map[string]string, meta ...int64) (map[string]map[string][]byte, error)
 	GetLink(key string) string
 	PutLink(key string, value string)

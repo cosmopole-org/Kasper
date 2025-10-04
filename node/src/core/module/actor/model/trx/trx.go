@@ -475,13 +475,6 @@ func (tw *TrxWrapper) SearchLinkValsList(typ string, fromColumn string, toColumn
 		item := it.Item()
 		itemKey := item.Key()
 		if strings.Contains(string(itemKey[len(prefix):]), word) {
-			if counter < offset {
-				counter++
-				continue
-			}
-			if counter >= (offset + count) {
-				break
-			}
 			itemVal, _ := item.ValueCopy(nil)
 			matched := true
 			if len(filter) > 0 {
@@ -493,9 +486,83 @@ func (tw *TrxWrapper) SearchLinkValsList(typ string, fromColumn string, toColumn
 				}
 			}
 			if matched {
+				if counter < offset {
+					counter++
+					continue
+				}
+				if counter >= (offset + count) {
+					break
+				}
 				m = append(m, string(itemVal))
+				counter++
 			}
-			counter++
+		}
+	}
+	return m, nil
+}
+
+func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter map[string]string, offset int64, count int64, shouldBeGlobal ...bool) ([]string, error) {
+	prefix := []byte(p)
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = true
+	opts.Prefix = prefix
+	it := tw.dbTrx.NewIterator(opts)
+	defer it.Close()
+	m := []string{}
+	counter := int64(0)
+	if len(shouldBeGlobal) > 0 && shouldBeGlobal[0] {
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			itemKey := item.Key()
+			objId := string(itemKey)[len(p):]
+			matched := true
+			if len(filter) > 0 {
+				for k, v := range filter {
+					if string(tw.GetColumn(typ, objId, k)) != v {
+						matched = false
+						break
+					}
+				}
+			}
+			if matched {
+				if counter < offset {
+					counter++
+					continue
+				}
+				if counter >= (offset + count) {
+					break
+				}
+				m = append(m, objId)
+				counter++
+			}
+		}
+	} else {
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			itemKey := item.Key()
+			objId := string(itemKey)[len(p):]
+			matched := true
+			if strings.HasSuffix(string(itemKey), "@global") {
+				if len(filter) > 0 {
+					for k, v := range filter {
+						if string(tw.GetColumn(typ, objId, k)) != v {
+							matched = false
+							break
+						}
+					}
+				}
+				if matched {
+					if counter < offset {
+						counter++
+						continue
+					}
+					if counter >= (offset + count) {
+						break
+					}
+					m = append(m, objId)
+					counter++
+				}
+			}
 		}
 	}
 	return m, nil
