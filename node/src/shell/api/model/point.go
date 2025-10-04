@@ -74,8 +74,8 @@ func (d Point) Pull(trx trx.ITrx) Point {
 }
 
 func (d Point) List(trx trx.ITrx, prefix string, global bool, filter map[string]string, inArrFilter map[string][]string, positional ...int64) ([]Point, error) {
-	offset := int64(-1)
-	count := int64(-1)
+	offset := int64(0)
+	count := int64(50)
 	entities := []Point{}
 	if len(positional) == 1 {
 		offset = positional[0]

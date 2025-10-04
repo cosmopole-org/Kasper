@@ -503,7 +503,7 @@ func (tw *TrxWrapper) SearchLinkValsList(typ string, fromColumn string, toColumn
 }
 
 func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter map[string]string, inArrFilter map[string][]string, offset int64, count int64, shouldBeGlobal ...bool) ([]string, error) {
-	prefix := []byte(p)
+	prefix := []byte("link::" + p)
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = true
 	opts.Prefix = prefix
@@ -512,40 +512,6 @@ func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter ma
 	m := []string{}
 	counter := int64(0)
 	if len(shouldBeGlobal) > 0 && shouldBeGlobal[0] {
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			item := it.Item()
-			itemKey := item.Key()
-			objId := string(itemKey)[len(p):]
-			matched := true
-			if len(filter) > 0 {
-				for k, v := range filter {
-					if string(tw.GetColumn(typ, objId, k)) != v {
-						matched = false
-						break
-					}
-				}
-			}
-			if len(inArrFilter) > 0 {
-				for k, v := range inArrFilter {
-					if !slices.Contains(v, string(tw.GetColumn(typ, objId, k))) {
-						matched = false
-						break
-					}
-				}
-			}
-			if matched {
-				if counter < offset {
-					counter++
-					continue
-				}
-				if counter >= (offset + count) {
-					break
-				}
-				m = append(m, objId)
-				counter++
-			}
-		}
-	} else {
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
 			itemKey := item.Key()
@@ -579,6 +545,40 @@ func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter ma
 					m = append(m, objId)
 					counter++
 				}
+			}
+		}
+	} else {
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			itemKey := item.Key()
+			objId := string(itemKey)[len(p):]
+			matched := true
+			if len(filter) > 0 {
+				for k, v := range filter {
+					if string(tw.GetColumn(typ, objId, k)) != v {
+						matched = false
+						break
+					}
+				}
+			}
+			if len(inArrFilter) > 0 {
+				for k, v := range inArrFilter {
+					if !slices.Contains(v, string(tw.GetColumn(typ, objId, k))) {
+						matched = false
+						break
+					}
+				}
+			}
+			if matched {
+				if counter < offset {
+					counter++
+					continue
+				}
+				if counter >= (offset + count) {
+					break
+				}
+				m = append(m, objId)
+				counter++
 			}
 		}
 	}
