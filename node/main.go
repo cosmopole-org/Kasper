@@ -21,7 +21,14 @@ import (
 	"net/http/pprof"
 )
 
+import "C"
+
 var KasperApp kasper.Kasper
+
+//export elpisCallback
+func elpisCallback(dataRaw *C.char) *C.char {
+	return C.CString(KasperApp.Tools().Elpis().ElpisCallback(C.GoString(dataRaw)))
+}
 
 var exit = make(chan int, 1)
 
