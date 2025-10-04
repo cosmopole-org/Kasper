@@ -27,11 +27,11 @@ function comp() {
                                     items: [
                                         {
                                             type: 'button',
-                                            buttonStyle: 'elevated',
                                             label: '+ file',
                                             onPress: () => {
                                                 ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: 'hello.js', docPath: 'src/logic/' }, (docs) => {
                                                     cache["docs"] = docs;
+                                                    buildDocsTree();
                                                     updateApp(comp());
                                                 });
                                             }
@@ -43,11 +43,11 @@ function comp() {
                                         },
                                         {
                                             type: 'button',
-                                            buttonStyle: 'elevated',
                                             label: '+ folder',
                                             onPress: () => {
                                                 ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: 'src/logic/' }, (docs) => {
                                                     cache["docs"] = docs;
+                                                    buildDocsTree();
                                                     updateApp(comp());
                                                 });
                                             }
@@ -65,11 +65,11 @@ function comp() {
                                     items: [
                                         {
                                             type: 'button',
-                                            buttonStyle: 'elevated',
                                             label: 'clear',
                                             onPress: () => {
                                                 ask(cache["workspaceId"], { type: 'files.purge' }, (docs) => {
                                                     cache["docs"] = docs;
+                                                    buildDocsTree();
                                                     updateApp(comp());
                                                 });
                                             }
@@ -81,11 +81,11 @@ function comp() {
                                         },
                                         {
                                             type: 'button',
-                                            buttonStyle: 'elevated',
                                             label: '+ folder',
                                             onPress: () => {
                                                 ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: 'src/logic/' }, (docs) => {
                                                     cache["docs"] = docs;
+                                                    buildDocsTree();
                                                     updateApp(comp());
                                                 });
                                             }
@@ -95,7 +95,7 @@ function comp() {
                                 {
                                     type: 'container',
                                     width: 250,
-                                    height: 16
+                                    height: 32
                                 },
                                 {
                                     type: 'container',
@@ -106,69 +106,62 @@ function comp() {
                                         treeData: {
                                             key: 'root',
                                             data: 'src',
-                                            children: [
-                                                {
-                                                    key: 'resources',
-                                                    data: 'resources',
-                                                    children: [
-                                                        {
-                                                            key: 'background',
-                                                            data: 'background.png',
-                                                            children: []
-                                                        },
-                                                        {
-                                                            key: 'logo',
-                                                            data: 'logo.png',
-                                                            children: []
-                                                        }
-                                                    ]
-                                                },
-                                                {
-                                                    key: 'logic',
-                                                    data: 'logic',
-                                                    children: [
-                                                        {
-                                                            key: 'sdk',
-                                                            data: 'sdk',
-                                                            children: [
-                                                                {
-                                                                    key: 'api',
-                                                                    data: 'api.js',
-                                                                    children: []
-                                                                },
-                                                                {
-                                                                    key: 'constants',
-                                                                    data: 'costants.json',
-                                                                    children: []
-                                                                },
-                                                            ]
-                                                        },
-                                                        {
-                                                            key: 'widgetjs',
-                                                            data: 'widget.js',
-                                                            children: []
-                                                        },
-                                                        {
-                                                            key: 'applet',
-                                                            data: 'applet.js',
-                                                            children: []
-                                                        },
-                                                        ...cache["docs"].map((doc, index) => {
-                                                            return {
-                                                                key: doc.Title.replace(".", "_") + "_" + index,
-                                                                data: doc.Title,
-                                                                children: []
-                                                            }
-                                                        })
-                                                    ]
-                                                }
-                                            ]
+                                            children: []
                                         },
                                         itemBuilder: (key, data, level) => {
+                                            log("hi " + data);
                                             return {
                                                 type: 'text',
-                                                content: level == 0 ? "src" : data
+                                                content: data,
                                             };
+                                            // let doc = JSON.parse(data);
+                                            // return {
+                                            //     type: 'popupMenu',
+                                            //     menuButton: {
+                                            //         type: 'text',
+                                            //         content: doc.title,
+                                            //     },
+                                            //     itemCount: 2,
+                                            //     itemBuilder: (index) => {
+                                            //         if (index == 0) {
+                                            //             return {
+                                            //                 type: 'text',
+                                            //                 content: 'new file',
+                                            //             }
+                                            //         } else if (index == 1) {
+                                            //             return {
+                                            //                 type: 'text',
+                                            //                 content: 'new folder',
+                                            //             }
+                                            //         } else if (index == 2) {
+                                            //             return {
+                                            //                 type: 'text',
+                                            //                 content: 'delete',
+                                            //             }
+                                            //         }
+                                            //     },
+                                            //     onItemPress: (index) => {
+                                            //         if (index == 0) {
+                                            //             ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: 'hello.js', docPath: doc.path + "/" + doc.id }, (docs) => {
+                                            //                 cache["docs"] = docs;
+                                            //                 buildDocsTree();
+                                            //                 updateApp(comp());
+                                            //             });
+                                            //         } else if (index == 1) {
+                                            //             ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: doc.path + "/" + doc.id }, (docs) => {
+                                            //                 cache["docs"] = docs;
+                                            //                 buildDocsTree();
+                                            //                 updateApp(comp());
+                                            //             });
+                                            //         } else if (index == 2) {
+                                            //             ask(cache["workspaceId"], { type: 'files.delete', docId: doc.id }, (docs) => {
+                                            //                 cache["docs"] = docs;
+                                            //                 buildDocsTree();
+                                            //                 updateApp(comp());
+                                            //             });
+                                            //         }
+                                            //     }
+                                            // };
                                         },
                                         onItemTap: (key) => {
                                             log(key + " tapped !");
@@ -456,20 +449,30 @@ function comp() {
                                                     cache["chatMessageInput"] = text;
                                                 },
                                                 trailing: {
-                                                    type: 'button',
-                                                    buttonStyle: 'elevated',
-                                                    label: 'Send',
-                                                    onPress: () => {
-                                                        if (!cache["chatMessageInput"] || cache["chatMessageInput"].length == 0) {
-                                                            return;
+                                                    type: 'container',
+                                                    height: 52,
+                                                    width: 92,
+                                                    padding: {
+                                                        left: 8,
+                                                        top: 8,
+                                                        right: 8,
+                                                        bottom: 8
+                                                    },
+                                                    child: {
+                                                        type: 'button',
+                                                        label: 'Send',
+                                                        onPress: () => {
+                                                            if (!cache["chatMessageInput"] || cache["chatMessageInput"].length == 0) {
+                                                                return;
+                                                            }
+                                                            if (!cache["messages"]) {
+                                                                cache["messages"] = [];
+                                                            }
+                                                            cache["messages"].push(cache["chatMessageInput"]);
+                                                            cache["chatMessageInput"] = "";
+                                                            clearInput('chatInput');
+                                                            updateApp(comp());
                                                         }
-                                                        if (!cache["messages"]) {
-                                                            cache["messages"] = [];
-                                                        }
-                                                        cache["messages"].push(cache["chatMessageInput"]);
-                                                        cache["chatMessageInput"] = "";
-                                                        clearInput('chatInput');
-                                                        updateApp(comp());
                                                     }
                                                 }
                                             }
@@ -484,16 +487,47 @@ function comp() {
         }
     };
 }
+function buildDocsTree() {
+    let root = { path: '', title: 'src', id: '0', children: {}, key: '0', data: JSON.stringify({ path: '', title: 'src', id: '0' }) };
+    cache["docs"].map((doc, index) => {
+        let pathParts = doc.Path.split("/").slice(1);
+        let temp = root;
+        let progressPath = temp.id;
+        for (let part in pathParts) {
+            if (!temp[part]) {
+                temp[part] = { path: progressPath, title: '', id: part, key: part, children: {} };
+            }
+            temp = temp[part].children;
+            progressPath += '/' + part;
+        }
+        if (temp[doc.Id]) {
+            temp[doc.Id].title = doc.Title;
+            temp[doc.Id].data = JSON.stringify({ path: temp[doc.Id].path, title: doc.Title, id: temp[doc.Id].id });
+        } else {
+            temp[doc.Id] = { path: doc.Path, title: doc.Title, id: doc.Id, children: {}, key: doc.Id, data: JSON.stringify({ path: doc.Path, title: doc.Title, id: doc.Id }) };
+        }
+    });
+    scanForTransform(root);
+    cache["docsTree"] = root;
+}
+function scanForTransform(doc) {
+    doc.children = Object.values(doc.children);
+    doc.children.forEach(child => {
+        scanForTransform(child);
+    });
+}
 if (!started) {
-    cache["docs"] = [];
+    cache["docs"] = [{ children: [], key: '0', data: "src" }];
+    cache["docsTree"] = { children: [], key: '0', data: "src" };
     cache["messages"] = [];
     ask(meta.pointId, { type: 'initWorkspace' }, (workspace) => {
         cache["workspaceId"] = workspace.Id;
         initApp(comp());
-        ask(cache["workspaceId"], { type: 'files.read' }, (docs) => {
-            cache["docs"] = docs;
-            updateApp(comp());
-        });
+        // ask(cache["workspaceId"], { type: 'files.read' }, (docs) => {
+        //     cache["docs"] = docs;
+        //     buildDocsTree();
+        //     updateApp(comp());
+        // });
     });
 } else {
     updateApp(comp());
