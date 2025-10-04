@@ -515,7 +515,7 @@ func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter ma
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
 			itemKey := item.Key()
-			objId := string(itemKey)[len(p):]
+			objId := string(itemKey)[len(string(prefix)):]
 			matched := true
 			if strings.HasSuffix(string(itemKey), "@global") {
 				if len(filter) > 0 {
@@ -551,7 +551,7 @@ func (tw *TrxWrapper) SearchLinkKeysListByPrefix(p string, typ string, filter ma
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
 			itemKey := item.Key()
-			objId := string(itemKey)[len(p):]
+			objId := string(itemKey)[len(string(prefix)):]
 			matched := true
 			if len(filter) > 0 {
 				for k, v := range filter {
