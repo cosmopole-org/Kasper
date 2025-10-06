@@ -603,11 +603,7 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 			log.Println(err)
 			return err.Error()
 		}
-		isRequesterOnchain, err := checkField(input, "isRequesterOnchain", false)
-		if err != nil {
-			log.Println(err)
-			return err.Error()
-		}
+		isRequesterOnchain := false
 		kRaw, err := checkField(input, "key", "")
 		if err != nil {
 			log.Println(err)

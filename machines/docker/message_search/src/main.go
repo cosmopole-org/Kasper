@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	model "quickstart/models"
 	"strings"
 	"sync"
 
@@ -84,61 +85,6 @@ func (d *Point) Parse(m map[string][]byte) {
 	d.PendingUserId = string(m["pendingUserId"])
 }
 
-type Doc struct {
-	Id        string
-	Title     string
-	FileId    string
-	MimeType  string
-	Category  string
-	CreatorId string
-	PointId   string
-}
-
-func (d *Doc) Push() {
-	obj := map[string]string{
-		"id":        base64.StdEncoding.EncodeToString([]byte(d.Id)),
-		"title":     base64.StdEncoding.EncodeToString([]byte(d.Title)),
-		"fileId":    base64.StdEncoding.EncodeToString([]byte(d.FileId)),
-		"mimeType":  base64.StdEncoding.EncodeToString([]byte(d.MimeType)),
-		"category":  base64.StdEncoding.EncodeToString([]byte(d.Category)),
-		"creatorId": base64.StdEncoding.EncodeToString([]byte(d.CreatorId)),
-		"pointId":   base64.StdEncoding.EncodeToString([]byte(d.PointId)),
-	}
-	c := make(chan int, 1)
-	dbPutObj("Doc", d.Id, obj, func() {
-		c <- 1
-	})
-	<-c
-}
-
-func (d *Doc) Pull() bool {
-	c := make(chan map[string][]byte, 1)
-	dbGetObj("Doc", d.Id, func(m map[string][]byte) {
-		c <- m
-	})
-	m := <-c
-	if len(m) > 0 {
-		d.Category = string(m["category"])
-		d.CreatorId = string(m["creatorId"])
-		d.FileId = string(m["fileId"])
-		d.MimeType = string(m["mimeType"])
-		d.PointId = string(m["pointId"])
-		d.Title = string(m["title"])
-		return true
-	} else {
-		return false
-	}
-}
-
-func (d *Doc) Parse(m map[string][]byte) {
-	d.Category = string(m["category"])
-	d.CreatorId = string(m["creatorId"])
-	d.FileId = string(m["fileId"])
-	d.MimeType = string(m["mimeType"])
-	d.PointId = string(m["pointId"])
-	d.Title = string(m["title"])
-}
-
 var callbacks = map[int64]func([]byte){}
 var searchers = map[string]bleve.Index{}
 var searchersLock sync.Mutex
@@ -201,16 +147,84 @@ func processPacket(callbackId int64, data []byte) {
 					defer searchersLock.Unlock()
 					searchers[pointId] = searcher
 				}
+			} else if strings.HasPrefix(text, "@search") && strings.Contains(text, "/activateUsername") {
+				objName := "username_" + userId
+				searcherDbPath := "/app/searcher_" + objName + ".bleve"
+				if _, err := os.Stat(searcherDbPath); errors.Is(err, os.ErrNotExist) {
+					mapping := bleve.NewIndexMapping()
+					searcher, err := bleve.New(searcherDbPath, mapping)
+					if err != nil {
+						panic(err)
+					}
+					searchersLock.Lock()
+					defer searchersLock.Unlock()
+					searchers[objName] = searcher
+				} else {
+					searcher, err := bleve.Open(searcherDbPath)
+					if err != nil {
+						panic(err)
+					}
+					searchersLock.Lock()
+					defer searchersLock.Unlock()
+					searchers[objName] = searcher
+				}
 			} else {
 				searchersLock.Lock()
 				defer searchersLock.Unlock()
 				searcher, ok := searchers[pointId]
-
 				if ok {
 					searcher.Index(packet["id"].(string), packet)
 				}
+				parts := strings.Split(input["text"].(string), " ")
+				for _, word := range parts {
+					if strings.HasPrefix(word, "@") {
+						ch := make(chan []byte)
+						submitOffchainBaseTrx(pointId, "/users/getByUsername", "", "", "", "", map[string]any{
+							"username": word[1:],
+						}, func(b []byte) {
+							ch <- b
+						})
+						result := <-ch
+						res := model.GetOutput{}
+						json.Unmarshal(result, &res)
+						uname := res.User["username"]
+						if uname == word[1:] {
+							searcher, ok := searchers["username_"+res.User["id"].(string)]
+							if ok {
+								searcher.Index(pointId+"|"+packet["id"].(string), res.User["username"].(string))
+							}
+						}
+					}
+				}
+
 			}
 		} else if input["type"] == "search" {
+			quest := packet["user"].(map[string]any)["username"].(string)
+			requestId := input["requestId"].(string)
+			query := bleve.NewMatchQuery(quest)
+			searchRequest := bleve.NewSearchRequest(query)
+			searchRequest.Explain = true
+			searchRequest.Fields = []string{"data"}
+
+			searchersLock.Lock()
+			defer searchersLock.Unlock()
+			searcher, ok := searchers["username_"+userId]
+
+			if ok {
+
+				searchResult, err := searcher.Search(searchRequest)
+				if err != nil {
+					log.Println(err)
+					signalPoint("single", pointId, userId, map[string]any{"type": "searchRes", "ids": []string{}, "callbackId": requestId}, true)
+					return
+				}
+				ids := []string{}
+				for _, hit := range searchResult.Hits {
+					ids = append(ids, hit.ID)
+				}
+				signalPoint("single", pointId, userId, map[string]any{"type": "searchRes", "ids": ids, "callbackId": requestId}, true)
+			}
+		} else if input["type"] == "searchMentions" {
 			quest := input["query"].(string)
 			requestId := input["requestId"].(string)
 			query := bleve.NewMatchQuery(quest)
@@ -249,7 +263,7 @@ var conn net.Conn
 
 func main() {
 
-	log.Println("started storag machine.")
+	log.Println("started searcher machine.")
 
 	var err error
 	conn, err = net.Dial("tcp", "10.10.0.3:8084")

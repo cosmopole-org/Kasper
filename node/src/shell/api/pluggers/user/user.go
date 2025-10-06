@@ -62,6 +62,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.Get)
 		}
 		
+		func (c *Plugger) GetByUsername() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.GetByUsername)
+		}
+		
 		func (c *Plugger) Find() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.Find)
 		}

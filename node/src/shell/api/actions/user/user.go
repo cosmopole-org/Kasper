@@ -446,6 +446,31 @@ func (a *Actions) Get(state state.IState, input inputsusers.GetInput) (any, erro
 	return outputsusers.GetOutput{User: result}, nil
 }
 
+// GetByUsername /users/getByUsername check [ true false false ] access [ true false false false GET ]
+func (a *Actions) GetByUsername(state state.IState, input inputsusers.GetByUsernameInput) (any, error) {
+	trx := state.Trx()
+	userId := trx.GetIndex("User", "username", "id", input.Username)
+	user := models.User{Id: userId}.Pull(trx)
+	result := map[string]any{
+		"id":        user.Id,
+		"publicKey": user.PublicKey,
+		"type":      user.Typ,
+		"username":  user.Username,
+	}
+	for _, v := range a.modelExtender["user"] {
+		if meta, err := trx.GetJson("UserMeta::"+user.Id, v.Path); err == nil || meta[v.Name] != nil {
+			result[v.Name] = meta[v.Name]
+		}
+	}
+	if userId == state.Info().UserId() {
+		result["balance"] = user.Balance
+	}
+
+	result["status"] = a.getUserStatus(trx, userId, state.Info().UserId())
+
+	return outputsusers.GetOutput{User: result}, nil
+}
+
 // Find /users/find check [ true false false ] access [ true false false false GET ]
 func (a *Actions) Find(state state.IState, input inputsusers.FindInput) (any, error) {
 	trx := state.Trx()
