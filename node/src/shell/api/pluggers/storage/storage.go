@@ -30,6 +30,10 @@
 			return utils.ExtractSecureAction(c.Core, c.Actions.UploadPointEntity)
 		}
 		
+		func (c *Plugger) UploadAppEntity() iaction.IAction {
+			return utils.ExtractSecureAction(c.Core, c.Actions.UploadAppEntity)
+		}
+		
 		func (c *Plugger) DeletePointEntity() iaction.IAction {
 			return utils.ExtractSecureAction(c.Core, c.Actions.DeletePointEntity)
 		}
