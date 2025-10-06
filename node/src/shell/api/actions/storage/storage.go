@@ -351,6 +351,103 @@ func Install(a *Actions, extra ...any) error {
 			resp.Write(w)
 		}
 	})
+	registerRoute(mux, "/storage/uploadAppEntity", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("User-Id")
+		inputStr := r.Header.Get("Input")
+		signature := r.Header.Get("Signature")
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, []byte(inputStr), signature); !success {
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		var input inputs_storage.UploadAppEntityInput
+		err := json.Unmarshal([]byte(inputStr), &input)
+		if err != nil {
+			log.Printf("Error parsing body: %v", err)
+			http.Error(w, "can't parse body", http.StatusBadRequest)
+			return
+		}
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		var e error
+		a.App.ModifyState(false, func(trx trx.ITrx) error {
+			app := models.App{Id: input.AppId}.Pull(trx)
+			if app.OwnerId != userId {
+				e = errors.New("you are not owner of app")
+				return err
+			}
+			if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/apps/"+input.AppId, data, input.EntityId+".original", true); err != nil {
+				log.Println(err)
+				e = err
+				return err
+			}
+			if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
+				entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/apps/" + input.AppId + "/" + input.EntityId
+				cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath+".jpg")
+				output, err := cmd.Output()
+				if err != nil {
+					log.Fatalf("Command execution failed: %v", err)
+				}
+				fmt.Printf("Command output:\n%s", output)
+			} else {
+				if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/apps/"+input.AppId, data, input.EntityId, true); err != nil {
+					log.Println(err)
+					e = err
+					return err
+				}
+			}
+			return nil
+		})
+		if e == nil {
+			w.Write([]byte("{ \"resCode\": 0, \"obj\": {} }"))
+		} else {
+			b, _ := json.Marshal(map[string]any{
+				"resCode": 1,
+				"message": e.Error(),
+			})
+			w.Write(b)
+		}
+	})
+	registerRoute(mux, "/storage/downloadAppEntity", func(w http.ResponseWriter, r *http.Request) {
+		userId := r.Header.Get("User-Id")
+		inputLengthStr := r.Header.Get("Input-Length")
+		ilI64, err := strconv.ParseInt(inputLengthStr, 10, 32)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputLength := int(ilI64)
+		var input inputs_storage.DownloadAppEntityInput
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Error reading body: %v", err)
+			http.Error(w, "can't read body", http.StatusBadRequest)
+			return
+		}
+		inputBody := body[0:inputLength]
+		signature := body[inputLength:]
+		if success, _, _ := a.App.Tools().Security().AuthWithSignature(userId, inputBody, string(signature)); !success {
+			http.Error(w, "signature verification failed", http.StatusForbidden)
+			return
+		}
+		err = json.Unmarshal(inputBody, &input)
+		if err != nil {
+			log.Printf("Error parsing body: %v", err)
+			http.Error(w, "can't parse body", http.StatusBadRequest)
+			return
+		}
+		data, err := a.App.Tools().File().ReadFileFromGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/apps/"+input.AppId, input.EntityId)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "can't read file", http.StatusBadRequest)
+			return
+		}
+		w.Write([]byte(data))
+	})
 	registerRoute(mux, "/storage/downloadPointEntity", func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Header.Get("User-Id")
 		inputLengthStr := r.Header.Get("Input-Length")
@@ -735,6 +832,38 @@ func (a *Actions) UploadPointEntity(state state.IState, input inputs_storage.Upl
 	future.Async(func() {
 		a.App.Tools().Signaler().SignalGroup("storage/updatePointEntity", state.Info().PointId(), map[string]any{"pointId": state.Info().PointId(), "entityId": input.EntityId}, true, []string{})
 	}, false)
+	return map[string]any{}, nil
+}
+
+// UploadAppEntity /storage/uploadAppEntity check [ true true true ] access [ true false false false POST ]
+func (a *Actions) UploadAppEntity(state state.IState, input inputs_storage.UploadAppEntityInput) (any, error) {
+	app := models.App{Id: input.AppId}.Pull(state.Trx())
+	if app.OwnerId != state.Info().UserId() {
+		return nil, errors.New("you are not owner of app")
+	}
+	data, err := base64.StdEncoding.DecodeString(input.Data)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/apps/"+input.AppId, data, input.EntityId+".original", true); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if mimeType := http.DetectContentType(data); strings.HasPrefix(mimeType, "image/") {
+		entityPath := a.App.Tools().Storage().StorageRoot() + "/entities/apps/" + input.AppId + "/" + input.EntityId
+		cmd := exec.Command("convert", entityPath+".original", "-quality", imageQuality(len(data)), "-thumbnail", imageThumbSize(input.EntityId, data)+">", entityPath+".jpg")
+		output, err := cmd.Output()
+		if err != nil {
+			log.Fatalf("Command execution failed: %v", err)
+		}
+		fmt.Printf("Command output:\n%s", output)
+	} else {
+		if err := a.App.Tools().File().SaveDataToGlobalStorage(a.App.Tools().Storage().StorageRoot()+"/entities/apps/"+input.AppId, data, input.EntityId, true); err != nil {
+			log.Println(err)
+			return nil, err
+		}
+	}
 	return map[string]any{}, nil
 }
 
