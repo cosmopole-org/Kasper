@@ -223,6 +223,8 @@ func processPacket(callbackId int64, data []byte) {
 					ids = append(ids, hit.ID)
 				}
 				signalPoint("single", pointId, userId, map[string]any{"type": "searchRes", "ids": ids, "callbackId": requestId}, true)
+			} else {
+				signalPoint("single", pointId, userId, map[string]any{"type": "searchRes", "ids": []string{}, "callbackId": requestId}, true)
 			}
 		} else if input["type"] == "searchMentions" {
 			quest := input["query"].(string)
@@ -249,6 +251,8 @@ func processPacket(callbackId int64, data []byte) {
 					ids = append(ids, hit.ID)
 				}
 				signalPoint("single", pointId, userId, map[string]any{"type": "searchRes", "ids": ids, "callbackId": requestId}, true)
+			} else {
+				signalPoint("single", pointId, userId, map[string]any{"type": "searchRes", "ids": []string{}, "callbackId": requestId}, true)
 			}
 		}
 	} else {
