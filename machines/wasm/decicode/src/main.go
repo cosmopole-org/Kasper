@@ -52,6 +52,7 @@ func Run(signal model.Send) {
 					Orig:     "",
 					Members: map[string]bool{
 						signal.User.Id: true,
+						"41@global":    true,
 					},
 					Metadata: map[string]any{
 						"title":  "decicode-" + signal.User.Id,

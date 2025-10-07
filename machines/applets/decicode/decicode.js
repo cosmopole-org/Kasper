@@ -72,34 +72,69 @@ function comp() {
                                             return scanComp({
                                                 type: 'popupMenu',
                                                 menuButton: (openMenu, closeMenu) => {
-                                                    return scanComp(
-                                                        {
-                                                            type: 'array',
-                                                            orientation: 'horizontal',
-                                                            items: [
-                                                                {
-                                                                    type: 'text',
-                                                                    content: doc.title
-                                                                },
-                                                                {
-                                                                    type: 'iconButton',
-                                                                    icon: "more_vert",
-                                                                    glass: false,
-                                                                    isTransparent: true,
-                                                                    onPress: () => {
-                                                                        log("keyhan 1");
-                                                                        if (cache["isMenuOpen"]) {
-                                                                            cache["isMenuOpen"] = false;
-                                                                            closeMenu();
-                                                                        } else {
-                                                                            cache["isMenuOpen"] = true;
-                                                                            openMenu();
+                                                    if (doc.isDir) {
+                                                        return scanComp(
+                                                            {
+                                                                type: 'array',
+                                                                orientation: 'horizontal',
+                                                                items: [
+                                                                    {
+                                                                        type: 'text',
+                                                                        content: doc.title
+                                                                    },
+                                                                    {
+                                                                        type: 'iconButton',
+                                                                        icon: "more_vert",
+                                                                        glass: false,
+                                                                        isTransparent: true,
+                                                                        onPress: () => {
+                                                                            log("keyhan 1");
+                                                                            if (cache["isMenuOpen"]) {
+                                                                                cache["isMenuOpen"] = false;
+                                                                                closeMenu();
+                                                                            } else {
+                                                                                cache["isMenuOpen"] = true;
+                                                                                openMenu();
+                                                                            }
                                                                         }
                                                                     }
-                                                                }
-                                                            ]
-                                                        }
-                                                    );
+                                                                ]
+                                                            }
+                                                        );
+                                                    } else {
+                                                        return scanComp(
+                                                            {
+                                                                type: 'array',
+                                                                orientation: 'horizontal',
+                                                                items: [
+                                                                    {
+                                                                        type: 'button',
+                                                                        label: doc.title,
+                                                                        onPress: () => {
+                                                                            cache["currentCode"] = "let a = 2;";
+                                                                            updateApp(comp());
+                                                                        }
+                                                                    },
+                                                                    {
+                                                                        type: 'iconButton',
+                                                                        icon: "more_vert",
+                                                                        glass: false,
+                                                                        isTransparent: true,
+                                                                        onPress: () => {
+                                                                            log("keyhan 1");
+                                                                            if (cache["isMenuOpen"]) {
+                                                                                cache["isMenuOpen"] = false;
+                                                                                closeMenu();
+                                                                            } else {
+                                                                                cache["isMenuOpen"] = true;
+                                                                                openMenu();
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        );
+                                                    }
                                                 },
                                                 itemCount: doc.isDir ? 3 : 1,
                                                 itemBuilder: (index) => {
@@ -169,6 +204,7 @@ function comp() {
                                                                                 ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: cache["creatingFileNameInput"], docPath: doc.path + (doc.path.length > 0 ? "/" : "") + doc.id }, (docs) => {
                                                                                     cache["creatingFileNameInput"] = "";
                                                                                     cache["docs"] = docs;
+                                                                                    closeDialog();
                                                                                     buildDocsTree();
                                                                                     updateApp(comp());
                                                                                 });
@@ -215,7 +251,11 @@ function comp() {
                         key: "mainCode",
                         minLines: 35,
                         width: meta.width - 250 - 350,
-                        height: meta.height
+                        height: meta.height,
+                        code: cache["currentCode"] ?? "",
+                        onChange: (text) => {
+                            cache["currentCode"] = text;
+                        }
                     },
                     {
                         type: "container",
@@ -436,86 +476,9 @@ function comp() {
                                         bottom: 16
                                     },
                                     child: {
-                                        type: 'array',
-                                        orientation: 'vertical',
-                                        items: [
-                                            {
-                                                type: 'expanded',
-                                                child: {
-                                                    type: 'scroller',
-                                                    child: {
-                                                        type: 'array',
-                                                        orientation: 'vertical',
-                                                        items: cache["messages"].map(msg => {
-                                                            return {
-                                                                type: 'array',
-                                                                orientation: 'horizontal',
-                                                                margin: {
-                                                                    top: 16
-                                                                },
-                                                                items: [
-                                                                    {
-                                                                        type: 'spacer'
-                                                                    },
-                                                                    {
-                                                                        type: 'container',
-                                                                        bgcolor: meta.primaryColor2,
-                                                                        width: 220,
-                                                                        borderRadius: 16,
-                                                                        padding: {
-                                                                            left: 8,
-                                                                            top: 8,
-                                                                            right: 8,
-                                                                            bottom: 8
-                                                                        },
-                                                                        child: {
-                                                                            type: 'text',
-                                                                            content: msg,
-                                                                            textColor: '#ffffff'
-                                                                        }
-                                                                    }
-                                                                ]
-                                                            };
-                                                        })
-                                                    },
-                                                },
-                                            },
-                                            {
-                                                type: 'input',
-                                                key: 'chatInput',
-                                                hint: 'type your prompt',
-                                                onChange: (text) => {
-                                                    cache["chatMessageInput"] = text;
-                                                },
-                                                trailing: {
-                                                    type: 'container',
-                                                    height: 52,
-                                                    width: 92,
-                                                    padding: {
-                                                        left: 8,
-                                                        top: 8,
-                                                        right: 8,
-                                                        bottom: 8
-                                                    },
-                                                    child: {
-                                                        type: 'button',
-                                                        label: 'Send',
-                                                        onPress: () => {
-                                                            if (!cache["chatMessageInput"] || cache["chatMessageInput"].length == 0) {
-                                                                return;
-                                                            }
-                                                            if (!cache["messages"]) {
-                                                                cache["messages"] = [];
-                                                            }
-                                                            cache["messages"].push(cache["chatMessageInput"]);
-                                                            cache["chatMessageInput"] = "";
-                                                            clearInput('chatInput');
-                                                            updateApp(comp());
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        ]
+                                        type: 'chat',
+                                        pointId: cache["workspaceId"],
+                                        onlyLLM: true
                                     }
                                 }
                             }
