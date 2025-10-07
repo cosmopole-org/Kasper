@@ -692,7 +692,7 @@ func (wm *Docker) dockerCallback(machineId string, dataRaw string) string {
 					log.Println(err)
 					return err.Error()
 				}
-				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "")
+				_, result, err := action.(iaction.ISecureAction).SecurelyAct(userId, "", data, userSignature, inp, "", true)
 				log.Println(result)
 				if err != nil {
 					return err.Error()
