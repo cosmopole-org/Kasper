@@ -534,8 +534,11 @@ if (!started) {
     cache["docsTree"] = { children: [], key: '0', data: JSON.stringify({ path: "", title: "loading...", id: "0" }), title: "src", path: "", id: "0", };
     cache["messages"] = [];
     listen("codeUpdated", (packet) => {
+        log("hi");
+        log(JSON.stringify(packet));
         let filePath = packet.filePath;
         let code = packet.code;
+        log(code);
         cache["currentCode"] = code;
         updateApp(comp());
     });
