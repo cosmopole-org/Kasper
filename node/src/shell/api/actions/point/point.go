@@ -330,6 +330,14 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		return nil, err
 	}
 	maps.Copy(input.MachineMeta.Metadata, meta)
+	acc := map[string]bool{}
+	for k, v := range access {
+		if v2, ok := input.MachineMeta.Access[k]; ok {
+			acc[k] = v2
+		} else {
+			acc[k] = v
+		}
+	}
 	fn := updates_points.Fn{
 		UserId:     machine.Id,
 		Typ:        machine.Typ,
@@ -341,15 +349,7 @@ func (a *Actions) AddMachine(state state.IState, input inputs_points.AddMachineI
 		Comment:    vm.Comment,
 		Identifier: input.MachineMeta.Identifier,
 		Metadata:   input.MachineMeta.Metadata,
-		Access:     input.MachineMeta.Access,
-	}
-	acc := map[string]bool{}
-	for k, v := range access {
-		if v2, ok := input.MachineMeta.Access[k]; ok {
-			acc[k] = v2
-		} else {
-			acc[k] = v
-		}
+		Access:     acc,
 	}
 	if arr, err := trx.GetLinksList("pointAppMachine::"+state.Info().PointId()+"::"+fn.AppId+"::"+fn.UserId+"::", 0, 100); err != nil || len(arr) == 0 {
 		trx.PutJson("PointAccess::"+state.Info().PointId()+"::"+fn.UserId, "metadata", acc, false)
@@ -687,12 +687,33 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 	trx.PutLink("adminof::"+state.Info().UserId()+"::"+point.Id, "true")
 	if input.Members != nil {
 		for userId, isAdmin := range input.Members {
-			trx.PutLink("memberof::"+userId+"::"+point.Id, "true")
-			trx.PutLink("member::"+point.Id+"::"+userId, "true")
-			trx.PutJson("PointAccess::"+point.Id+"::"+userId, "metadata", access, false)
-			if isAdmin {
-				trx.PutLink("admin::"+point.Id+"::"+userId, "true")
-				trx.PutLink("adminof::"+userId+"::"+point.Id, "true")
+			user := model.User{Id: userId}.Pull(trx)
+			if user.Typ == "human" {
+				trx.PutLink("memberof::"+userId+"::"+point.Id, "true")
+				trx.PutLink("member::"+point.Id+"::"+userId, "true")
+				trx.PutJson("PointAccess::"+point.Id+"::"+userId, "metadata", access, false)
+				if isAdmin {
+					trx.PutLink("admin::"+point.Id+"::"+userId, "true")
+					trx.PutLink("adminof::"+userId+"::"+point.Id, "true")
+				}
+				a.App.Tools().Signaler().JoinGroup(point.Id, userId)
+			} else {
+				vm := model.Vm{MachineId: userId}.Pull(trx)
+				meta, err := trx.GetJson("MachineMeta::"+vm.MachineId, "metadata")
+				if err != nil {
+					log.Println(err)
+					return nil, err
+				}
+				acc := map[string]bool{}
+				maps.Copy(acc, access)
+				if arr, err := trx.GetLinksList("pointAppMachine::"+point.Id+"::"+vm.AppId+"::"+vm.MachineId+"::", 0, 100); err != nil || len(arr) == 0 {
+					trx.PutJson("PointAccess::"+point.Id+"::"+vm.MachineId, "metadata", acc, false)
+				}
+				trx.PutJson("FnMeta::"+point.Id+"::"+vm.AppId+"::"+vm.MachineId+"::"+"0", "metadata", meta, true)
+				trx.PutLink("member::"+point.Id+"::"+vm.MachineId, "true")
+				trx.PutLink("memberof::"+vm.MachineId+"::"+point.Id, "true")
+				trx.PutLink("pointAppMachine::"+point.Id+"::"+vm.AppId+"::"+vm.MachineId+"::"+"0", "true")
+				a.App.Tools().Signaler().JoinGroup(point.Id, vm.MachineId)
 			}
 		}
 	}
@@ -722,9 +743,6 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 		}
 		slices.Sort(ids)
 		trx.PutLink("1-to-1-map::"+ids[0]+"<->"+ids[1], point.Id)
-	}
-	for memberId := range input.Members {
-		a.App.Tools().Signaler().JoinGroup(point.Id, memberId)
 	}
 	point = point.Pull(trx)
 	a.App.Tools().Signaler().SignalGroup("points/create", point.Id, updates_points.Delete{Point: point}, true, []string{state.Info().UserId()})
