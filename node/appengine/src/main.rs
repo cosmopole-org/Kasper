@@ -812,7 +812,7 @@ impl WasmMac {
         let v = Validator::create(Some(&conf2)).unwrap();
         v.validate(&main_mod_raw).unwrap();
 
-        let mut vm_instance_res = exec.register_active_module(&mut store, &main_mod_raw);
+        let vm_instance_res = exec.register_active_module(&mut store, &main_mod_raw);
         if vm_instance_res.is_ok() {
             let mut vm_instance = vm_instance_res.unwrap();
 
