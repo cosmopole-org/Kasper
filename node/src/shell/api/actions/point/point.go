@@ -713,6 +713,10 @@ func (a *Actions) Create(state state.IState, input inputs_points.CreateInput) (a
 				trx.PutLink("member::"+point.Id+"::"+vm.MachineId, "true")
 				trx.PutLink("memberof::"+vm.MachineId+"::"+point.Id, "true")
 				trx.PutLink("pointAppMachine::"+point.Id+"::"+vm.AppId+"::"+vm.MachineId+"::"+"0", "true")
+				if isAdmin {
+					trx.PutLink("admin::"+point.Id+"::"+userId, "true")
+					trx.PutLink("adminof::"+userId+"::"+point.Id, "true")
+				}
 				a.App.Tools().Signaler().JoinGroup(point.Id, vm.MachineId)
 			}
 		}

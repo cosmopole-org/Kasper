@@ -1,0 +1,19 @@
+{
+    "isMcp": true,
+    "tools": [
+        {
+            "name": "updateCodeFile",
+            "desc": "update the file specified by file path and put the code you wrote inside it",
+            "args": {
+                "filePath": {
+                    "type": "STRING",
+                    "desc": "path of the file in which the code you generate should be placed"
+                },
+                "code": {
+                    "type": "STRING",
+                    "desc": "the code that you wrote in the specified programming langaugae and wanna put in the file"
+                }
+            }
+        }
+    ]
+}

@@ -41,6 +41,18 @@ func Run(signal model.Send) {
 	}
 
 	switch act {
+	case "execute":
+		{
+			toolName := input["name"].(string)
+			args := input["args"].(map[string]any)
+			if toolName == "updateCodeFile" {
+				code := args["code"]
+				filePath := args["filePath"]
+				trx.Signaler.Broadcast(signal.Point.Id, map[string]any{"type": "codeUpdated", "filePath": filePath, "code": code})
+				trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "mcpCallback", "payload": "file code has been updated successfully."}, false)
+			}
+			break
+		}
 	case "initWorkspace":
 		{
 			if wId := trx.Db.BaseDB.Get(signal.Point.Id); len(wId) == 0 {
@@ -53,6 +65,7 @@ func Run(signal model.Send) {
 					Members: map[string]bool{
 						signal.User.Id: true,
 						"41@global":    true,
+						"50@global":    true,
 					},
 					Metadata: map[string]any{
 						"title":  "decicode-" + signal.User.Id,

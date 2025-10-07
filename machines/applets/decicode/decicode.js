@@ -533,6 +533,12 @@ if (!started) {
     cache["docs"] = [];
     cache["docsTree"] = { children: [], key: '0', data: JSON.stringify({ path: "", title: "loading...", id: "0" }), title: "src", path: "", id: "0", };
     cache["messages"] = [];
+    listen("codeUpdated", (packet) => {
+        let filePath = packet.filePath;
+        let code = packet.code;
+        cache["currentCode"] = code;
+        updateApp(comp());
+    });
     ask(meta.pointId, { type: 'initWorkspace' }, (workspace) => {
         cache["workspaceId"] = workspace.Id;
         initApp(comp());

@@ -878,6 +878,11 @@ type FileResponse struct {
 type Signaler struct {
 }
 
+func (s *Signaler) Send(pointId string, userId string, data any, temp bool) {
+	res, _ := json.Marshal(data)
+	SendSignal("single", pointId, userId, string(res), temp)
+}
+
 func (s *Signaler) Answer(pointId string, userId string, data any, temp bool) {
 	res, _ := json.Marshal(data)
 	SendSignal("single", pointId, userId, string(res), temp)

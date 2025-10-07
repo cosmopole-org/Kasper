@@ -812,27 +812,30 @@ impl WasmMac {
         let v = Validator::create(Some(&conf2)).unwrap();
         v.validate(&main_mod_raw).unwrap();
 
-        let mut vm_instance = exec.register_active_module(&mut store, &main_mod_raw).unwrap();
+        let mut vm_instance_res = exec.register_active_module(&mut store, &main_mod_raw);
+        if vm_instance_res.is_ok() {
+            let mut vm_instance = vm_instance_res.unwrap();
 
-        let mut binding = vm_instance.get_func_mut("_start").unwrap();
+            let mut binding = vm_instance.get_func_mut("_start").unwrap();
 
-        exec.call_func(&mut binding, []).unwrap();
+            exec.call_func(&mut binding, []).unwrap();
 
-        let val_l = input.len() as i32;
-        let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
-        let res2 = exec.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
+            let val_l = input.len() as i32;
+            let mut malloc_fn = vm_instance.get_func_mut("malloc").unwrap();
+            let res2 = exec.call_func(&mut malloc_fn, [WasmValue::from_i32(val_l)]).unwrap();
 
-        let val_offset = res2[0].to_i32();
-        let raw_arr = input.as_bytes();
-        let arr: Vec<u8> = raw_arr.to_vec();
-        let mem = vm_instance.get_memory_mut("memory");
-        mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
-        let c = ((val_offset as i64) << 32) | (val_l as i64);
+            let val_offset = res2[0].to_i32();
+            let raw_arr = input.as_bytes();
+            let arr: Vec<u8> = raw_arr.to_vec();
+            let mem = vm_instance.get_memory_mut("memory");
+            mem.unwrap().set_data(arr, val_offset.cast_unsigned()).unwrap();
+            let c = ((val_offset as i64) << 32) | (val_l as i64);
 
-        let mut run_fn = vm_instance.get_func_mut("run").unwrap();
-        let res = exec.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
-        if res.is_ok() {
-            res.unwrap();
+            let mut run_fn = vm_instance.get_func_mut("run").unwrap();
+            let res = exec.call_func(&mut run_fn, [WasmValue::from_i64(c)]);
+            if res.is_ok() {
+                res.unwrap();
+            }
         }
     }
 
