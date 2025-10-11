@@ -12,9 +12,8 @@ type MyDb struct {
 }
 
 type User struct {
-	Id       string
-	Name     string
-	AuthCode string
+	Id          string
+	CurrentPath string
 }
 
 type Point struct {

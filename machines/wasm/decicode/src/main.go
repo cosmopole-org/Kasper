@@ -3,16 +3,19 @@ package main
 import (
 	model "applet/src/models"
 	input_model_points "applet/src/models/inputs/points"
+	input_model_storage "applet/src/models/inputs/storage"
 	output_model_points "applet/src/models/outputs/points"
 	api "applet/src/sdk"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
 
-func Run(signal model.Send) {
+func Run(signal model.Send, typ string, args map[string]any) {
 
 	api.Init()
 
@@ -41,16 +44,25 @@ func Run(signal model.Send) {
 	}
 
 	switch act {
-	case "execute":
+	case "setCurrentPath":
 		{
-			toolName := input["name"].(string)
-			args := input["args"].(map[string]any)
-			if toolName == "updateCodeFile" {
-				code := args["code"]
-				filePath := args["filePath"]
-				trx.Signaler.Broadcast(signal.Point.Id, map[string]any{"type": "codeUpdated", "filePath": filePath, "code": code})
-				trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "mcpCallback", "payload": "file code has been updated successfully."}, false)
+			cp := input["path"].(string)
+			user := trx.Db.Users.FindById(signal.User.Id)
+			user.CurrentPath = cp
+			trx.Db.Users.CreateAndInsert(&user)
+			break
+		}
+	case "updateCodeFile":
+		{
+			code := input["code"].(string)
+			filePath := input["filePath"].(string)
+			inp := input_model_storage.UploadUserEntityInput{
+				EntityId: signal.User.Id + "_" + strings.Join(strings.Split(filePath, "/"), "_"),
+				Data:     base64.StdEncoding.EncodeToString([]byte(code)),
 			}
+			trx.Offchain.SubmitBaseRequest(signal.Point.Id, "/storage/uploadUserEntity", "", "", "", inp)
+			trx.Signaler.Broadcast(signal.Point.Id, map[string]any{"type": "codeUpdated", "updatedBy": signal.User.Id, "filePath": filePath, "code": code})
+			trx.Signaler.Answer(signal.Point.Id, signal.User.Id, map[string]any{"type": "mcpCallback", "payload": "file code has been updated successfully."}, false)
 			break
 		}
 	case "initWorkspace":
