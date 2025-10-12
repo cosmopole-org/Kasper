@@ -14,7 +14,7 @@ try {
                         label: "Deci Code",
                         bgcolor: meta.primaryColor1,
                         onPress: () => {
-                            openWindow("applet", 1700, 900);
+                            openWindow("applet", 1200, 800);
                         }
                     }
                 }

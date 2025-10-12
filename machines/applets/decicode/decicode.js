@@ -161,6 +161,7 @@ function comp() {
                                                                                 if (cache["currentPath"] === (doc.path + "/" + doc.id)) {
                                                                                     log(data);
                                                                                     cache["currentCode"] = data;
+                                                                                    cache["sandobxRerenderFlag"] = Math.random().toString();
                                                                                     updateApp(comp());
                                                                                 }
                                                                             });
@@ -297,7 +298,52 @@ function comp() {
                                     type: 'button',
                                     label: 'build',
                                     onPress: () => {
-                                        ask(cache["workspaceId"], { type: 'build' }, () => { });
+                                        openCustomDialog(
+                                            "build",
+                                            scanComp({
+                                                type: 'array',
+                                                orientation: 'vertical',
+                                                items: [
+                                                    {
+                                                        type: 'text',
+                                                        content: 'enter machine id:'
+                                                    },
+                                                    {
+                                                        type: 'input',
+                                                        key: 'buildMachineInput',
+                                                        hint: 'type machine id',
+                                                        onChange: (text) => {
+                                                            cache["builingMachineInput"] = text;
+                                                        },
+                                                    }
+                                                ]
+                                            }),
+                                            (closeDialog) => [
+                                                scanComp({
+                                                    type: 'button',
+                                                    label: 'cancel',
+                                                    onPress: () => {
+                                                        cache["builingMachineInput"] = "";
+                                                        closeDialog();
+                                                    }
+                                                }),
+                                                scanComp({
+                                                    type: 'button',
+                                                    label: 'build',
+                                                    onPress: () => {
+                                                        if (cache["builingMachineInput"] && cache["builingMachineInput"].length > 0) {
+                                                            base64Encode(cache["currentCode"], (b64Encoded) => {
+                                                                log(b64Encoded);
+                                                                sendRequest("/storage/uploadUserEntity", { entityId: 'widget', data: b64Encoded, machineId: cache["builingMachineInput"] }, '', () => {
+                                                                    cache["builingMachineInput"] = "";
+                                                                    closeDialog();
+                                                                });
+                                                            });
+                                                        }
+                                                    }
+                                                })
+                                            ]
+                                        )
                                     }
                                 },
                             ]
@@ -349,11 +395,13 @@ function comp() {
                                         },
                                         {
                                             type: 'sandbox',
-                                            fromCode: true,
+                                            key: 'preview',
+                                            rerenderFlag: cache["sandobxRerenderFlag"],
                                             width: 250,
                                             height: 250,
                                             key: "preview",
-                                            code: cache["currentCode"],
+                                            entityId: meta.userId + "_" + (cache["currentPath"].replace("/", "_")),
+                                            machineId: "244@global"
                                         },
                                         {
                                             type: "container",
@@ -432,6 +480,7 @@ function scanForTransform(doc) {
     });
 }
 if (!started) {
+    cache["sandobxRerenderFlag"] = Math.random().toString();
     cache["updaterActive"] = true;
     cache["currentPath"] = '';
     cache["currentCode"] = '';
