@@ -17,14 +17,28 @@ let uiInstructions = `
         (type: container ( a container element which has same use case as div in html ), properties: [
             width ( which is integer width of container ),
             height ( which is integer height of container ),
+            padding: ( a json object that contains for integer fields "left", "top", "right", "bottom" as padding in 4 direction )
+            bgcolor: ( a string showing hex color code of container background color )
             child ( which can be any of the other elements in the current instructions, a container can have a single child which is a json object ),
         ]),
         (type: array ( it is similar to container element but can have multiple children and the field name is "items" also it can be vertical or horizontal ), properties: [
             orientation ( it is a string that can be 'horizontal' or 'vertical' showing direction of showing items in ui ),
             items ( which can be an array of any of the other elements or mix of them ),
         ]),
-        remember type property and other properties are next to each other in a json object. produce this json object in function called "comp", return the json object from that function and put this code after that using comp function:
+        remember type property and other properties are next to each other in a json object. produce this json object in function called "comp", the json object must be nested in anothe json object and assigned to field named 'root', return the json object from that function and put this code after that using comp function:
         """"
+        if (!started) {
+            initApp(comp());
+        } else {
+            updateApp(comp());
+        }""""
+        the template is like this:
+        """"
+        function comp() {
+            return {
+                root: ""json object""
+            };
+        }
         if (!started) {
             initApp(comp());
         } else {
@@ -159,7 +173,6 @@ function comp() {
                                                                                     cache["updaterActive"] = true;
                                                                                 }, 1000);
                                                                                 if (cache["currentPath"] === (doc.path + "/" + doc.id)) {
-                                                                                    log(data);
                                                                                     cache["currentCode"] = data;
                                                                                     cache["sandobxRerenderFlag"] = Math.random().toString();
                                                                                     updateApp(comp());
@@ -399,7 +412,6 @@ function comp() {
                                             rerenderFlag: cache["sandobxRerenderFlag"],
                                             width: 250,
                                             height: 250,
-                                            key: "preview",
                                             entityId: meta.userId + "_" + (cache["currentPath"].replace("/", "_")),
                                             machineId: "244@global"
                                         },
@@ -434,7 +446,7 @@ function comp() {
                                         type: 'chat',
                                         pointId: cache["workspaceId"],
                                         onlyLLM: true,
-                                        instructions: '"""current editting file path is ' + cache["currentPath"] + ' \n' + uiInstructions + '""" '
+                                        instructions: '"""current editting file path is ' + cache["currentPath"] + ' \n' + uiInstructions + ' \n also look at this code and use it as the context of existing code in the file and do all your work and updates on it: \n' + cache["currentCode"] + '""" '
                                     }
                                 }
                             }
@@ -489,10 +501,15 @@ if (!started) {
     listen("codeUpdated", (packet) => {
         if (packet.updatedBy === meta.userId) return;
         let filePath = packet.filePath;
-        if (filePath === cache["currentPath"]) {
-            let code = packet.code;
-            cache["currentCode"] = code;
+        if (cache["currentPath"] === filePath) {
+            cache["currentPath"] = '';
             updateApp(comp());
+            setTimeout(() => {
+                cache["sandobxRerenderFlag"] = Math.random().toString();
+                cache["currentPath"] = filePath;
+                cache["currentCode"] = packet.code;
+                updateApp(comp());
+            }, 2500);
         }
     });
     ask(meta.pointId, { type: 'initWorkspace' }, (workspace) => {
