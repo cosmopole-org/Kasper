@@ -12,7 +12,7 @@ PORT=${5:-1337}
 dest=$DEST/node1
 mkdir -p $dest
 
-echo "api.kproto.app:$PORT" > $dest/addr
+echo "api.decillionai.com:$PORT" > $dest/addr
 
 echo "Generating key pair for node$i"
 go run ../keygen/keygen.go

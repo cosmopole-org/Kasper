@@ -25,8 +25,8 @@ elif [ "$peersMode" = "2" ]; then
 else
     # get genesis.peers.json
     echo "Fetching peers.genesis.json from node1"
-    curl --trace dump -H "Work-Chain-Id: ${workchainId}" -H "Shard-Chain-Id: ${shardchainId}" -s http://api.kproto.app:8079/genesispeers > $dest/peers.genesis.json
+    curl --trace dump -H "Work-Chain-Id: ${workchainId}" -H "Shard-Chain-Id: ${shardchainId}" -s http://api.decillionai.com:8079/genesispeers > $dest/peers.genesis.json
     # get up-to-date peers.json
     echo "Fetching peers.json from node1"
-    curl --trace dump -H "Work-Chain-Id: ${workchainId}" -H "Shard-Chain-Id: ${shardchainId}" -s http://api.kproto.app:8079/peers > $dest/peers.json
+    curl --trace dump -H "Work-Chain-Id: ${workchainId}" -H "Shard-Chain-Id: ${shardchainId}" -s http://api.decillionai.com:8079/peers > $dest/peers.json
 fi
