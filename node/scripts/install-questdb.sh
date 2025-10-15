@@ -10,7 +10,7 @@ PG_PORT=5432
 # Download QuestDB if not exists
 if [ ! -d "$QUESTDB_DIR" ]; then
     echo "Downloading QuestDB $QUESTDB_VERSION..."
-    wget -q https://github.com/questdb/questdb/releases/download/$QUESTDB_VERSION/questdb-$QUESTDB_VERSION-rt-linux-x86-64.tar.gz -O /tmp/questdb.tar.gz
+    curl -L https://github.com/questdb/questdb/releases/download/9.1.0/questdb-9.1.0-no-jre-bin.tar.gz -o /tmp/questdb.tar.gz
     tar -xzf /tmp/questdb.tar.gz -C /app
     mv /app/questdb-$QUESTDB_VERSION-rt-linux-x86-64 $QUESTDB_DIR
 fi
