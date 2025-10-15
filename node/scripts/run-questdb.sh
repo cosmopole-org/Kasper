@@ -6,4 +6,4 @@ QUESTDB_DIR="/app/questdb"
 
 # Start QuestDB in background
 echo "Starting QuestDB..."
-$QUESTDB_DIR/bin/questdb.sh start -d $QUESTDB_DIR -f
+$QUESTDB_DIR/questdb.sh start -d $QUESTDB_DIR -f
