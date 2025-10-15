@@ -10,7 +10,7 @@ dest=$DEST/node$N
 # Create new key-pair and place it in new conf directory
 mkdir -p $dest
 echo "Generating key pair for node$N"
-go run ../..//keygen/keygen.go
+go run ../../keygen/keygen.go
 
 # get genesis.peers.json
 echo "Fetching peers.genesis.json from node1"
