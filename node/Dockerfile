@@ -51,6 +51,10 @@ COPY . .
 RUN mkdir /app/storage
 
 RUN bash scripts/install-fcvmm.sh
+
+RUN apt install -y openjdk-17-jdk openjdk-17-jre
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
 RUN bash scripts/install-questdb.sh
 ENV PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig"
 
