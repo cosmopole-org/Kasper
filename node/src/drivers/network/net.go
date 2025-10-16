@@ -48,8 +48,8 @@ func NewNetwork(
 	signaler signaler.ISignaler,
 	fed network.IFederation) *Network {
 
-	certPath := "/etc/letsencrypt/live/api.decillionai.com/fullchain.pem"
-	keyPath := "/etc/letsencrypt/live/api.decillionai.com/privkey.pem"
+	certPath := "/app/certs/fullchain.pem"
+	keyPath := "/app/certs/privkey.pem"
 
 	cer, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
