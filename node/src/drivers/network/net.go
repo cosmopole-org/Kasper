@@ -13,12 +13,12 @@ import (
 )
 
 type Network struct {
-	core       core.ICore
-	tcp        network.ITcp
-	ws         network.IWs
-	fed        network.IFederation
-	chain      network.IChain
-	tlsConfig  *tls.Config
+	core      core.ICore
+	tcp       network.ITcp
+	ws        network.IWs
+	fed       network.IFederation
+	chain     network.IChain
+	tlsConfig *tls.Config
 }
 
 func (n *Network) Tcp() network.ITcp {
@@ -47,19 +47,22 @@ func NewNetwork(
 	security security.ISecurity,
 	signaler signaler.ISignaler,
 	fed network.IFederation) *Network {
-	
-	cer, err := tls.LoadX509KeyPair("/app/certs/server.crt", "/app/certs/server.key")
-    if err != nil {
-        panic(err)
-    }
-    config := &tls.Config{Certificates: []tls.Certificate{cer}}
+
+	certPath := "/etc/letsencrypt/live/api.decillionai.com/fullchain.pem"
+	keyPath := "/etc/letsencrypt/live/api.decillionai.com/privkey.pem"
+
+	cer, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		panic(err)
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cer}}
 	net := &Network{
-		core:       core,
-		tcp:        tcp.NewTcp(core),
-		ws:         ws.NewWs(core),
-		fed:        fed,
-		chain:      chain.NewChain(core, storage.StorageRoot()),
-		tlsConfig:  config,
+		core:      core,
+		tcp:       tcp.NewTcp(core),
+		ws:        ws.NewWs(core),
+		fed:       fed,
+		chain:     chain.NewChain(core, storage.StorageRoot()),
+		tlsConfig: config,
 	}
 	return net
 }
