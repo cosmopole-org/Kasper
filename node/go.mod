@@ -136,6 +136,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.35.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
@@ -174,7 +175,6 @@ require (
 	github.com/spf13/viper v1.4.0
 	github.com/ugorji/go/codec v1.2.11
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
-	golang.org/x/crypto v0.40.0
 	golang.org/x/image v0.30.0
 	google.golang.org/api v0.231.0
 )

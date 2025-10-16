@@ -8,7 +8,7 @@ docker run -d --name kasper-proxy \
     -v /home/kasper/data/docker_proxy/ssl:/etc/nginx/ssl:ro \
     nginx:alpine
 
-docker create -p 80:80 -p 9999:9999 -p 3000:3000 -p 8074:8074 -p 8076:8076 -p 8077:8077 -p 8078:8078 -p 1337:1337 -p 8079:8000 --name=node1 \
+docker create -p 9999:9999 -p 3000:3000 -p 8074:8074 -p 8076:8076 -p 8077:8077 -p 8078:8078 -p 1337:1337 -p 8079:8000 --name=node1 \
     --ulimit nofile=65535:65535 \
     --net=kasper \
     --ip=10.10.0.3 \

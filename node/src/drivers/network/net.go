@@ -10,10 +10,6 @@ import (
 	"kasper/src/drivers/network/chain"
 	"kasper/src/drivers/network/client/tcp"
 	"kasper/src/drivers/network/client/ws"
-	"net/http"
-	"os"
-
-	"golang.org/x/crypto/acme/autocert"
 )
 
 type Network struct {
@@ -23,7 +19,6 @@ type Network struct {
 	fed        network.IFederation
 	chain      network.IChain
 	tlsConfig  *tls.Config
-	tlsManager *autocert.Manager
 }
 
 func (n *Network) Tcp() network.ITcp {
@@ -52,14 +47,12 @@ func NewNetwork(
 	security security.ISecurity,
 	signaler signaler.ISignaler,
 	fed network.IFederation) *Network {
-	manager := &autocert.Manager{
-		Cache:      autocert.DirCache("certs"),
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(os.Getenv("ORIGIN")),
-	}
-	config := &tls.Config{
-		GetCertificate: manager.GetCertificate,
-	}
+	
+	cer, err := tls.LoadX509KeyPair("/app/certs/server.crt", "/app/certs/server.key")
+    if err != nil {
+        panic(err)
+    }
+    config := &tls.Config{Certificates: []tls.Certificate{cer}}
 	net := &Network{
 		core:       core,
 		tcp:        tcp.NewTcp(core),
@@ -67,16 +60,11 @@ func NewNetwork(
 		fed:        fed,
 		chain:      chain.NewChain(core, storage.StorageRoot()),
 		tlsConfig:  config,
-		tlsManager: manager,
 	}
 	return net
 }
 
 func (net *Network) Run(ports map[string]int) {
-	// This starts HTTP server on :80 for challenges
-	go func() {
-		http.ListenAndServe(":80", net.tlsManager.HTTPHandler(nil))
-	}()
 
 	tcpPort, ok := ports["tcp"]
 	if ok {
