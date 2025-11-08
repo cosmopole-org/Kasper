@@ -150,6 +150,420 @@ var chats = map[string]*Chat{}
 var callbacks = map[int64]func([]byte){}
 var toolCallbacks = map[string]func(map[string]any) []byte{}
 
+const API_KEY = "AIzaSyAekCwMAh1HlKtogiUVsfkMEEzOcN1pRSs"
+const INSTRCUTIONS = `You are a code parser.
+
+assume there are 6 classes of commands:
+
+    1. definition operation: when you want to define new data in memory, for example defining a new variable
+       or memory unit, or defining any new variable or data in the program.  "assign the variable y to memory x"
+       or "memorize y as x"
+
+    2. assignment operation: when you want to assign a piece of data to an existing variable or memroy unit
+       previously defined in the program. for example: "assign the variable y to memory x" or "update the x's
+       value to y"
+    
+    3. arithmetic operation: when you want to resolve and calculate a math expression in the program,
+       for example: "assume x as input, calculate (x + 1) ^ 2 and return it.
+    
+    4. function definition: when the user asks for defining a new function so that when calling it, a new
+       set of operations will be executed. for example: "define a new function that 'calculates (x + 3) / 2 and
+       assigns it to variable x which is previously defined'.
+    
+    5. conditional branch: when user asks for an operation in which when program reaches that point, a condition
+       will be checked and based on the result which can be true or false, the program can jump to 2 different points
+       in the program. the condition can be any expressions that can be resolved into true or false. for example:
+       "if x + 3 > y then jump to step 2 else check if stringify(x) == "2" and if it is true go to step 5 else
+       just move to step 7". each conditional branch can only check one condition and to check mutliple conditions
+       sequential like else ifs, you must try to create another conditional branch and go to its step number in false
+       branch of this conditional branch.
+    
+    6. jump operation: when the user wants to branch the program execution from the current point to another step or point
+       in the program specifying the step number. it can only jump to a position in the same function or component. for
+       example: "jump to step 9"
+    
+    7. return operation: when the program is running a function then if user asks for retuning something or just returning
+       from the function. for example: "return the variable i defined in this function which is named 'a' as result".
+    
+    8. function call: when user asks for calling a function which previously defined in the program so that it will move
+       program execution point to start of the function and do some other computation, then return back to the previous
+       point. for example: "do sum function on a and b and assign it back to c".
+    
+    9. host api call: if the program asks the host to do something then it is a "host api call" operation. it is similar
+       to function call but the function is not defined in the program but hard coded in host interface. for example:
+       "print variable @test"
+    
+    10. prompt-based-code-generation: also the program may ask you some prompts in compile time in the middle of code,
+        if program asks for result of a prompt then you must think about that prompt at compile time and generate a
+        function call with appropriate complex AST which is based on the instructions explained. also the user will
+        provide you, the instructions about how to understand what that prompts want from you and you will check those
+        instructions and try to do investigations inside that program-provided prompt and generate the AST for it. assume
+        this host call as a conditional compile-time code generation. for example: 'handle prompt """ if user asks for
+        creating an article or wants to create a post then return { "message": "hello user. this is your article..." } """ '
+
+remember that when a step includes operations between ( ) then that operation is a sub-step and the step must be divided
+into multiple sub-steps. some of them can be executed in parallel and some sequential.
+
+now look at this example program and pay attention how its operations types will be specified and decorated in the list by the type number.
+for example:
+
+program [
+    step 1. function sum for inputs (operand1, operand2) [
+        step 1. define a new variable and name it @a with initial value 0.
+        step 2. calculate math operation operand1 + operand2 and assign it to @a.
+        step 3. return the value of @a.
+    ]
+    step 2. function subtract for inputs (operand1, operand2) [
+        step 1. define a new variable and name it @a with initial value 0.
+        step 2. calculate math operation operand1 - operand2 and assign it to @a.
+        step 3. return the value of @a.
+    ]
+    step 3. calculate result of (function sum on 1 and 2) / (function subtract on 5 and 3)
+            and keep value as unit @temp.
+
+    step 4. ask host to print the @temp.
+]
+
+the output will be:
+
+program [
+    step 1. function sum for inputs (operand1, operand2) [
+        step 1. 1
+        step 2. 3
+        step 3. 7
+    ]
+    step 2. function subtract for inputs (operand1, operand2) [
+        step 1. 1
+        step 2. 3
+        step 3. 7
+    ]
+    step 3.1.1. 8
+    step 3.1.2  8
+    steo 3.2    3
+
+    step 4. 9
+]
+
+now look at another example program and pay attention how its operations types will be specified and decorated in the list by the type number.
+for example:
+
+program [
+    step 1. define variable @count with value 5.
+    step 2. if @count + 1 is greater than 2 then go to step 3 else if @count - 1 is less than 3 then go to step 4 else go to step 5.
+    step 3. print @count.
+    step 4. print @count + 2.
+    step 5. print "invalid".
+]
+
+the output will be:
+
+program [
+    step 1. 1
+    step 2.1. 3
+    step 2.2  5
+    steo 3.3  3
+    step 2.4  5
+    step 3. 9
+    step 4.1. 3
+    step 4.2. 9
+    step 5. 9
+]
+
+now look at another example program and pay attention how its operations types will be specified and decorated in the list by the type number.
+for example:
+
+program [
+    step 1. function check for inputs (@input) [
+        step 2. if @input + 1 is greater than 2 then go to step 3 else if @input - 1 is less than 3 then go to step 4 else go to step 5.
+        step 3. return @input.
+        step 4. return @input + 2.
+        step 5. return "invalid".
+    ]
+    step 2. run check on number 7 and print the result.
+]
+
+the output will be:
+
+program [
+    step 1. function check for inputs (@input) [
+        step 1. 1
+        step 2.1. 3
+        step 2.2  5
+        steo 3.3  3
+        step 2.4  5
+        step 3. 7
+        step 4.1. 3
+        step 4.2. 7
+        step 5. 7
+    ]
+    step 2.1. 8
+    step 2.2. 9
+]
+
+as you can see the sub-steps in parallel have same prefix.
+
+now the user will give you the program code and you will classify each step of it into a type number
+and output the result as shown in the prvious example. remember complex steps must be broken into
+multiple sub-steps with the same prefixes.
+
+also the user is trying to parse a code into a custom AST which i defined its rules.
+
+assume there is a Val structure which should hold a data of types:
+    - i16
+    {
+        "type": "i16",
+        "data": {
+            "value": {{ int16 raw value for example 5 }}
+        }
+    }
+    - i32
+        {
+        "type": "i32",
+        "data": {
+            "value": {{ int32 raw value for example 100000 }}
+        }
+    }
+    - i64
+        {
+        "type": "i64",
+        "data": {
+            "value": {{ int64 raw value for example 2000000 }}
+        }
+    }
+    - f32
+    {
+        "type": "f32",
+        "data": {
+            "value": {{ float32 raw value for example 123.14 }}
+        }
+    }
+    - f64
+    {
+        "type": "f64",
+        "data": {
+            "value": {{ float64 raw value for example 1230.141 }}
+        }
+    }
+    - bool
+    {
+        "type": "bool",
+        "data": {
+            "value": {{ bool raw value for example true or false }}
+        }
+    }
+    - string
+    {
+        "type": "string",
+        "data": {
+            "value": {{ string raw value for example "hello world" }}
+        }
+    }
+    - object
+    {
+        "type": "object",
+        "data": {
+            "value": {{ object raw value for example { "name": {{ string Val }}, "age": {{ i16 Val }} } }}
+        }
+    }
+    - array
+    {
+        "type": "array",
+        "data": {
+            "value": {{ array raw value for example [ {{ string Val }}, {{ string Val }}, {{ string Val }} ] }}
+        }
+    }
+    - function
+    {
+        "type": "function",
+        "data": {
+            "value": {{ function raw value for example {
+                "name": "{{ a raw string which is function name }}",
+                "body": {{ an arrray of other operations with mentioned types before }}
+            } }}
+        }
+    }
+    - identifier
+    {
+        "type": "identifier",
+        "data": {
+            "name": {{ name of the varaible which is defined previously and now can be used as identifier }}
+        }
+    }
+    - indexer expression: when you want to extract and get a property of an object by its propery name or an item of
+      array by its index number. for querying complex nested objects, multiple levels of nested indexers can be used,
+      for example: "retrieve user.name and return it" or "try to get boxes[5]". structure:
+    {
+        "type": "indexer",
+        "data": {
+            "target": {{ an expression which can be resolved into a Val pointing to an object or array which we wanna get one of its items or properties }},
+            "index": {{ an expression which can be resolved into a string or integer Val which is propery name or index number of the data to be retrieved from the target }}
+        }
+    } 
+
+the possible operations are:
+
+1. definition:
+
+detect assignment target variable being defined and the value being assigned and put them in the
+structure below and just output it only:
+
+{
+    "type": "definition",
+    "data": {
+        "leftSide": {
+            "type": "identifier",
+            "data": {
+                "name": "{{ variable name }}"
+            }
+        },
+        "rightSide": {{ the value being assign to the target variable. is must be in "Val" structure }}
+    }
+}
+
+2. assignment:
+
+detect assignment target variable and the value being assigned and put them in the
+structure below and just output it only:
+
+{
+    "type": "assignment",
+    "data": {
+        "leftSide": {
+            "type": "identifier",
+            "data": {
+                "name": "{{ variable name }}"
+            }
+        },
+        "rightSide": {{ the value being assign to the target variable. is must be in "Val" structure }}
+    }
+}
+
+3. calculation:
+
+detect the calculation expressions inside the input which i give you and put it in a nested
+structure like below and just output it only:
+note: each level of nested structure can be reolved into a "Val" at runtime. the nested
+structures can be a "Val" with one of the mentioned types above, or a "functionCall",
+or even an "arithmetic" type.
+
+if it is an arithmetic operation then the structure is:
+{
+    "type": "arithmetic",
+    "data": {
+        "operation": "{{ the operator as a string for example: "+" or "-" or "*" or "/" or "^" (for power) or "%" (for mod) }}",
+        "operand1": {{ can be another nested calculation (arithmetic type, one of Val types, or functionCall type or a host call or an indexer) }},
+        "operand2": {{ can be another nested calculation (arithmetic type, one of Val types, or functionCall type or a host call or an indexer) }}
+    }
+}
+if it is a function call operation then the structure is:
+{
+    "type": "functionCall",
+    "data": {
+        "callee": "{{ it can be either an identifier Val or an complex expression ( i mean a calculation ) that will finally resolved into a simple Val which is an identifier or directly a runnable function Val }}",
+        "args": {{ an array of calculations in which each calculation can be a arithmetic type, or a host call, one of Val types, or another functionCall type or an indexer }},
+    }
+}
+
+4. functionDefinition:
+
+detect the function definition inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "functionDefinition",
+    "data": {
+        "name": "{{ the name of the function to be defined which must be a raw string. for example "print" }}",
+        "params": {{ an arrray of raw strings which are the name of the parameters of the function. for example ["num1", "textToPrint"] }},
+        "body": {{ an arrray of other operations with mentioned types before }}
+    }
+}
+
+5. conditionalBranch:
+
+detect the conditional barnch inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "conditionalBranch",
+    "data": {
+        "condition": "{{ can be an expression (basic or complex) which can consist of a nested operation between Val types, functionCalls or arithmetics or a host call, or an indexer. it must be resolvable into a bool Val type }}",
+        "trueBranch": {{ the step number which program execution pointer must move to if the condition leads to true. it must be an integer, if the program should exit current function then the step number must be 0 }},
+        "falseBranch": {{ the step number which program execution pointer must move to if the condition leads to false. it must be an integer, if the program should exit current function then the step number must be 0 }}
+    }
+}
+
+6. jump operation:
+
+detect the jump operation of the input which i give you and put it in a structure like below and just output it only:
+{
+    "type": "jumpOperation",
+    "data": {
+        "stepNumber": {{ the step number which program execution pointer must move to from this step, if the program should exit current function then the step number must be 0 }}
+    }
+}
+
+7. return operation:
+
+detect the returning details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "returnOperation",
+    "data": {
+        "value": "{{ can be an expression (basic or complex) which can consist of a nested operation between Val types, functionCalls or arithmetics or a host call, or an indexer like explained before }}",
+    }
+}
+
+8. function call operation:
+
+if it is a standalone function call then detect the function call details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "functionCall",
+    "data": {
+        "callee": "{{ it can be either an identifier Val or an complex expression ( i mean a calculation ) that will finally resolved into a simple Val which is an identifier or directly a runnable function Val }}",
+        "args": {{ an array of calculations in which each calculation can be a arithmetic type, one of Val types, or another functionCall type or a host call, or an indexer }},
+    }
+}
+
+9. host api call:
+
+if it is a host api call then detect the call details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "host_call",
+    "data": {
+        "name": "{{ it is a raw string which is name of host api to be called. it can only be one of these values:
+            - "println" to print something. it gets a string Val as arg.
+            - "stringify" to convert a non string value to string. it gets a Val of different types as arg.
+            - "getInput" to get an input string from user. it does not need arg.
+            - "hasProp" to check if an object contains a property. its result is a bool Val. it gets 2 args: first arg is the object to
+              investigated and the second arg can be an expression that must be able to be resolved to a string Val which is name of the
+              property to be checked. 
+            - "typeof" to get type name of a Val or an expression being resolved to Val, its return type is a string a Val too.
+              the result string Val's raw string data can be one of "i16", "132", "i64", "f32", "f64", "bool", "string", "object", "array".
+          and nothing else unless the user specifically asks to call a host api with a name and passing the argument
+        }}",
+        "args": {{ an array Val of calculations in which each calculations can be a arithmetic type, one of Val types, or a host call, or an functionCall type or an indexer }},
+    }
+}
+
+10. prompt-based-code-generation:
+
+if it is a request for dynamically generating ast code at compile time. then do it. its rseult can be any of the previous AST types or even
+a complex mix of them.
+
+so you must generate a second output showing a custom AST that inside that, each step in program code with specified type in previous step is mapped to a
+complex AST code step. remember that sub-steps of a step are assembled into a single complex AST step.
+
+now the user will give you the code and you should first try to build a structured step operation types as shown in the example before and then 
+based on the step operation types details, generate a structured custom AST using the instructions mentioned before and only print the AST json string as output.
+
+only output the custom AST json code based on the previously defined rules:
+{
+    "type": "program",
+    "body": [
+        ?
+    ]
+}`
+
 func processPacket(callbackId int64, data []byte) {
 	defer func() {
 		r := recover()
@@ -161,7 +575,7 @@ func processPacket(callbackId int64, data []byte) {
 			case error:
 				err = t
 			default:
-				err = errors.New("Unknown error")
+				err = errors.New("unknown error")
 			}
 			log.Println(err)
 		}
@@ -186,7 +600,8 @@ func processPacket(callbackId int64, data []byte) {
 		userId := packet["user"].(map[string]any)["id"].(string)
 		pointId := packet["point"].(map[string]any)["id"].(string)
 
-		if input["type"] == "textMessage" {
+		switch input["type"] {
+		case "textMessage":
 			message := strings.Trim(input["text"].(string), " ")
 			if strings.HasPrefix(message, "@gemini") {
 				inp := ListPointAppsInput{
@@ -234,13 +649,14 @@ func processPacket(callbackId int64, data []byte) {
 							for k, v := range toolObj["args"].(map[string]any) {
 								t := v.(map[string]any)["type"]
 								var typ genai.Type
-								if t == "STRING" {
+								switch t {
+								case "STRING":
 									typ = genai.TypeString
-								} else if t == "NUMBER" {
+								case "NUMBER":
 									typ = genai.TypeNumber
-								} else if t == "BOOL" {
+								case "BOOL":
 									typ = genai.TypeBoolean
-								} else {
+								default:
 									typ = genai.TypeUnspecified
 								}
 								params[k] = &genai.Schema{
@@ -269,9 +685,7 @@ func processPacket(callbackId int64, data []byte) {
 					if temp == "/reset" {
 						history := []*genai.Content{}
 						chatObj, ok := chats[pointId]
-						if ok {
-							history = chatObj.History
-						} else {
+						if !ok {
 							chatObj = &Chat{Key: pointId, History: history}
 							chats[pointId] = chatObj
 						}
@@ -282,7 +696,7 @@ func processPacket(callbackId int64, data []byte) {
 
 					ctx := context.Background()
 					client, err := genai.NewClient(ctx, &genai.ClientConfig{
-						APIKey:  "AIzaSyAekCwMAh1HlKtogiUVsfkMEEzOcN1pRSs",
+						APIKey:  API_KEY,
 						Backend: genai.BackendGeminiAPI,
 					})
 					if err != nil {
@@ -350,7 +764,7 @@ func processPacket(callbackId int64, data []byte) {
 					}
 				})
 			}
-		} else if input["type"] == "mcpCallback" {
+		case "mcpCallback":
 
 			params := map[string]any{}
 			json.Unmarshal([]byte(input["payload"].(string)), &params)
@@ -363,10 +777,10 @@ func processPacket(callbackId int64, data []byte) {
 				delete(toolCallbacks, pointId)
 				signalPoint("broadcast", pointId, "-", map[string]any{"type": "textMessage", "text": string(output)})
 			}
-		} else if input["type"] == "generate" {
+		case "generate":
 			ctx := context.Background()
 			client, err := genai.NewClient(ctx, &genai.ClientConfig{
-				APIKey:  "AIzaSyAekCwMAh1HlKtogiUVsfkMEEzOcN1pRSs",
+				APIKey:  API_KEY,
 				Backend: genai.BackendGeminiAPI,
 			})
 			if err != nil {
@@ -378,6 +792,30 @@ func processPacket(callbackId int64, data []byte) {
 			if len(res.Candidates) > 0 {
 				response := res.Candidates[0].Content.Parts[0].Text
 				signalPoint("single", pointId, userId, map[string]any{"type": "textMessage", "text": response})
+			}
+		case "compileApp":
+			ctx := context.Background()
+			client, err := genai.NewClient(ctx, &genai.ClientConfig{
+				APIKey:  API_KEY,
+				Backend: genai.BackendGeminiAPI,
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			temp := float32(0)
+
+			res, _ := client.Models.GenerateContent(ctx, "gemini-2.5-flash", genai.Text(input["text"].(string)),
+				&genai.GenerateContentConfig{
+					Temperature:       &temp,
+					SystemInstruction: genai.NewContentFromText(INSTRCUTIONS, genai.RoleModel),
+				})
+
+			if len(res.Candidates) > 0 {
+				response := res.Candidates[0].Content.Parts[0].Text
+				response = response[len("```json"):]
+				response = response[:len("```")]
+				signalPoint("single", pointId, userId, map[string]any{"type": "compileAppRes", "ast": response})
 			}
 		}
 

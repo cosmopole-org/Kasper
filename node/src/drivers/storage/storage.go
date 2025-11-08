@@ -45,7 +45,7 @@ func (sm *StorageManager) LogBuild(buildId string, machineId string, data string
 	ctx := context.Background()
 	id := uuid.NewString()
 	_, err := sm.tsdb.ExecContext(ctx,
-		"INSERT INTO buildlogs (id, build_id, machine_id, data) VALUES ($1, $2, $3)",
+		"INSERT INTO buildlogs (id, build_id, machine_id, data) VALUES ($1, $2, $3, $4)",
 		id, buildId, machineId, data,
 	)
 	if err != nil {
