@@ -8,13 +8,13 @@ docker run -d --name kasper-proxy \
     -v /home/kasper/data/docker_proxy/ssl:/etc/nginx/ssl:ro \
     nginx:alpine
 
-docker create -p 9999:9999 -p 3000:3000 -p 8074:8074 -p 8076:8076 -p 8077:8077 -p 8078:8078 -p 1337:1337 -p 8079:8000 --name=node1 \
+sudo docker create -p 9999:9999 -p 3000:3000 -p 8074:8074 -p 8076:8076 -p 8077:8077 -p 8078:8078 -p 1337:1337 -p 8079:8000 --name=node1 \
     --ulimit nofile=65535:65535 \
     --net=kasper \
     --ip=10.10.0.3 \
     -v /var/run/docker.sock:/var/run/docker.sock \
+    --mount type=bind,source=/home/kasper/certs,target=/app/certs \
     --mount type=bind,source=/root/.babble,target=/root/.babble \
-    --mount type=bind,source=/etc/letsencrypt/live/api.decillionai.com,target=/app/certs \
     --mount type=bind,source=/home/kasper/data,target=/app/storage \
     --mount type=bind,source=/home/kasper/packets,target=/app/questdb/db \
     --privileged \
@@ -23,4 +23,4 @@ docker create -p 9999:9999 -p 3000:3000 -p 8074:8074 -p 8076:8076 -p 8077:8077 -
     -v /boot:/boot \
     kasper:latest    
     
-docker start node1
+sudo docker start node1
