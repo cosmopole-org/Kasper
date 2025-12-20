@@ -1,55 +1,63 @@
 
 function comp(hoursAngle, minutesAngle, secondsAngle) {
     return {
-        root: {
+        type: "clipRRect",
+        borderRadius: 9999,
+        clipBehavior: "antiAlias",
+        child: {
             type: "glassContainer",
-            borderRadius: meta.width / 2,
             child: {
                 type: "container",
                 height: meta.height,
                 width: meta.width,
-                shape: "circle",
-                borderColor: "#999999",
                 child: {
-                    type: 'freelayout',
-                    items: [
+                    type: 'stack',
+                    children: [
                         {
-                            type: "container",
+                            type: "positioned",
                             left: 0,
                             top: 0,
                             width: meta.width,
                             height: meta.height,
                             child: {
-                                type: 'freelayout',
-                                items: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) => (
+                                type: 'stack',
+                                children: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) => (
                                     {
-                                        type: "container",
+                                        type: "positioned",
                                         left: 0,
                                         top: 0,
                                         width: meta.width,
                                         height: meta.height,
                                         child: {
-                                            type: "container",
-                                            center: true,
-                                            transform: {
-                                                rotation: index * 30 - 90
-                                            },
+                                            type: "transform",
+                                            action: 'rotate',
+                                            data: index * 30 - 90,
                                             child: {
                                                 type: "container",
                                                 width: meta.width,
                                                 height: 24,
                                                 child: {
-                                                    type: 'freelayout',
-                                                    items: [
+                                                    type: 'stack',
+                                                    "alignment": "center",
+                                                    "clipBehavior": "antiAlias",
+                                                    "fit": "expand",
+                                                    "textDirection": "ltr",
+                                                    children: [
                                                         {
-                                                            type: "container",
+                                                            type: "positioned",
                                                             left: meta.width - 32,
                                                             child: {
-                                                                type: "text",
-                                                                content: (index == 0 ? 12 : index).toString(),
-                                                                transform: {
-                                                                    rotation: -(index * 30 - 90)
-                                                                },
+                                                                type: "transform",
+                                                                action: 'rotate',
+                                                                data: -(index * 30 - 90),
+                                                                child: {
+                                                                    type: "text",
+                                                                    data: (index == 0 ? 12 : index).toString(),
+                                                                    "style": {
+                                                                        "color": meta.textColor,
+                                                                        fontSize: 20,
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                     ]
@@ -61,31 +69,38 @@ function comp(hoursAngle, minutesAngle, secondsAngle) {
                             }
                         },
                         {
-                            type: "container",
+                            type: "positioned",
                             left: 0,
                             top: 0,
                             width: meta.width,
                             height: meta.height,
                             child: {
-                                type: "container",
-                                center: true,
-                                transform: {
-                                    rotation: hoursAngle
-                                },
+                                type: "transform",
+                                action: 'rotate',
+                                data: hoursAngle,
                                 child: {
                                     type: "container",
                                     width: meta.width * 3 / 5,
                                     height: 12,
                                     child: {
-                                        type: 'freelayout',
-                                        items: [
+                                        type: 'stack',
+                                        "alignment": "center",
+                                        "clipBehavior": "antiAlias",
+                                        "fit": "expand",
+                                        "textDirection": "ltr",
+                                        children: [
                                             {
-                                                type: "container",
-                                                left: (meta.width * 3 / 5) / 2,
+                                                type: "positioned",
+                                                left: (meta.width * 3 / 5)  / 2 + 32,
                                                 width: (meta.width * 3 / 5) / 2,
                                                 height: 12,
-                                                bgcolor: meta.primaryColor1,
-                                                borderRadius: 6,
+                                                child: {
+                                                    type: 'container',
+                                                    decoration: {
+                                                        color: meta.primaryColor1,
+                                                        borderRadius: 6
+                                                    }
+                                                }
                                             }
                                         ]
                                     }
@@ -93,31 +108,38 @@ function comp(hoursAngle, minutesAngle, secondsAngle) {
                             }
                         },
                         {
-                            type: "container",
+                            type: "positioned",
                             left: 0,
                             top: 0,
                             width: meta.width,
                             height: meta.height,
                             child: {
-                                type: "container",
-                                center: true,
-                                transform: {
-                                    rotation: minutesAngle
-                                },
+                                type: "transform",
+                                action: 'rotate',
+                                data: minutesAngle,
                                 child: {
                                     type: "container",
                                     width: meta.width * 3.5 / 5,
                                     height: 8,
                                     child: {
-                                        type: 'freelayout',
-                                        items: [
+                                        type: 'stack',
+                                        "alignment": "center",
+                                        "clipBehavior": "antiAlias",
+                                        "fit": "expand",
+                                        "textDirection": "ltr",
+                                        children: [
                                             {
-                                                type: "container",
-                                                left: (meta.width * 3.5 / 5) / 2,
+                                                type: "positioned",
+                                                left: (meta.width * 3.5 / 5) / 2 + 32,
                                                 width: (meta.width * 3.5 / 5) / 2,
                                                 height: 8,
-                                                bgcolor: meta.primaryColor2,
-                                                borderRadius: 4,
+                                                child: {
+                                                    type: 'container',
+                                                    decoration: {
+                                                        color: meta.primaryColor2,
+                                                        borderRadius: 4
+                                                    }
+                                                }
                                             }
                                         ]
                                     }
@@ -125,31 +147,38 @@ function comp(hoursAngle, minutesAngle, secondsAngle) {
                             }
                         },
                         {
-                            type: "container",
+                            type: "positioned",
                             left: 0,
                             top: 0,
                             width: meta.width,
                             height: meta.height,
                             child: {
-                                type: "container",
-                                center: true,
-                                transform: {
-                                    rotation: secondsAngle
-                                },
+                                type: "transform",
+                                action: 'rotate',
+                                data: secondsAngle,
                                 child: {
                                     type: "container",
                                     width: meta.width * 4 / 5,
                                     height: 4,
                                     child: {
-                                        type: 'freelayout',
-                                        items: [
+                                        type: 'stack',
+                                        "alignment": "center",
+                                        "clipBehavior": "antiAlias",
+                                        "fit": "expand",
+                                        "textDirection": "ltr",
+                                        children: [
                                             {
-                                                type: "container",
-                                                left: (meta.width * 4 / 5) / 2,
+                                                type: "positioned",
+                                                left: (meta.width * 4 / 5) / 2 + 16,
                                                 width: (meta.width * 4 / 5) / 2,
                                                 height: 4,
-                                                bgcolor: meta.primaryColor3,
-                                                borderRadius: 2,
+                                                child: {
+                                                    type: 'container',
+                                                    decoration: {
+                                                        color: meta.primaryColor3,
+                                                        borderRadius: 2
+                                                    }
+                                                }
                                             }
                                         ]
                                     }
@@ -163,10 +192,10 @@ function comp(hoursAngle, minutesAngle, secondsAngle) {
     };
 }
 if (!started) {
-    initApp(comp((30 * (new Date()).getHours()) - 90, (6 * (new Date()).getMinutes()) - 90, (6 * (new Date()).getSeconds()) - 90));
+    render(comp((30 * (new Date()).getHours()) - 90, (6 * (new Date()).getMinutes()) - 90, (6 * (new Date()).getSeconds()) - 90));
     setInterval(() => {
-        updateApp(comp((30 * (new Date()).getHours()) - 90, (6 * (new Date()).getMinutes()) - 90, (6 * (new Date()).getSeconds()) - 90));
+        render(comp((30 * (new Date()).getHours()) - 90, (6 * (new Date()).getMinutes()) - 90, (6 * (new Date()).getSeconds()) - 90));
     }, 1000);
 } else {
-    updateApp(comp((30 * (new Date()).getHours()) - 90, (6 * (new Date()).getMinutes()) - 90, (6 * (new Date()).getSeconds()) - 90));
+    render(comp((30 * (new Date()).getHours()) - 90, (6 * (new Date()).getMinutes()) - 90, (6 * (new Date()).getSeconds()) - 90));
 }

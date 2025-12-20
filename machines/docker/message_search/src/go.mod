@@ -1,4 +1,4 @@
-module quickstart
+module msgsearch
 
 go 1.24.4
 

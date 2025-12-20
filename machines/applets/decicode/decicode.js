@@ -413,7 +413,7 @@ function comp() {
                                             width: 250,
                                             height: 250,
                                             entityId: meta.userId + "_" + (cache["currentPath"].replace("/", "_")),
-                                            machineId: "244@global"
+                                            machineId: "61@global"
                                         },
                                         {
                                             type: "container",

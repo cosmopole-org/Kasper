@@ -1,31 +1,39 @@
-try {
-    function comp() {
-        return {
-            root: {
-                type: "glassContainer",
-                borderRadius: meta.width / 5,
+
+function openTheApplet() {
+    openWindow("applet", 1200, 800);
+}
+
+function comp() {
+    return {
+        type: "clipRRect",
+        borderRadius: 24,
+        clipBehavior: "antiAlias",
+        child: {
+            type: "glassContainer",
+            child: {
+                type: "container",
+                height: meta.height,
+                width: meta.width,
+                padding: {
+                    left: 8, top: 8, right: 8, bottom: 8
+                },
                 child: {
-                    type: "container",
-                    height: meta.height,
-                    width: meta.width,
+                    type: 'elevatedButton',
                     child: {
-                        type: 'button',
-                        buttonStyle: 'elevated',
-                        label: "Deci Code",
-                        bgcolor: meta.primaryColor1,
-                        onPress: () => {
-                            openWindow("applet", 1200, 800);
-                        }
-                    }
+                        type: "text",
+                        data: "Deci Code"
+                    },
+                    style: {
+                        backgroundColor: "primary"
+                    },
+                    onPressed: { actionType: "event", appId: meta.appId, key: "openTheApplet", args: [] }
                 }
             }
-        };
-    }
-    if (!started) {
-        initApp(comp());
-    } else {
-        updateApp(comp());
-    }
-} catch (ex) {
-    log(ex.toString());
+        }
+    };
+}
+if (!started) {
+    render(comp());
+} else {
+    render(comp());
 }

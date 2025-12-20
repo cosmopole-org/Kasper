@@ -10,7 +10,6 @@ import (
 	"log"
 	"net"
 	"os"
-	model "quickstart/models"
 	"strings"
 	"sync"
 
@@ -185,7 +184,7 @@ func processPacket(callbackId int64, data []byte) {
 							ch <- b
 						})
 						result := <-ch
-						res := model.GetOutput{}
+						res := GetOutput{}
 						json.Unmarshal(result, &res)
 						uname := res.User["username"]
 						if uname == word[1:] {
