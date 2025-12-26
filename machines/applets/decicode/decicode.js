@@ -360,7 +360,7 @@ function comp() {
                     }
                 },
                 {
-                    type: 'codeEditor',
+                    type: 'code',
                     key: "mainCode",
                     minLines: 35,
                     width: meta.width - 250 - 350,

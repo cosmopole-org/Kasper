@@ -154,6 +154,11 @@ func (t *Tcp) listenForPackets(socket *Socket) {
 					log.Println(origin, "stat 3:", remainedReadLength, oldReadCount, readCount)
 
 					future.Async(func() {
+						defer func() {
+							if err := recover(); err != nil {
+								log.Println(err)
+							}
+						}()
 						socket.processPacket(packet)
 					}, false)
 				}()
