@@ -28,7 +28,7 @@ let uiInstructions = `
         remember type property and other properties are next to each other in a json object. produce this json object in function called "comp", the json object must be nested in anothe json object and assigned to field named 'root', return the json object from that function and put this code after that using comp function:
         """"
         if (!started) {
-            initApp(comp());
+            render(comp());
         } else {
             render(comp());
         }""""
@@ -40,7 +40,7 @@ let uiInstructions = `
             };
         }
         if (!started) {
-            initApp(comp());
+            render(comp());
         } else {
             render(comp());
         }""""
@@ -115,180 +115,153 @@ function comp() {
                                 height: meta.height - 150,
                                 child: {
                                     type: 'treeview',
+                                    appId: meta.appId,
                                     treeData: cache["docsTree"],
                                     itemBuilder: (key, data, level) => {
                                         let doc = JSON.parse(data);
                                         return joinUI({
-                                            type: 'popupMenu',
-                                            button: (() => {
-                                                if (doc.isDir) {
-                                                    return joinUI(
-                                                        {
-                                                            type: 'row',
-                                                            children: [
-                                                                {
-                                                                    type: 'text',
-                                                                    data: doc.title
-                                                                },
-                                                                {
-                                                                    type: 'iconButton',
-                                                                    icon: {
-                                                                        "type": "icon",
-                                                                        "icon": "add"
-                                                                    },
-                                                                    onPressed: () => {
-                                                                        if (!cache["isMenuOpen"]) {
-                                                                            cache["isMenuOpen"] = true;
-                                                                            openMenu();
-                                                                        }
-                                                                    }
+                                            type: 'row',
+                                            children: [
+                                                doc.isDir ?
+                                                    {
+                                                        type: 'text',
+                                                        data: doc.title
+                                                    } :
+                                                    {
+                                                        type: 'elevatedButton',
+                                                        child: {
+                                                            type: 'text',
+                                                            data: doc.title
+                                                        },
+                                                        onPressed: () => {
+                                                            cache["updaterActive"] = false;
+                                                            cache["currentCode"] = '';
+                                                            cache["currentPath"] = doc.path + "/" + doc.id;
+                                                            render(comp());
+                                                            ask(cache["workspaceId"], { type: 'setCurrentPath', path: doc.path + "/" + doc.id }, () => { });
+                                                            getEntity(meta.userId + "_" + (doc.path.replace("/", "_") + "_" + doc.id), (data) => {
+                                                                if (cache["updaterFlagReturn"]) {
+                                                                    clearTimeout(cache["updaterFlagReturn"]);
+                                                                    cache["updaterFlagReturn"] = undefined;
                                                                 }
-                                                            ]
-                                                        }
-                                                    );
-                                                } else {
-                                                    return joinUI(
-                                                        {
-                                                            type: 'row',
-                                                            children: [
-                                                                {
-                                                                    type: 'elevatedButton',
-                                                                    child: {
-                                                                        type: 'text',
-                                                                        data: doc.title
-                                                                    },
-                                                                    onPressed: () => {
-                                                                        cache["updaterActive"] = false;
-                                                                        cache["currentCode"] = '';
-                                                                        cache["currentPath"] = doc.path + "/" + doc.id;
-                                                                        render(comp());
-                                                                        ask(cache["workspaceId"], { type: 'setCurrentPath', path: doc.path + "/" + doc.id }, () => { });
-                                                                        getEntity(meta.userId + "_" + (doc.path.replace("/", "_") + "_" + doc.id), (data) => {
-                                                                            if (cache["updaterFlagReturn"]) {
-                                                                                clearTimeout(cache["updaterFlagReturn"]);
-                                                                                cache["updaterFlagReturn"] = undefined;
-                                                                            }
-                                                                            cache["updaterFlagReturn"] = setTimeout(() => {
-                                                                                cache["updaterFlagReturn"] = undefined;
-                                                                                cache["updaterActive"] = true;
-                                                                            }, 1000);
-                                                                            if (cache["currentPath"] === (doc.path + "/" + doc.id)) {
-                                                                                cache["currentCode"] = data;
-                                                                                cache["sandobxRerenderFlag"] = Math.random().toString();
-                                                                                render(comp());
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                },
-                                                                {
-                                                                    type: 'iconButton',
-                                                                    icon: {
-                                                                        "type": "icon",
-                                                                        "icon": "add"
-                                                                    },
-                                                                    onPressed: () => {
-                                                                        if (!cache["isMenuOpen"]) {
-                                                                            cache["isMenuOpen"] = true;
-                                                                            openMenu();
-                                                                        }
-                                                                    }
+                                                                cache["updaterFlagReturn"] = setTimeout(() => {
+                                                                    cache["updaterFlagReturn"] = undefined;
+                                                                    cache["updaterActive"] = true;
+                                                                }, 1000);
+                                                                if (cache["currentPath"] === (doc.path + "/" + doc.id)) {
+                                                                    cache["currentCode"] = data;
+                                                                    cache["sandobxRerenderFlag"] = Math.random().toString();
+                                                                    render(comp());
                                                                 }
-                                                            ]
+                                                            });
                                                         }
-                                                    );
-                                                }
-                                            })(),
-                                            items: doc.isDir ? [
+                                                    },
                                                 {
-                                                    "value": "option1",
-                                                    "label": "new file",
-                                                },
-                                                {
-                                                    "value": "option1",
-                                                    "label": "new folder",
-                                                },
-                                                {
-                                                    "value": "option1",
-                                                    "label": "delete",
-                                                },
-                                            ] : [
-                                                {
-                                                    "value": "option1",
-                                                    "label": "delete",
-                                                },
-                                            ],
-                                            onItemPress: (index) => {
-                                                if (doc.isDir) {
-                                                    if (index === 0) {
-                                                        openCustomDialog(
-                                                            "Create new file",
-                                                            joinUI({
-                                                                type: 'array',
-                                                                orientation: 'vertical',
-                                                                items: [
-                                                                    {
-                                                                        type: 'text',
-                                                                        content: 'enter file name:'
-                                                                    },
-                                                                    {
-                                                                        type: 'input',
-                                                                        key: 'createFileNameInput',
-                                                                        hint: 'type file name',
-                                                                        onChange: (text) => {
-                                                                            cache["creatingFileNameInput"] = text;
-                                                                        },
-                                                                    }
-                                                                ]
-                                                            }),
-                                                            (closeDialog) => [
-                                                                joinUI({
-                                                                    type: 'button',
-                                                                    label: 'cancel',
-                                                                    onPress: () => {
-                                                                        cache["creatingFileNameInput"] = "";
-                                                                        closeDialog();
-                                                                    }
-                                                                }),
-                                                                joinUI({
-                                                                    type: 'button',
-                                                                    label: 'create',
-                                                                    onPress: () => {
-                                                                        if (cache["creatingFileNameInput"] && cache["creatingFileNameInput"].length > 0) {
-                                                                            ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: cache["creatingFileNameInput"], docPath: doc.path + (doc.path.length > 0 ? "/" : "") + doc.id }, (docs) => {
+                                                    type: 'popupMenu',
+                                                    appId: meta.appId,
+                                                    button: () => {
+                                                        return joinUI(
+                                                            {
+                                                                type: 'iconButton',
+                                                                icon: {
+                                                                    "type": "icon",
+                                                                    "icon": "add"
+                                                                },
+                                                            }
+                                                        );
+                                                    },
+                                                    items: doc.isDir ? [
+                                                        {
+                                                            "type": "text",
+                                                            "data": "new file",
+                                                        },
+                                                        {
+                                                            "type": "text",
+                                                            "data": "new folder",
+                                                        },
+                                                        {
+                                                            "type": "text",
+                                                            "data": "delete",
+                                                        },
+                                                    ] : [
+                                                        {
+                                                            "type": "text",
+                                                            "data": "delete",
+                                                        },
+                                                    ],
+                                                    onItemPress: (index) => {
+                                                        if (doc.isDir) {
+                                                            if (index === 0) {
+                                                                openCustomDialog(
+                                                                    "Create new file",
+                                                                    joinUI({
+                                                                        type: 'column',
+                                                                        children: [
+                                                                            {
+                                                                                type: 'text',
+                                                                                content: 'enter file name:'
+                                                                            },
+                                                                            {
+                                                                                type: 'input',
+                                                                                key: 'createFileNameInput',
+                                                                                hint: 'type file name',
+                                                                                onChange: (text) => {
+                                                                                    cache["creatingFileNameInput"] = text;
+                                                                                },
+                                                                            }
+                                                                        ]
+                                                                    }),
+                                                                    (closeDialog) => [
+                                                                        joinUI({
+                                                                            type: 'button',
+                                                                            label: 'cancel',
+                                                                            onPress: () => {
                                                                                 cache["creatingFileNameInput"] = "";
-                                                                                cache["docs"] = docs;
                                                                                 closeDialog();
-                                                                                buildDocsTree();
-                                                                                render(comp());
-                                                                            });
-                                                                        }
-                                                                    }
-                                                                })
-                                                            ]
-                                                        )
-                                                    } else if (index === 1) {
-                                                        ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: doc.path + (doc.path.length > 0 ? "/" : "") + doc.id }, (docs) => {
-                                                            cache["docs"] = docs;
-                                                            buildDocsTree();
-                                                            render(comp());
-                                                        });
-                                                    } else if (index === 2) {
-                                                        ask(cache["workspaceId"], { type: 'files.delete', docId: doc.id }, (docs) => {
-                                                            cache["docs"] = docs;
-                                                            buildDocsTree();
-                                                            render(comp());
-                                                        });
-                                                    }
-                                                } else {
-                                                    if (index === 0) {
-                                                        ask(cache["workspaceId"], { type: 'files.delete', docId: doc.id }, (docs) => {
-                                                            cache["docs"] = docs;
-                                                            buildDocsTree();
-                                                            render(comp());
-                                                        });
+                                                                            }
+                                                                        }),
+                                                                        joinUI({
+                                                                            type: 'button',
+                                                                            label: 'create',
+                                                                            onPress: () => {
+                                                                                if (cache["creatingFileNameInput"] && cache["creatingFileNameInput"].length > 0) {
+                                                                                    ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: cache["creatingFileNameInput"], docPath: doc.path + (doc.path.length > 0 ? "/" : "") + doc.id }, (docs) => {
+                                                                                        cache["creatingFileNameInput"] = "";
+                                                                                        cache["docs"] = docs;
+                                                                                        closeDialog();
+                                                                                        buildDocsTree();
+                                                                                        render(comp());
+                                                                                    });
+                                                                                }
+                                                                            }
+                                                                        })
+                                                                    ]
+                                                                )
+                                                            } else if (index === 1) {
+                                                                ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: doc.path + (doc.path.length > 0 ? "/" : "") + doc.id }, (docs) => {
+                                                                    cache["docs"] = docs;
+                                                                    buildDocsTree();
+                                                                    render(comp());
+                                                                });
+                                                            } else if (index === 2) {
+                                                                ask(cache["workspaceId"], { type: 'files.delete', docId: doc.id }, (docs) => {
+                                                                    cache["docs"] = docs;
+                                                                    buildDocsTree();
+                                                                    render(comp());
+                                                                });
+                                                            }
+                                                        } else {
+                                                            if (index === 0) {
+                                                                ask(cache["workspaceId"], { type: 'files.delete', docId: doc.id }, (docs) => {
+                                                                    cache["docs"] = docs;
+                                                                    buildDocsTree();
+                                                                    render(comp());
+                                                                });
+                                                            }
+                                                        }
                                                     }
                                                 }
-                                            }
+                                            ]
                                         })
                                     },
                                     onItemTap: (key) => {
@@ -359,28 +332,28 @@ function comp() {
                         ]
                     }
                 },
-                {
-                    type: 'code',
-                    key: "mainCode",
-                    minLines: 35,
-                    width: meta.width - 250 - 350,
-                    height: meta.height,
-                    code: cache["currentCode"] ?? "",
-                    onChange: (text) => {
-                        console.log(text);
-                        cache["currentCode"] = text;
-                        if (cache["updaterActive"]) {
-                            if (cache["codeUpdater"]) {
-                                clearTimeout(cache["codeUpdater"]);
-                            }
-                            cache["codeUpdater"] = setTimeout(() => {
-                                cache["codeUpdater"] = undefined;
-                                console.log("updating... ");
-                                ask(cache["workspaceId"], { type: 'updateCodeFile', filePath: cache["currentPath"], code: cache["currentCode"] }, () => { });
-                            }, 1000);
-                        }
-                    }
-                },
+                // {
+                //     type: 'code',
+                //     key: "mainCode",
+                //     minLines: 35,
+                //     width: meta.width - 250 - 350,
+                //     height: meta.height,
+                //     code: cache["currentCode"] ?? "",
+                //     onChange: (text) => {
+                //         console.log(text);
+                //         cache["currentCode"] = text;
+                //         if (cache["updaterActive"]) {
+                //             if (cache["codeUpdater"]) {
+                //                 clearTimeout(cache["codeUpdater"]);
+                //             }
+                //             cache["codeUpdater"] = setTimeout(() => {
+                //                 cache["codeUpdater"] = undefined;
+                //                 console.log("updating... ");
+                //                 ask(cache["workspaceId"], { type: 'updateCodeFile', filePath: cache["currentPath"], code: cache["currentCode"] }, () => { });
+                //             }, 1000);
+                //         }
+                //     }
+                // },
                 {
                     type: "container",
                     width: 16,
@@ -513,7 +486,7 @@ if (!started) {
     });
     ask(meta.pointId, { type: 'initWorkspace' }, (workspace) => {
         cache["workspaceId"] = workspace.Id;
-        initApp(comp());
+        render(comp());
         ask(cache["workspaceId"], { type: 'files.read' }, (docs) => {
             cache["docs"] = docs;
             buildDocsTree();
