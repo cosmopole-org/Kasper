@@ -150,7 +150,7 @@ var chats = map[string]*Chat{}
 var callbacks = map[int64]func([]byte){}
 var toolCallbacks = map[string]func(map[string]any) []byte{}
 
-const API_KEY = "AIzaSyAekCwMAh1HlKtogiUVsfkMEEzOcN1pRSs"
+const API_KEY = ""
 const INSTRCUTIONS = `You are a code parser.
 
 assume there are 6 classes of commands:
@@ -724,7 +724,11 @@ func processPacket(callbackId int64, data []byte) {
 						},
 					}, history)
 
-					res, _ := chat.SendMessage(ctx, genai.Part{Text: message})
+					res, err := chat.SendMessage(ctx, genai.Part{Text: message})
+
+					if (err != nil) {
+						log.Println(err)
+					}
 
 					fc := res.FunctionCalls()
 					if len(fc) > 0 {

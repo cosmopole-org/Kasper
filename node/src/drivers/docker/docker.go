@@ -57,7 +57,7 @@ type Docker struct {
 	client      *client.Client
 }
 
-func (wm *Docker) SaRContainer(machineId string, imageName string, containerName string) error {
+func (wm *Docker) SaRContainer(machineId string, imageName string, containerName string) {
 	cn := strings.Join(strings.Split(machineId, "@"), "_") + "_" + imageName + "_" + containerName
 	ctx := context.Background()
 
@@ -72,10 +72,7 @@ func (wm *Docker) SaRContainer(machineId string, imageName string, containerName
 
 	if err := wm.client.ContainerRemove(ctx, cn, removeOptions); err != nil {
 		log.Println("Unable to remove container: ", err.Error())
-		return err
 	}
-
-	return nil
 }
 
 func WriteToTar(inputFiles map[string]string) string {

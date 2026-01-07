@@ -1,53 +1,11 @@
 
 let uiInstructions = `
-    to generate a component assume the code should a javascript and json code and only based on these elements:
-        (type: text (showing a text in ui), properties: [
-            content ( which is string that is the text being shown ),
-            textColor ( which is a hex color code specifying text color ),
-            textSize ( which is an integer showing font size )
-        ]),
-        (type: image (showing an image in ui), properties: [
-            url ( which is string url of image link ),
-        ]),
-        (type: button (an interactive button element in ui which is clickable), properties: [
-            label ( which is string label being shown on the button ),
-            textColor ( which is a hex color code specifying text color ),
-            textSize ( which is an integer showing font size,
-        ]),
-        (type: container ( a container element which has same use case as div in html ), properties: [
-            width ( which is integer width of container ),
-            height ( which is integer height of container ),
-            padding: ( a json object that contains for integer fields "left", "top", "right", "bottom" as padding in 4 direction )
-            bgcolor: ( a string showing hex color code of container background color )
-            child ( which can be any of the other elements in the current instructions, a container can have a single child which is a json object ),
-        ]),
-        (type: array ( it is similar to container element but can have multiple children and the field name is "items" also it can be vertical or horizontal ), properties: [
-            orientation ( it is a string that can be 'horizontal' or 'vertical' showing direction of showing items in ui ),
-            items ( which can be an array of any of the other elements or mix of them ),
-        ]),
-        remember type property and other properties are next to each other in a json object. produce this json object in function called "comp", the json object must be nested in anothe json object and assigned to field named 'root', return the json object from that function and put this code after that using comp function:
-        """"
-        if (!started) {
-            render(comp());
-        } else {
-            render(comp());
-        }""""
-        the template is like this:
-        """"
-        function comp() {
-            return {
-                root: ""json object""
-            };
-        }
-        if (!started) {
-            render(comp());
-        } else {
-            render(comp());
-        }""""
-        also remember each time you modify values and wanna update and rerender the ui, you should call "render(comp())".
+    to generate a component assume the code should a javascript and json code and only based on "flutter stac sdui framework" json code.
+    also remember each time you modify values and wanna update and rerender the ui, you should call "render(comp())".
 `;
 
 function comp() {
+    console.log("kasper", meta.userId + "_" + (cache["currentPath"].replace("/", "_")));
     return {
         type: "container",
         height: meta.height,
@@ -134,6 +92,13 @@ function comp() {
                                                             data: doc.title
                                                         },
                                                         onPressed: () => {
+                                                            if (!cache["codeLock"]) {
+                                                                cache["codeBackup"] = cache["currentCode"];
+                                                                console.log("updating... ");
+                                                                ask(cache["workspaceId"], { type: 'updateCodeFile', filePath: cache["currentPath"], code: cache["currentCode"] }, () => { });
+                                                            }
+                                                            cache["mainCodeKey"] = Math.random().toString().substring(2);
+                                                            cache["codeLock"] = true;
                                                             cache["updaterActive"] = false;
                                                             cache["currentCode"] = '';
                                                             cache["currentPath"] = doc.path + "/" + doc.id;
@@ -150,9 +115,11 @@ function comp() {
                                                                 }, 1000);
                                                                 if (cache["currentPath"] === (doc.path + "/" + doc.id)) {
                                                                     cache["currentCode"] = data;
+                                                                    cache["currentCodeDef"] = data;
                                                                     cache["sandobxRerenderFlag"] = Math.random().toString();
                                                                     render(comp());
                                                                 }
+                                                                cache["codeLock"] = false;
                                                             });
                                                         }
                                                     },
@@ -199,44 +166,52 @@ function comp() {
                                                                         children: [
                                                                             {
                                                                                 type: 'text',
-                                                                                content: 'enter file name:'
+                                                                                data: 'enter file name:'
                                                                             },
                                                                             {
                                                                                 type: 'input',
+                                                                                appId: meta.appId,
                                                                                 key: 'createFileNameInput',
-                                                                                hint: 'type file name',
+                                                                                label: 'type file name',
                                                                                 onChange: (text) => {
                                                                                     cache["creatingFileNameInput"] = text;
                                                                                 },
                                                                             }
                                                                         ]
                                                                     }),
-                                                                    (closeDialog) => [
-                                                                        joinUI({
-                                                                            type: 'button',
-                                                                            label: 'cancel',
-                                                                            onPress: () => {
-                                                                                cache["creatingFileNameInput"] = "";
-                                                                                closeDialog();
-                                                                            }
-                                                                        }),
-                                                                        joinUI({
-                                                                            type: 'button',
-                                                                            label: 'create',
-                                                                            onPress: () => {
-                                                                                if (cache["creatingFileNameInput"] && cache["creatingFileNameInput"].length > 0) {
-                                                                                    ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: cache["creatingFileNameInput"], docPath: doc.path + (doc.path.length > 0 ? "/" : "") + doc.id }, (docs) => {
-                                                                                        cache["creatingFileNameInput"] = "";
-                                                                                        cache["docs"] = docs;
-                                                                                        closeDialog();
-                                                                                        buildDocsTree();
-                                                                                        render(comp());
-                                                                                    });
+                                                                    (closeDialog) => {
+                                                                        return [
+                                                                            joinUI({
+                                                                                type: 'elevatedButton',
+                                                                                child: {
+                                                                                    type: 'text',
+                                                                                    data: 'cancel',
+                                                                                },
+                                                                                onPressed: () => {
+                                                                                    cache["creatingFileNameInput"] = "";
+                                                                                    closeDialog();
                                                                                 }
-                                                                            }
-                                                                        })
-                                                                    ]
-                                                                )
+                                                                            }),
+                                                                            joinUI({
+                                                                                type: 'elevatedButton',
+                                                                                child: {
+                                                                                    type: 'text',
+                                                                                    data: 'create',
+                                                                                },
+                                                                                onPressed: () => {
+                                                                                    if (cache["creatingFileNameInput"] && cache["creatingFileNameInput"].length > 0) {
+                                                                                        ask(cache["workspaceId"], { type: 'files.create', isDir: false, docTitle: cache["creatingFileNameInput"], docPath: doc.path + (doc.path.length > 0 ? "/" : "") + doc.id }, (docs) => {
+                                                                                            cache["creatingFileNameInput"] = "";
+                                                                                            cache["docs"] = docs;
+                                                                                            closeDialog();
+                                                                                            buildDocsTree();
+                                                                                            render(comp());
+                                                                                        });
+                                                                                    }
+                                                                                }
+                                                                            })
+                                                                        ];
+                                                                    })
                                                             } else if (index === 1) {
                                                                 ask(cache["workspaceId"], { type: 'files.create', isDir: true, docTitle: 'hello.js', docPath: doc.path + (doc.path.length > 0 ? "/" : "") + doc.id }, (docs) => {
                                                                     cache["docs"] = docs;
@@ -287,15 +262,16 @@ function comp() {
                                                 },
                                                 {
                                                     type: 'input',
+                                                    appId: meta.appId,
                                                     key: 'buildMachineInput',
-                                                    hint: 'type machine id',
+                                                    label: 'type machine id',
                                                     onChange: (text) => {
                                                         cache["builingMachineInput"] = text;
                                                     },
                                                 }
                                             ]
                                         }),
-                                        (closeDialog) => [
+                                        (closeDialog) => ([
                                             joinUI({
                                                 type: 'elevatedButton',
                                                 child: {
@@ -315,45 +291,40 @@ function comp() {
                                                 },
                                                 onPressed: () => {
                                                     if (cache["builingMachineInput"] && cache["builingMachineInput"].length > 0) {
-                                                        base64Encode(cache["currentCode"], (b64Encoded) => {
-                                                            console.log(b64Encoded);
-                                                            sendRequest("/storage/uploadUserEntity", { entityId: 'widget', data: b64Encoded, machineId: cache["builingMachineInput"] }, '', () => {
-                                                                cache["builingMachineInput"] = "";
-                                                                closeDialog();
-                                                            });
+                                                        sendRequest("/storage/uploadUserEntity", { entityId: 'widget', data: cache["currentCode"], machineId: cache["builingMachineInput"] }, (res) => {
+                                                            console.log("responseForm", res);
+                                                            cache["builingMachineInput"] = "";
+                                                            closeDialog();
                                                         });
                                                     }
                                                 }
                                             })
-                                        ]
+                                        ])
                                     )
                                 }
                             },
                         ]
                     }
                 },
-                // {
-                //     type: 'code',
-                //     key: "mainCode",
-                //     minLines: 35,
-                //     width: meta.width - 250 - 350,
-                //     height: meta.height,
-                //     code: cache["currentCode"] ?? "",
-                //     onChange: (text) => {
-                //         console.log(text);
-                //         cache["currentCode"] = text;
-                //         if (cache["updaterActive"]) {
-                //             if (cache["codeUpdater"]) {
-                //                 clearTimeout(cache["codeUpdater"]);
-                //             }
-                //             cache["codeUpdater"] = setTimeout(() => {
-                //                 cache["codeUpdater"] = undefined;
-                //                 console.log("updating... ");
-                //                 ask(cache["workspaceId"], { type: 'updateCodeFile', filePath: cache["currentPath"], code: cache["currentCode"] }, () => { });
-                //             }, 1000);
-                //         }
-                //     }
-                // },
+                {
+                    type: 'codeSnippet',
+                    appId: meta.appId,
+                    key: cache["mainCodeKey"],
+                    minLines: 35,
+                    width: meta.width - 250 - 350 - 50,
+                    height: meta.height,
+                    data: cache["currentCodeDef"] ?? "",
+                    onChange: (text) => {
+                        cache["currentCode"] = text;
+                        setTimeout(() => {
+                            if (cache["currentCode"] === "" && !cache["codeLock"]) {
+                                cache["codeBackup"] = cache["currentCode"];
+                                console.log("updating... ");
+                                ask(cache["workspaceId"], { type: 'updateCodeFile', filePath: cache["currentPath"], code: cache["currentCode"] }, () => { });
+                            }
+                        });
+                    }
+                },
                 {
                     type: "container",
                     width: 16,
@@ -361,28 +332,34 @@ function comp() {
                 },
                 {
                     type: 'column',
-                    items: [
+                    children: [
+                        {
+                            type: 'container',
+                            width: 350,
+                            height: 32
+                        },
                         {
                             type: 'container',
                             height: 250,
                             width: 350,
                             child: {
                                 type: 'row',
-                                items: [
+                                children: [
                                     {
                                         type: "container",
                                         width: 48,
                                         height: meta.height
                                     },
-                                    {
+                                    cache["currentPath"] !== "" ? {
                                         type: 'sandbox',
+                                        appId: meta.appId,
                                         key: 'preview',
-                                        rerenderFlag: cache["sandobxRerenderFlag"],
+                                        updateFlag: cache["sandobxRerenderFlag"],
                                         width: 250,
                                         height: 250,
                                         entityId: meta.userId + "_" + (cache["currentPath"].replace("/", "_")),
                                         machineId: "61@global"
-                                    },
+                                    } : { type: "container" },
                                     {
                                         type: "container",
                                         width: 32,
@@ -405,7 +382,7 @@ function comp() {
                                 child: {
                                     type: 'container',
                                     width: 350,
-                                    height: meta.height - 320,
+                                    height: meta.height - 280,
                                     decoration: {
                                         borderRadius: 16,
                                     },
@@ -417,6 +394,7 @@ function comp() {
                                     },
                                     child: {
                                         type: 'chat',
+                                        appId: meta.appId,
                                         pointId: cache["workspaceId"],
                                         onlyLLM: true,
                                         instructions: '"""current editting file path is ' + cache["currentPath"] + ' \n' + uiInstructions + ' \n also look at this code and use it as the context of existing code in the file and do all your work and updates on it: \n' + cache["currentCode"] + '""" '
@@ -468,20 +446,28 @@ if (!started) {
     cache["updaterActive"] = true;
     cache["currentPath"] = '';
     cache["currentCode"] = '';
+    cache["currentCodeDef"] = '';
+    cache["mainCodeKey"] = Math.random().toString().substring(2);
     cache["docs"] = [];
     cache["docsTree"] = { children: [], key: '0', data: JSON.stringify({ path: "", title: "loading...", id: "0" }), title: "src", path: "", id: "0", };
     listen("codeUpdated", (packet) => {
-        if (packet.updatedBy === meta.userId) return;
         let filePath = packet.filePath;
+        if (cache["sandboxBackup"] !== packet.code && cache["currentPath"] === filePath) {
+            cache["sandboxBackup"] = packet.code;
+            cache["sandobxRerenderFlag"] = Math.random().toString();
+            render(comp());
+        }
+        if (packet.updatedBy === meta.userId) return;
         if (cache["currentPath"] === filePath) {
             cache["currentPath"] = '';
             render(comp());
             setTimeout(() => {
                 cache["sandobxRerenderFlag"] = Math.random().toString();
                 cache["currentPath"] = filePath;
+                cache["mainCodeKey"] = Math.random().toString().substring(2);
                 cache["currentCode"] = packet.code;
                 render(comp());
-            }, 2500);
+            });
         }
     });
     ask(meta.pointId, { type: 'initWorkspace' }, (workspace) => {
@@ -493,6 +479,15 @@ if (!started) {
             render(comp());
         });
     });
+    setInterval(() => {
+        if (cache["codeBackup"] !== cache["currentCode"]) {
+            if (cache["currentCode"] !== "" && !cache["codeLock"]) {
+                cache["codeBackup"] = cache["currentCode"];
+                console.log("updating... ");
+                ask(cache["workspaceId"], { type: 'updateCodeFile', filePath: cache["currentPath"], code: cache["currentCode"] }, () => { });
+            }
+        }
+    }, 1000);
 } else {
     render(comp());
 }
