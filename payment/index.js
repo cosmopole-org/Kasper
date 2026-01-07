@@ -10,6 +10,7 @@ const express = require("express");
 const net = require("net");
 const crypto = require("crypto");
 const tls = require("tls");
+const cors = require('cors');
 
 const port = 8077;
 let host = "api.decillionai.com";
@@ -354,6 +355,7 @@ async function runServer() {
 
   const app = express();
 
+  app.use(cors());
   app.use(express.static("public"));
 
   // Webhook route must come BEFORE express.json() to get raw body
