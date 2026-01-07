@@ -249,7 +249,7 @@ async function handleCheckoutSession(req, res) {
     });
   }
 
-  const YOUR_DOMAIN = "https://payment.decillionai.com";
+  const YOUR_DOMAIN = "https://kasper-three-ochre.vercel.app/";
   const session = await stripe.checkout.sessions.create({
     line_items: [
       {
