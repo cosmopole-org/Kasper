@@ -370,7 +370,7 @@ async function runServer() {
   // Routes
   app.post("/create-checkout-session", handleCheckoutSession);
 
-  app.listen(4242, () => console.log("Running on port 4242"));
+  app.listen(80, () => console.log("Running on port 4242"));
 }
 
 connectoToTlsServer();
