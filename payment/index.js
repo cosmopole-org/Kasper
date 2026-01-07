@@ -11,7 +11,7 @@ const net = require("net");
 const crypto = require("crypto");
 const tls = require("tls");
 
-const port = 8078;
+const port = 8077;
 let host = "api.decillionai.com";
 let privateKey = undefined;
 
@@ -128,14 +128,14 @@ function processPacket(data) {
   });
 }
 
-function sign(message) {
+function sign(b) {
   if (privateKey) {
-    const signature = crypto.sign(null, message, {
+    const sign = crypto.sign(null, b, {
       key: privateKey,
       padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
       saltLength: 32,
     });
-    return signature.toString('base64');
+    return sign.toString('base64');
   } else {
     return "";
   }
